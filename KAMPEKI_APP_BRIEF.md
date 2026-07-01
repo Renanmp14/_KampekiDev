@@ -647,3 +647,270 @@ Unidade (`uCom`) é **ignorada**.
 ### Pendências em aberto (módulo NF-e)
 - A importação não casa item por NCM/cEAN — só por descrição (`xProd`). Itens com descrições diferentes para o mesmo produto geram cadastros distintos a classificar.
 - A coluna `CHAVE_NFE` não é exibida na listagem/edição de Custos (proposital); se um dia quiser auditar a nota de origem, ela está gravada.
+
+---
+
+## Atualizações — 30/06/2026
+
+> Sessão focada em três frentes: **exclusão em massa de Custos**, **melhorias na classificação de itens** e **centralização da gestão de itens/subcategorias na página Itens**. Inclui uma correção de modelo (itens "órfãos" persistindo na fila de classificação).
+
+### Custos — exclusão em massa de lançamentos
+
+Na listagem de Custos, a barra de seleção (que já tinha "Editar em massa") ganhou **"Excluir selecionados"** (botão vermelho), com `ConfirmDialog` informando a quantidade e avisando que é irreversível.
+
+- **Backend:** `POST /custos/bulk-delete` `{ uuids }` → `custos.removerEmMassa`, que apaga todos os UUIDs **numa única chamada** à API. A primitiva `sheets.deleteRowsByUuid(tab, uuids)` lê os registros uma vez, **agrupa as linhas em intervalos contíguos** e aplica os `deleteDimension` **de baixo para cima** (índices maiores primeiro), para que cada exclusão não invalide os índices das próximas. Não apaga linha a linha (isso quebraria a reindexação da planilha).
+
+### Correção — itens "a classificar" persistindo após excluir custos (órfãos)
+
+**Sintoma:** após excluir custos em massa de itens que estavam na fila "a classificar", os itens **continuavam aparecendo** no contador/modal de classificação.
+
+**Causa:** a fila "a classificar" é derivada da aba `ITENS` (itens sem subcategoria/categoria), **não** dos custos. Excluir os custos não removia o item de `ITENS` — ele virava um **órfão** (item sem nenhum custo) e seguia na fila.
+
+**Agora:**
+- **`custos.itensAClassificar`** passou a retornar também a **contagem de custos pendentes por item** (`custos`) e a **filtrar apenas itens com ≥1 custo pendente** — itens sem custo não têm o que classificar e somem da fila imediatamente.
+- **Excluir custo (individual e em massa)** chama `limparItensOrfaos()`, que remove de `ITENS` os itens **sem classificação que ficaram sem nenhum custo**. Itens **já classificados nunca são tocados** (curados pelo usuário). A exclusão em massa retorna também `itensRemovidos`.
+
+### Tela de classificar itens (`ClassificarItensModal`) — melhorada
+
+Antes era uma lista crua, item a item. Agora:
+- **Busca por descrição** no topo, com contador `X de Y`.
+- **Coluna "Custos"** mostrando quantos lançamentos pendentes cada item tem (ajuda a priorizar).
+- **Seleção em massa:** checkbox por linha + "marcar todos os visíveis". Com itens marcados, surge uma barra para escolher **uma subcategoria e aplicá-la a todos de uma vez** (caso típico: vários itens da mesma subcategoria), com retorno de quantos itens/custos foram atualizados.
+- **Classificação individual** (select + botão por linha) continua disponível.
+- Backend: `POST /custos/classificar-lote` `{ ITEM_UUIDS, SUB_CATEGORIA }` → `custos.classificarItensEmLote`, que aplica a mesma subcategoria a vários itens e faz o **back-fill** nos custos sem classificação de todos eles, reusando `updateColumnForUuids` (uma chamada por coluna; lê ITENS/CUSTOS uma vez só).
+
+### Modais largos (`modal-lg`)
+
+O `Modal` ganhou prop opcional `className`. Nova variante **`.modal-lg`** (`max-width: 960px`) para telas com tabela. Além disso, **todo** `.modal` agora tem `max-height: 90vh; overflow-y: auto` — modais altos rolam dentro da viewport em vez de estourar. Aplicado ao `ClassificarItensModal` e ao novo `SubcategoriasModal` (resolve a reclamação de barras de rolagem apertadas: sem rolagem horizontal e a tabela usa `55vh`).
+
+### Itens — central de classificação e gestão de subcategorias
+
+A página **Itens** virou o lugar central para corrigir classificação e gerir subcategorias (antes isso só existia "escondido" dentro do fluxo de Custos). Dois novos botões na toolbar:
+
+1. **"⚠ N item(ns) a classificar"** (aparece só quando há pendências) → abre o **mesmo `ClassificarItensModal`** (reaproveitado), com back-fill nos custos.
+2. **"Subcategorias"** → abre o novo **`SubcategoriasModal`** (gestão completa):
+   - **Lista** todas as subcategorias com **categoria**, **tipo** (Fixa do sistema / Personalizada) e **uso** (quantos itens e custos usam cada uma), com busca.
+   - **Criar** subcategoria nova (nome + categoria fixa) no topo do modal.
+   - **Excluir** as **personalizadas** — o botão fica desabilitado quando há uso, e o backend **bloqueia** a exclusão de subcategoria **em uso** (`em uso: N itens, M custos — reclassifique antes`) ou **fixa**. Garante que não fiquem itens/custos órfãos.
+
+> Regra de negócio preservada: continua **só sendo possível criar subcategorias** (apontando para uma das categorias fixas — CMV, FOLHA CANOAS/POA/TELE, DESPESA ADMINISTRATIVA, DISTRIBUIÇÃO DE LUCRO, IMPOSTOS); **categorias não são criáveis**.
+
+### Changelog técnico — sessão 30/06/2026 (por arquivo)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/sheets.js` | Novo `deleteRowsByUuid(tab, uuids)` — exclusão em massa em uma chamada (agrupa linhas contíguas em intervalos e aplica `deleteDimension` de baixo para cima). |
+| `src/services/custos.js` | Novos `removerEmMassa({ uuids })`, `classificarItensEmLote({ ITEM_UUIDS, SUB_CATEGORIA })` e `limparItensOrfaos()` (chamado em `remover` e `removerEmMassa`). `itensAClassificar` agora inclui a contagem `custos` e filtra itens com ≥1 custo pendente. |
+| `src/services/subcategoria.js` | Novos `listarGestao()` (lista combinada + flag `fixa` + uso em itens/custos) e `remover({ SUB_CATEGORIA })` (trava em fixas e em subcategorias em uso). |
+| `src/routes/custos.js` | Novas rotas `POST /custos/bulk-delete` e `POST /custos/classificar-lote`. |
+| `src/routes/itens.js` | Novas rotas `GET /itens/subcategorias-gestao` e `POST /itens/subcategorias/remover`. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/api/resources.js` | `custosApi`: `removerEmMassa`, `classificarLote`. `itensApi`: `subcategoriasGestao`, `removerSubcategoria`. |
+| `src/components/Modal.jsx` | Aceita prop `className` (variar tamanho). |
+| `src/components/ClassificarItensModal.jsx` | Reescrito: busca, coluna de custos, seleção + classificação em massa, `modal-lg`, tabela `55vh`. |
+| `src/components/SubcategoriasModal.jsx` | **Novo** — gestão de subcategorias (lista fixa/personalizada + uso, criar, excluir personalizada com trava de uso). |
+| `src/pages/Custos.jsx` | Botão "Excluir selecionados" + `ConfirmDialog` + handler `excluirEmMassa`. |
+| `src/pages/Itens.jsx` | Carrega a contagem de pendentes; botões "Subcategorias" e "⚠ N a classificar"; renderiza `ClassificarItensModal` e `SubcategoriasModal`. |
+| `src/styles.css` | `.modal` ganhou `max-height: 90vh; overflow-y: auto`; nova variante `.modal.modal-lg { max-width: 960px; }`. |
+
+### Validação
+
+- Backend: `node --check` OK em todos os arquivos alterados.
+- Frontend: `vite build` OK (861 módulos; único aviso é o de tamanho de chunk, pré-existente).
+- **Execução real contra a planilha** (diferente das sessões anteriores, que não tinham `.env`): rodado um roteiro E2E com **dados descartáveis** contra a base real — **19/20 verificações OK** (a 1 restante foi falha de asserção do próprio script — checava status HTTP 200 numa resposta que corretamente retorna erro; a trava de "subcategoria em uso" funcionou). Cobertura: criar/gerir/excluir subcategoria, trava de uso (em uso e fixa), import NF-e fake → classificação em massa com back-fill, exclusão em massa, limpeza de órfão, e preservação de itens já classificados. Baseline 100% restaurado ao final (2695 itens / 27 pendentes).
+
+### Pendências em aberto
+- O cadastro manual de Folha ("+ Novo lançamento") continua existindo (folha é sempre custo) — remoção opcional, já anotada em sessões anteriores.
+- Itens órfãos pré-existentes (sem classe e sem custo, criados antes desta correção) só são limpos quando ocorre a próxima exclusão de custo; o filtro de `itensAClassificar` já os esconde da fila enquanto isso.
+
+---
+
+## Atualizações — 30/06/2026 (parte 2)
+
+> Ajustes de usabilidade: drill-down por Tag no Dash Folha, mais largura/visibilidade na listagem de Custos e campo de subcategoria pesquisável por digitação. Tudo no frontend, sem mudança de backend.
+
+### Dash Folha — drill-down por Tag na pizza (dropdown + clique)
+
+Antes, no Dash Folha, só a **"Evolução mensal"** tinha dropdown (e clique para filtro global de mês). Agora a pizza **"Participação por Tag"** também é interativa, espelhando a pizza de categorias do Dash Custos:
+
+- **Dropdown "Filtrar por tag..."** no cabeçalho do card + **clique na fatia/legenda** selecionam uma tag (`selTag`).
+- A tag selecionada **destaca a fatia** (borda branca; demais esmaecidas) e **recorta** os KPIs (Total no período/mês, Lançamentos), o **Subtotal por Item** e o **Cruzamento Tag × Item**.
+- A **pizza e a tabela "Subtotal por Tag" continuam sobre todas as tags** (base `baseMes`), com o **%** relativo ao total de todas as tags (`totalBaseMes`) — permite trocar de tag a qualquer momento. A tabela "Subtotal por Tag" ficou **clicável** (linha destacada quando selecionada).
+- **Chip removível** "Tag: … ✕" na barra de filtros ativos (junto do chip de mês). O drill se **auto-limpa** se a tag sair da base (mudança de período/mês/filtro).
+- Camadas derivadas: `base → baseMes (mês) → baseTag (tag)`. Implementação 100% frontend (`DashFolha.jsx`, estado `selTag`).
+
+### Custos — mais largura e botão "Excluir" sempre visível
+
+- A área de conteúdo (`.main`) passou de **`max-width: 1400px` → `1760px`**, aproveitando melhor telas largas (vale para todas as páginas).
+- A **coluna de ações da tabela de Custos ficou fixada à direita** (`position: sticky; right: 0`): mesmo com rolagem horizontal em telas menores, **Editar/Excluir nunca somem**. Nova classe `.sticky-actions` (com sombra de profundidade e fundo acompanhando hover/seleção), aplicada à `<table>` da listagem de Custos.
+
+### Classificar itens — subcategoria pesquisável por digitação
+
+Na tela de classificar itens (`ClassificarItensModal`), os `<select>` de subcategoria (na **classificação individual por linha** e na **classificação em massa**) viraram um combo **`input` + `datalist`**: dá para **escolher na lista ou digitar para filtrar** rápido.
+
+- Resolução **case-insensitive** para o valor canônico (`resolveSub`): o texto digitado é casado contra a lista; o botão "Classificar" só habilita quando casa com uma subcategoria válida (evita gravar subcategoria inexistente). A categoria derivada é exibida ao lado, como antes.
+- Um único `<datalist id="subcats-classif-dl">` compartilhado por todos os campos.
+
+### Changelog técnico — 30/06/2026 (parte 2)
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/pages/dash/DashFolha.jsx` | Estado `selTag` + `toggleTag`; `baseTag` (drill de tag) alimenta KPIs/Item/Cruzamento; pizza "Participação por Tag" com dropdown + clique + destaque; tabela "Subtotal por Tag" clicável; chip de tag; `%` da tag sobre `totalBaseMes`; auto-limpa o drill fora da base. |
+| `src/components/ClassificarItensModal.jsx` | `<select>` de subcategoria (linha e massa) → `input` + `datalist` (`subcats-classif-dl`); `subByName` case-insensitive + helper `resolveSub`; botões habilitam só com subcategoria válida. |
+| `src/pages/Custos.jsx` | `<table>` da listagem com classe `sticky-actions`. |
+| `src/styles.css` | `.main` `max-width` 1400 → 1760; nova classe `.sticky-actions` (coluna de ações fixa à direita, com hover/seleção). |
+
+### Validação
+- Frontend: `vite build` OK (861 módulos; único aviso é o de tamanho de chunk, pré-existente). Sem mudança de backend.
+
+---
+
+## Atualizações — 30/06/2026 (parte 3)
+
+> Reforma do formulário de lançamento de Custo (cascata pesquisável + criação de item inline), filtro por item na listagem, e a evolução do modelo de **TAG no item de folha** (herança automática nos custos). Também: subtotal e listagem completa de tags no cruzamento do Dash Folha.
+
+### Lançamento de Custo — cascata Categoria → Subcategoria → Item (pesquisável)
+
+O `<select>` único de item (com ~2.700 itens) foi substituído por uma **cascata pesquisável por digitação** (combos `input` + `datalist`, resolução case-insensitive):
+
+- **Categoria → Subcategoria → Item**, cada um filtrando o próximo. A subcategoria fica restrita à categoria; escolher a subcategoria também confirma/preenche a categoria.
+- **Busca por item** funciona sempre, respeitando o filtro mais específico já escolhido: **subcategoria → categoria → todos**. Uma linha de ajuda mostra o escopo e a contagem. Ao **selecionar um item**, ele **preenche automaticamente** categoria/subcategoria (e a Tag, se o item tiver — ver abaixo).
+- **Criação de item inline:** quando o texto digitado não casa com nenhum item da subcategoria, aparece **"➕ Criar item 'XYZ' em [SUBCATEGORIA]"**, que cria o item na hora (categoria derivada) e o seleciona — sem sair do formulário.
+- **Fornecedor** também virou combo pesquisável. O "exige Tag" (folha) passou a derivar da **categoria escolhida**.
+
+### Custos — filtro por item na listagem
+
+A toolbar de filtros da listagem de Custos ganhou o campo **"Item"** (busca por trecho, case-insensitive), combinável com Mês/Ano, Categoria, Fornecedor e Nº Nota.
+
+### TAG no item de folha (nova coluna em ITENS) + herança automática
+
+Evolução do modelo: além de a TAG ser atributo do **lançamento**, agora o **item de folha** (FOLHA CANOAS/POA/TELE) pode ter uma **TAG própria** (opcional). A aba `ITENS` ganhou a coluna **`TAG`** (o `initSheets` sincroniza o cabeçalho na planilha existente).
+
+**Regra central: o custo sempre respeita a TAG do item.**
+- **Custo novo (form):** ao selecionar um item com tag, o custo **herda a tag** do item (o form auto-preenche; o backend também usa `item.TAG` como fallback quando o payload não traz tag).
+- **Importação (planilha e NF-e):** o custo **herda `item.TAG`** quando o item já tem tag.
+- **Ao salvar o item (criar/editar) com tag:** a tag é **aplicada automaticamente a todos os custos daquele item** (sobrescreve onde estiver diferente/vazia) — escopo barato (1 leitura + 1 escrita de CUSTOS). O modal informa quantos custos foram atualizados. **Trocar a tag do item** re-sincroniza os custos. (Não limpa custos ao **remover** a tag do item, para não deixar folha sem tag.)
+- **Botão "↻ Reprocessar tags (geral)"** na página Itens: sincroniza **todos** os itens com tag de uma vez — caminho **mais pesado**, deixado como sincronização pontual (ex.: após carga histórica). No dia a dia não é necessário, pois salvar o item já resolve.
+- Itens **não-folha ignoram** qualquer tag (fica vazia). Na página Itens: campo Tag só aparece para itens de folha; nova **coluna Tag** na tabela.
+
+> Decisão de UX: em vez de um "flag de reprocessar" manual, o reprocessamento por item é **automático ao salvar** (o custo sempre segue o item), o que é bem mais barato que o reprocessar global.
+
+### Dash Folha — Cruzamento Tag × Categoria
+
+- A coluna do último relatório passou de **Item** para **Categoria** (FOLHA CANOAS/POA/TELE; lançamentos sem categoria caem em "(sem categoria)").
+- **Linha de Subtotal** no rodapé: soma de cada coluna (categoria) e, no cruzamento com "Total", o **total geral**.
+- **Todas as tags cadastradas sempre aparecem** como linhas (mesmo sem lançamento), com **R$ 0,00** nas células sem valor (antes mostrava "—" e omitia tags sem dados).
+
+### Changelog técnico — 30/06/2026 (parte 3)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/sheets.js` | `TABS.ITENS` ganhou a coluna `TAG` (5ª). |
+| `src/services/itens.js` | `listar` inclui `TAG`; `resolverTagItem` (tag só p/ folha, opcional, validada); `criar`/`atualizar` gravam/validam TAG e chamam `aplicarTagAosCustosDoItem` (auto-aplica a tag aos custos do item, retorna `custosAtualizados`); novo `reprocessarTagsNosCustos` (sincronização geral). |
+| `src/services/custos.js` | `montarLinha` usa `item.TAG` como fallback da tag; `importarLote` e `importarLoteXml` herdam `item.TAG` no custo. |
+| `src/routes/itens.js` | Nova rota `POST /itens/reprocessar-tags`. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/pages/Custos.jsx` | Formulário em cascata Categoria→Subcategoria→Item (combos `datalist`), busca de item por escopo, criação de item inline, fornecedor pesquisável, tag herdada do item; filtro "Item" na listagem. |
+| `src/pages/Itens.jsx` | Campo Tag (folha) no form + coluna Tag; auto-aplica ao salvar (mensagem de custos atualizados); botão "↻ Reprocessar tags (geral)"; carrega `tags`. |
+| `src/pages/dash/DashFolha.jsx` | Cruzamento Tag × Categoria: rodapé de Subtotal + Total geral; lista **todas** as tags cadastradas com R$ 0,00 nas vazias. |
+| `src/api/resources.js` | `itensApi.reprocessarTags`. |
+
+### Validação
+- Backend: `node --check` OK. Frontend: `vite build` OK.
+- **E2E contra a planilha real** (dados descartáveis, baseline restaurado):
+  - Bloco TAG/reprocessar (11/11): item folha com tag, listagem com TAG, item não-folha ignora tag, custo herda tag do item, import de folha em branco + reprocessar aplica a tag.
+  - Bloco auto-aplicar (11/11): salvar item com tag aplica aos custos **sem** reprocessar global; import herda tag de item já tagueado; trocar a tag do item atualiza os custos.
+
+---
+
+## Nova Feature — Importação de Custo via NFS-e (PDF) — 30/06/2026
+
+> Implementa o `FEATURE_IMPORT_NFSE_PDF.md`. **Terceiro caminho** de lançamento de Custo (além do form manual e do import de NF-e XML `.zip`): importação de **NFS-e de serviço** (DANFSe v1.0, PDF com texto selecionável) → **1 nota = 1 item = 1 custo, sempre `QTD = 1`**. Um PDF por vez.
+
+### Fluxo
+Página **Custos** → botão **"Importar NFS-e (PDF)"** → seleciona 1 PDF → o frontend extrai os campos (pdfjs-dist, sem OCR) e abre uma **tela de conferência editável** (Data/Competência, Nº Nota, Fornecedor, Item, Valor com Qtd=1) indicando se Fornecedor/Item são **novos ou existentes** → confirma → grava o Custo. Se a `CHAVE_NFE` já existir, mostra aviso e **bloqueia** (dedup).
+
+### Mapeamento (PDF → CUSTOS), validado nos 2 exemplos (Canoas e Porto Alegre)
+| PDF (DANFSe) | CUSTOS | Regra |
+|---|---|---|
+| Competência da NFS-e | `DATA_NOTA` | `DD/MM/YYYY`; deriva MES_ANO/MES_NUM/ANO/DIA_MES_ANO. |
+| Número da NFS-e | `NUM_NOTA` | direto. |
+| Nome/Nome Empresarial (bloco **EMITENTE**) | `FORNECEDOR` | 1ª ocorrência após "EMITENTE DA NFS-e" (a 2ª é o TOMADOR = Kampeki). Remove CPF/CNPJ colado no fim (`/\s*\d{9,}\s*$/`). Casa/cria por nome. |
+| Código de Tributação Nacional | `ITEM` | junta as linhas até "Código de Tributação Municipal" e remove o prefixo `NN.NN.NN - ` (`/^\d{2}\.\d{2}\.\d{2}\s*-\s*/`). Descrição longa pode vir truncada com `...` na própria origem. |
+| Valor Líquido da NFS-e | `VALOR_UNIT` = `VALOR_TOTAL` | mesmo valor (2 casas); `QTD = 1`. |
+| Chave de Acesso da NFS-e | `CHAVE_NFE` | reaproveita a coluna do import de NF-e XML como chave de dedup (NFS-e tem 50 díg.; coluna é texto livre). |
+
+`SUB_CATEGORIA`/`CATEGORIA`/`TAG` seguem a regra já existente: item novo entra **"a classificar"** (aparece no `ClassificarItensModal`/contador ⚠); item existente herda a classificação e a **TAG** do sistema.
+
+### Arquitetura (extração no front, negócio no back — mesmo padrão do NF-e XML)
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `package.json` | Nova dependência **`pdfjs-dist`** (^4). |
+| `src/utils/parseNfsePdf.js` | **Novo** — extrai o texto do PDF (`pdfjs-dist`, worker via `?url`) e localiza cada campo por âncora de rótulo; aplica as limpezas de ITEM/FORNECEDOR; retorna `{ chaveNfse, numNota, dataNota, fornecedor, item, valor, avisos[] }`. |
+| `src/components/ImportNfsePdfModal.jsx` | **Novo** — upload + tela de conferência editável, indicadores "novo/existente" p/ fornecedor e item, aviso+bloqueio de chave já importada, resumo ao salvar. |
+| `src/pages/Custos.jsx` | Botão "Importar NFS-e (PDF)" + render do modal (passa `fornecedores`/`itens`/`custos`). |
+| `src/api/resources.js` | `custosApi.importarNfse(payload)`. |
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/custos.js` | Novo `importarNfse({ chaveNfse, numNota, dataNota, fornecedor, item, valor })` — dedup por `CHAVE_NFE` (erro `code: 'CHAVE_DUPLICADA'`), cria fornecedor/item (item novo "a classificar"), QTD=1, `VALOR_UNIT=VALOR_TOTAL`, herda TAG do item, grava com `CHAVE_NFE`. |
+| `src/routes/custos.js` | Nova rota `POST /custos/import-nfse` (chave duplicada → **HTTP 409**). |
+
+### Validação
+- Extração validada com um script Node usando o **próprio `pdfjs-dist`** sobre os 2 PDFs reais: **12/12 campos corretos** (chave, número, data, fornecedor limpo, item sem código, valor) — Canoas e Porto Alegre.
+- Backend `node --check` OK; frontend `vite build` OK (worker do pdfjs empacotado).
+- **E2E do endpoint contra a planilha real** (dados de teste, baseline restaurado) — **9/9**: cria fornecedor+item("a classificar"), `QTD=1`, `VALOR_UNIT=VALOR_TOTAL`, data/mês derivados, **reimport da mesma chave → 409 bloqueado**, itens órfãos limpos ao excluir os custos.
+- Pendente de teste manual: o click-through da UI no navegador (upload real do PDF pelo `<input file>` + modal). A extração `pdfjs-dist` foi validada com a mesma lib fora do browser; o build empacota o worker corretamente.
+
+### Fora de escopo (como no doc da feature)
+Importação em lote de vários PDFs, OCR (foto/print), casamento de fornecedor por CNPJ/CPF, e tabela LC 116 para descrições truncadas. O backend já nasce por-nota (`importarNfse` recebe 1 objeto), então lote depois é iterar a mesma função.
+
+---
+
+## Novas Features — Saída (backup mensal) e Exportar Relatório em PDF — 30/06/2026
+
+> Duas saídas de dados, **100% frontend** (sem mudança de backend). Reaproveitam `custosApi.listar()` e os dados já computados nos dashboards.
+
+### 1. Saída — Backup mensal (planilha .xlsx)
+
+Nova aba no **menu lateral** (seção "Saída") → página **`/saida`**. O usuário escolhe o **Mês/Ano** e baixa uma planilha `.xlsx` com **todos os custos daquele mês** (backup fiel da aba CUSTOS).
+
+- Geração no navegador com **SheetJS (`xlsx`)** — a dependência já existia (usada no "Baixar modelo").
+- Colunas: DATA, Nº NOTA, MÊS/ANO, FORNECEDOR, ITEM, SUBCATEGORIA, CATEGORIA, TAG, QTD, VALOR UNIT, VALOR TOTAL, CHAVE NFE, UUID. Linha de **TOTAL** ao final. Arquivo: `backup-custos-MM-YYYY.xlsx`.
+- A página mostra uma prévia (lançamentos + total) do mês selecionado antes de baixar. Como a folha é lançada como custo de categoria FOLHA, o backup do mês já inclui os custos de folha.
+- Arquivos: `src/pages/Saida.jsx` (**novo**), rota em `App.jsx`, link em `Layout.jsx` (nova seção "Saída").
+
+### 2. Exportar Relatório de Custos em PDF
+
+No **Dash Custos**, botão **"⬇ Exportar PDF"** (ao lado do título) gera um PDF do relatório **conforme os filtros ativos** (período, mês selecionado e drill-down de categoria/subcategoria) — pronto para enviar a alguém.
+
+- Geração com **`jspdf` + `jspdf-autotable`** (novas dependências). Conteúdo: cabeçalho com a marca (verde institucional) e data de geração; linha de **Período/Filtros** aplicados; **KPIs** (Total e Nº de lançamentos); **gráficos** (ver abaixo); tabelas **Total por categoria**, **Total por subcategoria** (respeitando o drill) e **Top N itens** (valor, % e variação); rodapé com paginação. Arquivo: `relatorio-custos-AAAA-MM-DD.pdf`.
+- **Gráficos no PDF (desenhados para o relatório):** em vez de capturar os gráficos escuros da tela (que ficavam ruins no papel branco), o PDF **desenha os próprios gráficos em vetor** (primitivas do jsPDF), com **tema claro e cores da marca**, nítidos e alinhados ao layout do relatório:
+  - **Custos por mês** — barras verticais (coral) com rótulos de mês e valores compactos (`brlCompact`); rótulos alternam quando há muitos meses.
+  - **Custos por categoria** — **barras horizontais** (mais legíveis num relatório que pizza), com nome, barra proporcional (paleta da marca), valor e %.
+- Recebe os dados **já computados** pelo `DashCustos` (`porMes`, `porCategoria`, ...) — o PDF reflete os filtros/drill ativos, sem recalcular e sem depender de captura de tela.
+- Arquivos: `src/utils/exportPdf.js` (**novo** — `exportarRelatorioCustos(...)` com os desenhos `barrasMes`/`barrasCategoria`), botão + handler `exportarPdf()` em `src/pages/dash/DashCustos.jsx`. O Dash Folha pode ganhar o mesmo botão depois (util reutilizável).
+
+### Validação
+- Frontend: `vite build` OK (empacota `xlsx`, `jspdf`, `jspdf-autotable`; aviso de tamanho de chunk pré-existente).
+- Geração de PDF validada por smoke test em Node: os dois gráficos vetoriais (barras por mês + barras horizontais por categoria) + tabelas (autoTable) → PDF válido, sem erros.
+- Backend: inalterado.
+
+### Correção — escala compacta dos gráficos (milhão/bilhão)
+
+Os eixos/rótulos dos gráficos só formatavam até **milhar** (`R$${(v/1000).toFixed(0)}k`), então valores em **milhão** apareciam feios (ex.: `1.500.000` → "1.500k"). Novo helper **`brlCompact(value)`** em `src/utils/format.js` trata **k / mi / bi** (`R$ 12k`, `R$ 1,5mi`, `R$ 1,2bi`) e foi aplicado em **todos os gráficos**: eixos do **Dash Custos**, **Dash Folha** e **Análise por Período** (`tickFormatter`), e os rótulos de valor do **PDF** (`exportPdf.js`). `vite build` OK.

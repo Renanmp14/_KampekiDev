@@ -1,9 +1,11 @@
 import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
+  updateColumnForUuids,
 } from './sheets.js';
 import { getCache, setCache, invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
-import { categoriaDe } from '../utils/switch-categoria.js';
+import { categoriaDe, exigeTag } from '../utils/switch-categoria.js';
+import { tagExiste } from './tag.js';
 
 const TAB = 'ITENS';
 const CACHE_KEY = 'itens';
@@ -17,9 +19,36 @@ export async function listar() {
     DESCRICAO_ITEM: o.DESCRICAO_ITEM,
     SUB_CATEGORIA: o.SUB_CATEGORIA,
     CATEGORIA: o.CATEGORIA,
+    TAG: o.TAG || '',
   }));
   setCache(CACHE_KEY, list);
   return list;
+}
+
+// Resolve a TAG de um item: só faz sentido para categorias de folha; é opcional
+// (pode ficar vazia) e, quando informada, precisa existir na aba TAG. Itens
+// não-folha nunca têm tag.
+async function resolverTagItem(categoria, TAG) {
+  if (!exigeTag(categoria)) return '';
+  const tag = String(TAG || '').trim();
+  if (!tag) return '';
+  if (!(await tagExiste(tag))) throw new Error('TAG não cadastrada');
+  return tag;
+}
+
+// Aplica a TAG aos custos de UM item (os que estiverem com tag diferente/vazia).
+// Barato: uma leitura de CUSTOS + uma escrita. Usado ao salvar o item — o custo
+// sempre respeita a tag do item. Não faz nada se a tag estiver vazia (não limpa
+// custos ao remover a tag do item, para não deixar folha sem tag).
+async function aplicarTagAosCustosDoItem(descricao, tag) {
+  if (!tag) return 0;
+  const custos = await getObjects('CUSTOS');
+  const alvo = custos
+    .filter((c) => normalizar(c.ITEM) === normalizar(descricao) && String(c.TAG || '').trim() !== tag)
+    .map((c) => c.UUID);
+  if (!alvo.length) return 0;
+  await updateColumnForUuids('CUSTOS', 'TAG', alvo, tag);
+  return alvo.length;
 }
 
 function normalizar(t) {
@@ -45,10 +74,15 @@ export async function criar(payload) {
     throw new Error('Item já cadastrado');
   }
 
+  const tag = await resolverTagItem(categoria, payload.TAG);
   const uuid = newUuid();
-  await appendRow(TAB, [uuid, descricao, sub, categoria]);
+  await appendRow(TAB, [uuid, descricao, sub, categoria, tag]);
   invalidate(CACHE_KEY);
-  return { UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria };
+  // Item novo pode já casar com custos existentes (mesma descrição) — aplica a tag.
+  const custosAtualizados = await aplicarTagAosCustosDoItem(descricao, tag);
+  return {
+    UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria, TAG: tag, custosAtualizados,
+  };
 }
 
 export async function atualizar(uuid, payload) {
@@ -59,9 +93,49 @@ export async function atualizar(uuid, payload) {
     throw new Error('Item já cadastrado');
   }
 
-  await updateRowByUuid(TAB, uuid, [uuid, descricao, sub, categoria]);
+  const tag = await resolverTagItem(categoria, payload.TAG);
+  await updateRowByUuid(TAB, uuid, [uuid, descricao, sub, categoria, tag]);
   invalidate(CACHE_KEY);
-  return { UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria };
+  // O custo sempre respeita o item: ao salvar a tag, aplica aos custos deste item.
+  const custosAtualizados = await aplicarTagAosCustosDoItem(descricao, tag);
+  return {
+    UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria, TAG: tag, custosAtualizados,
+  };
+}
+
+/**
+ * Reprocessa as TAGs nos custos a partir da TAG cadastrada em cada item.
+ * Para cada item que tem TAG, aplica essa tag a todos os custos daquele item
+ * cuja TAG esteja diferente (ou vazia) — corrige custos lançados antes de o item
+ * ganhar tag. Itens sem tag não afetam nada.
+ */
+export async function reprocessarTagsNosCustos() {
+  const [itensList, custos] = await Promise.all([getObjects(TAB), getObjects('CUSTOS')]);
+
+  const tagPorItem = new Map();
+  for (const it of itensList) {
+    const tag = String(it.TAG || '').trim();
+    if (tag) tagPorItem.set(normalizar(it.DESCRICAO_ITEM), tag);
+  }
+
+  // Agrupa por tag alvo os UUIDs de custos que precisam mudar.
+  const porTag = new Map();
+  for (const c of custos) {
+    const alvo = tagPorItem.get(normalizar(c.ITEM));
+    if (alvo && String(c.TAG || '').trim() !== alvo) {
+      if (!porTag.has(alvo)) porTag.set(alvo, []);
+      porTag.get(alvo).push(c.UUID);
+    }
+  }
+
+  let custosAtualizados = 0;
+  for (const [tag, uuids] of porTag) {
+    // eslint-disable-next-line no-await-in-loop
+    await updateColumnForUuids('CUSTOS', 'TAG', uuids, tag);
+    custosAtualizados += uuids.length;
+  }
+
+  return { itensComTag: tagPorItem.size, custosAtualizados };
 }
 
 export async function remover(uuid) {

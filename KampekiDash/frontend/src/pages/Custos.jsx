@@ -6,6 +6,7 @@ import Modal from '../components/Modal.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import ImportModal from '../components/ImportModal.jsx';
 import ImportModalXml from '../components/ImportModalXml.jsx';
+import ImportNfsePdfModal from '../components/ImportNfsePdfModal.jsx';
 import ImportResult from '../components/ImportResult.jsx';
 import ClassificarItensModal from '../components/ClassificarItensModal.jsx';
 import { parseCustos } from '../utils/importParse.js';
@@ -16,8 +17,11 @@ const isFolha = (cat) => CATEGORIAS_FOLHA.includes(String(cat || '').toUpperCase
 
 const emptyForm = {
   DATA_NOTA: '', NUM_NOTA: '', FORNECEDOR: '', ITEM_UUID: '',
+  CATEGORIA: '', SUB_CATEGORIA: '',
   QTD: '', VALOR_UNIT: '', VALOR_TOTAL: '', TAG: '',
 };
+
+const norm = (s) => String(s || '').trim().toUpperCase();
 
 // "2026-06-13" (input date) -> "13/06/2026"
 function isoToBr(iso) {
@@ -135,13 +139,18 @@ export default function Custos() {
   const [custos, setCustos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [itens, setItens] = useState([]);
+  const [subcats, setSubcats] = useState([]);
+  const [categoriasCad, setCategoriasCad] = useState([]);
   const [tags, setTags] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [itemText, setItemText] = useState(''); // texto digitado no combo de item
+  const [criandoItem, setCriandoItem] = useState(false);
   const [totalManual, setTotalManual] = useState(false); // total editado à mão
   const [editing, setEditing] = useState(null); // 'novo' | objeto | null
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showImportXml, setShowImportXml] = useState(false);
+  const [showImportNfse, setShowImportNfse] = useState(false);
   const [showClassificar, setShowClassificar] = useState(false);
   const [qtdAClassificar, setQtdAClassificar] = useState(0);
   const [showConfirmSave, setShowConfirmSave] = useState(false);
@@ -154,6 +163,7 @@ export default function Custos() {
   const [fCategoria, setFCategoria] = useState('');
   const [fFornecedor, setFFornecedor] = useState('');
   const [fNota, setFNota] = useState('');
+  const [fItem, setFItem] = useState('');
 
   // Seleção / edição em massa.
   const [selected, setSelected] = useState(() => new Set());
@@ -162,18 +172,23 @@ export default function Custos() {
   const [bulkValor, setBulkValor] = useState('');
   const [bulkError, setBulkError] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [confirmBulkDel, setConfirmBulkDel] = useState(false);
+  const [bulkDelSaving, setBulkDelSaving] = useState(false);
 
   async function carregar() {
     setLoading(true);
     try {
-      const [c, f, i, t, pend] = await Promise.all([
+      const [c, f, i, t, subs, cats, pend] = await Promise.all([
         custosApi.listar(), fornecedorApi.listar(), itensApi.listar(), tagApi.listar(),
+        itensApi.subcategorias(), itensApi.categorias(),
         custosApi.itensAClassificar().catch(() => []),
       ]);
       setCustos(c);
       setFornecedores(f);
       setItens(i);
       setTags(t);
+      setSubcats(subs);
+      setCategoriasCad(cats);
       setQtdAClassificar(pend.length);
     } catch (e) {
       setError(e.message);
@@ -188,7 +203,37 @@ export default function Custos() {
     () => itens.find((i) => i.UUID === form.ITEM_UUID) || null,
     [itens, form.ITEM_UUID],
   );
-  const exigeTag = isFolha(itemSelecionado?.CATEGORIA);
+
+  // --- Cascata Categoria → Subcategoria → Item (todos pesquisáveis) ----------
+  // Categoria canônica (casa o texto digitado com a lista, case-insensitive).
+  const categoriaResolvida = useMemo(
+    () => categoriasCad.find((c) => norm(c) === norm(form.CATEGORIA)) || '',
+    [categoriasCad, form.CATEGORIA],
+  );
+  // Subcategoria canônica (objeto { SUB_CATEGORIA, CATEGORIA }).
+  const subResolvida = useMemo(
+    () => subcats.find((s) => norm(s.SUB_CATEGORIA) === norm(form.SUB_CATEGORIA)) || null,
+    [subcats, form.SUB_CATEGORIA],
+  );
+  // Opções de subcategoria: limitadas à categoria escolhida, se houver.
+  const subcatsDaCategoria = useMemo(
+    () => (categoriaResolvida ? subcats.filter((s) => s.CATEGORIA === categoriaResolvida) : subcats),
+    [subcats, categoriaResolvida],
+  );
+  // Itens disponíveis no combo, do filtro mais específico para o mais amplo:
+  // subcategoria → categoria → todos. Permite buscar o item diretamente,
+  // respeitando o que já foi escolhido na cascata.
+  const itensDisponiveis = useMemo(() => {
+    if (subResolvida) return itens.filter((i) => norm(i.SUB_CATEGORIA) === norm(subResolvida.SUB_CATEGORIA));
+    if (categoriaResolvida) return itens.filter((i) => norm(i.CATEGORIA) === norm(categoriaResolvida));
+    return itens;
+  }, [itens, subResolvida, categoriaResolvida]);
+  // Resolve o texto do item para um item existente da lista disponível.
+  const resolveItem = (txt) => itensDisponiveis.find((i) => norm(i.DESCRICAO_ITEM) === norm(txt)) || null;
+  // Há texto de item novo (não casa com nenhum existente) → habilita criar inline.
+  const itemNovo = Boolean(subResolvida && itemText.trim() && !form.ITEM_UUID);
+
+  const exigeTag = isFolha(categoriaResolvida);
   const valorCalculado = toNum(form.QTD) * toNum(form.VALOR_UNIT);
   // Por padrão o total é QTD × V.Unit; se o usuário destravar "editar total",
   // passa a valer o que ele digitou.
@@ -196,10 +241,68 @@ export default function Custos() {
 
   function abrirNovo() {
     setForm(emptyForm);
+    setItemText('');
     setTotalManual(false);
     setEditing('novo');
     setError('');
     setShowForm(true);
+  }
+
+  // Cascata: trocar a categoria zera subcategoria/item; trocar a subcategoria zera o item.
+  function setCategoria(v) {
+    setForm((f) => ({ ...f, CATEGORIA: v, SUB_CATEGORIA: '', ITEM_UUID: '', TAG: '' }));
+    setItemText('');
+  }
+  function setSubcategoria(v) {
+    const s = subcats.find((x) => norm(x.SUB_CATEGORIA) === norm(v));
+    setForm((f) => ({
+      ...f,
+      SUB_CATEGORIA: v,
+      // Subcategoria que resolve preenche a categoria canônica (mantém consistência).
+      CATEGORIA: s ? s.CATEGORIA : f.CATEGORIA,
+      ITEM_UUID: '',
+      TAG: isFolha(s ? s.CATEGORIA : f.CATEGORIA) ? f.TAG : '',
+    }));
+    setItemText('');
+  }
+  function onItemText(v) {
+    setItemText(v);
+    const it = resolveItem(v);
+    setForm((f) => ({
+      ...f,
+      ITEM_UUID: it ? it.UUID : '',
+      // Ao escolher um item direto, herda categoria/subcategoria dele — mantém a
+      // cascata coerente mesmo quando o usuário busca pelo item primeiro.
+      ...(it ? {
+        CATEGORIA: it.CATEGORIA,
+        SUB_CATEGORIA: it.SUB_CATEGORIA,
+        // Herda a tag cadastrada no item (folha); senão mantém a que já estava.
+        TAG: isFolha(it.CATEGORIA) ? (it.TAG || f.TAG) : '',
+      } : {}),
+    }));
+  }
+  // Cria o item novo (na subcategoria escolhida) sem sair do formulário e já o seleciona.
+  async function criarItemInline() {
+    const desc = itemText.trim();
+    if (!desc || !subResolvida) return;
+    setCriandoItem(true);
+    setError('');
+    try {
+      const novo = await itensApi.criar({ DESCRICAO_ITEM: desc, SUB_CATEGORIA: subResolvida.SUB_CATEGORIA });
+      const itemObj = {
+        UUID: novo.UUID,
+        DESCRICAO_ITEM: novo.DESCRICAO_ITEM,
+        SUB_CATEGORIA: novo.SUB_CATEGORIA,
+        CATEGORIA: novo.CATEGORIA,
+      };
+      setItens((prev) => [...prev, itemObj]);
+      setForm((f) => ({ ...f, ITEM_UUID: novo.UUID }));
+      setItemText(novo.DESCRICAO_ITEM);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCriandoItem(false);
+    }
   }
 
   function abrirEdicao(c) {
@@ -216,11 +319,14 @@ export default function Custos() {
       NUM_NOTA: c.NUM_NOTA,
       FORNECEDOR: c.FORNECEDOR,
       ITEM_UUID: item ? item.UUID : '',
+      CATEGORIA: c.CATEGORIA || '',
+      SUB_CATEGORIA: c.SUB_CATEGORIA || '',
       QTD: c.QTD,
       VALOR_UNIT: c.VALOR_UNIT,
       VALOR_TOTAL: manual ? c.VALOR_TOTAL : '',
       TAG: c.TAG || '',
     });
+    setItemText(c.ITEM || '');
     setTotalManual(manual);
     setEditing(c);
     setError('');
@@ -231,7 +337,9 @@ export default function Custos() {
     if (!form.DATA_NOTA) return 'Informe a data da nota';
     if (!form.NUM_NOTA) return 'Informe o número da nota';
     if (!form.FORNECEDOR) return 'Selecione o fornecedor';
-    if (!form.ITEM_UUID) return 'Selecione o item';
+    if (!categoriaResolvida) return 'Selecione a categoria';
+    if (!subResolvida) return 'Selecione a subcategoria';
+    if (!form.ITEM_UUID) return itemText.trim() ? 'Crie o item novo (botão) ou selecione um existente' : 'Selecione o item';
     if (toNum(form.QTD) <= 0) return 'Quantidade inválida';
     if (toNum(form.VALOR_UNIT) < 0) return 'Valor unitário inválido';
     if (exigeTag && !form.TAG) return 'Selecione a tag (categoria de folha)';
@@ -292,10 +400,12 @@ export default function Custos() {
 
   const filtrados = custos.filter((c) => {
     const nota = fNota.trim().toLowerCase();
+    const item = fItem.trim().toLowerCase();
     return (!fMesAno || c.MES_ANO === fMesAno)
       && (!fCategoria || c.CATEGORIA === fCategoria)
       && (!fFornecedor || c.FORNECEDOR === fFornecedor)
-      && (!nota || String(c.NUM_NOTA || '').toLowerCase().includes(nota));
+      && (!nota || String(c.NUM_NOTA || '').toLowerCase().includes(nota))
+      && (!item || String(c.ITEM || '').toLowerCase().includes(item));
   });
 
   const totalFiltrado = filtrados.reduce((s, c) => s + toNum(c.VALOR_TOTAL), 0);
@@ -356,6 +466,23 @@ export default function Custos() {
     }
   }
 
+  async function excluirEmMassa() {
+    setError('');
+    setBulkDelSaving(true);
+    try {
+      const uuids = [...selected];
+      await custosApi.removerEmMassa(uuids);
+      setConfirmBulkDel(false);
+      limparSelecao();
+      await carregar();
+    } catch (err) {
+      setError(err.message);
+      setConfirmBulkDel(false);
+    } finally {
+      setBulkDelSaving(false);
+    }
+  }
+
   return (
     <div>
       <h1 className="page-title">Custos</h1>
@@ -364,6 +491,7 @@ export default function Custos() {
         <button className="btn" onClick={abrirNovo}>+ Novo lançamento</button>
         <button className="btn btn-ghost" onClick={() => setShowImport(true)}>Importar planilha</button>
         <button className="btn btn-ghost" onClick={() => setShowImportXml(true)}>Importar NF-e (.zip)</button>
+        <button className="btn btn-ghost" onClick={() => setShowImportNfse(true)}>Importar NFS-e (PDF)</button>
         {qtdAClassificar > 0 && (
           <button
             className="btn btn-sm"
@@ -400,6 +528,10 @@ export default function Custos() {
           <label>Nº Nota</label>
           <input value={fNota} onChange={(e) => setFNota(e.target.value)} placeholder="Pesquisar nota..." />
         </div>
+        <div className="field" style={{ maxWidth: 180 }}>
+          <label>Item</label>
+          <input value={fItem} onChange={(e) => setFItem(e.target.value)} placeholder="Pesquisar item..." />
+        </div>
       </div>
 
       <div className="card">
@@ -411,13 +543,14 @@ export default function Custos() {
             <div className="row-actions" style={{ alignItems: 'center', gap: 8 }}>
               <span className="muted">{selected.size} selecionado(s)</span>
               <button className="btn btn-sm" onClick={abrirBulk}>Editar em massa</button>
+              <button className="btn btn-sm btn-danger" onClick={() => setConfirmBulkDel(true)}>Excluir selecionados</button>
               <button className="btn btn-sm btn-ghost" onClick={limparSelecao}>Limpar seleção</button>
             </div>
           )}
         </div>
         {loading ? <div className="empty">Carregando...</div> : (
           <div className="table-wrap">
-            <table>
+            <table className="sticky-actions">
               <thead>
                 <tr>
                   <th style={{ width: 36 }}>
@@ -502,20 +635,79 @@ export default function Custos() {
 
           <div className="field" style={{ marginBottom: 12 }}>
             <label>Fornecedor</label>
-            <select value={form.FORNECEDOR} onChange={(e) => setForm({ ...form, FORNECEDOR: e.target.value })}>
-              <option value="">Selecione...</option>
-              {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR}>{f.NOME_FORNECEDOR}</option>)}
-            </select>
+            <input
+              list="custo-forn-dl"
+              value={form.FORNECEDOR}
+              onChange={(e) => setForm({ ...form, FORNECEDOR: e.target.value })}
+              placeholder="Selecionar ou digitar..."
+            />
+            <datalist id="custo-forn-dl">
+              {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR} />)}
+            </datalist>
+          </div>
+
+          {/* Cascata Categoria → Subcategoria → Item (todos pesquisáveis por digitação) */}
+          <div className="grid grid-2" style={{ marginBottom: 12 }}>
+            <div className="field">
+              <label>Categoria</label>
+              <input
+                list="custo-cat-dl"
+                value={form.CATEGORIA}
+                onChange={(e) => setCategoria(e.target.value)}
+                placeholder="Selecionar ou digitar..."
+              />
+              <datalist id="custo-cat-dl">
+                {categoriasCad.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+            <div className="field">
+              <label>Subcategoria</label>
+              <input
+                list="custo-sub-dl"
+                value={form.SUB_CATEGORIA}
+                onChange={(e) => setSubcategoria(e.target.value)}
+                placeholder={categoriaResolvida ? 'Selecionar ou digitar...' : 'Escolha a categoria (ou digite)'}
+              />
+              <datalist id="custo-sub-dl">
+                {subcatsDaCategoria.map((s) => <option key={s.SUB_CATEGORIA} value={s.SUB_CATEGORIA} />)}
+              </datalist>
+            </div>
           </div>
 
           <div className="field" style={{ marginBottom: 12 }}>
             <label>Item</label>
-            <select value={form.ITEM_UUID} onChange={(e) => setForm({ ...form, ITEM_UUID: e.target.value })}>
-              <option value="">Selecione...</option>
-              {itens.map((i) => (
-                <option key={i.UUID} value={i.UUID}>{i.DESCRICAO_ITEM} — {i.CATEGORIA}</option>
-              ))}
-            </select>
+            <input
+              list="custo-item-dl"
+              value={itemText}
+              onChange={(e) => onItemText(e.target.value)}
+              placeholder="Digite para buscar o item..."
+            />
+            <datalist id="custo-item-dl">
+              {itensDisponiveis.map((i) => <option key={i.UUID} value={i.DESCRICAO_ITEM} />)}
+            </datalist>
+            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              {subResolvida
+                ? `Buscando entre os itens da subcategoria ${subResolvida.SUB_CATEGORIA} (${itensDisponiveis.length}).`
+                : categoriaResolvida
+                  ? `Buscando entre os itens da categoria ${categoriaResolvida} (${itensDisponiveis.length}). Escolha a subcategoria para refinar.`
+                  : `Buscando entre todos os itens (${itensDisponiveis.length}). Escolha categoria/subcategoria para refinar.`}
+            </p>
+            {form.ITEM_UUID && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>✓ Item existente selecionado</p>
+            )}
+            {itemNovo && (
+              <div className="row-actions" style={{ marginTop: 6, justifyContent: 'flex-start', alignItems: 'center', gap: 8 }}>
+                <button type="button" className="btn btn-sm" onClick={criarItemInline} disabled={criandoItem}>
+                  {criandoItem ? 'Criando...' : `➕ Criar item "${itemText.trim()}" em ${subResolvida.SUB_CATEGORIA}`}
+                </button>
+                <span className="muted" style={{ fontSize: 12 }}>item não encontrado nesta subcategoria</span>
+              </div>
+            )}
+            {!form.ITEM_UUID && itemText.trim() && !subResolvida && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                Para criar um item novo, selecione antes a subcategoria.
+              </span>
+            )}
           </div>
 
           {exigeTag && (
@@ -614,6 +806,15 @@ export default function Custos() {
         />
       )}
 
+      {confirmBulkDel && (
+        <ConfirmDialog
+          message={`Excluir os ${selected.size} lançamentos selecionados? Esta ação não pode ser desfeita.`}
+          confirmLabel={bulkDelSaving ? 'Excluindo...' : `Excluir ${selected.size}`}
+          onConfirm={excluirEmMassa}
+          onCancel={() => setConfirmBulkDel(false)}
+        />
+      )}
+
       {showBulk && (
         <Modal
           title={`Editar em massa (${selected.size} lançamentos)`}
@@ -684,6 +885,16 @@ export default function Custos() {
           onImport={(notas) => custosApi.importarXml(notas)}
           renderResult={(r) => <ImportResult result={r} />}
           onClose={() => setShowImportXml(false)}
+          onDone={carregar}
+        />
+      )}
+
+      {showImportNfse && (
+        <ImportNfsePdfModal
+          fornecedores={fornecedores}
+          itens={itens}
+          custos={custos}
+          onClose={() => setShowImportNfse(false)}
           onDone={carregar}
         />
       )}

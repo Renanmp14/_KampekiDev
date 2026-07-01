@@ -10,6 +10,19 @@ export function pct(value) {
   return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
+// Valor monetário compacto para eixos de gráfico e rótulos: milhar (k), milhão
+// (mi) e bilhão (bi). Antes só ia até "k", o que estourava com valores em milhão
+// (ex.: 1.500.000 virava "1.500k"); agora vira "R$ 1,5mi".
+export function brlCompact(value) {
+  const n = toNum(value);
+  const abs = Math.abs(n);
+  const f = (x, d) => x.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: d });
+  if (abs >= 1e9) return `R$ ${f(n / 1e9, 1)}bi`;
+  if (abs >= 1e6) return `R$ ${f(n / 1e6, 1)}mi`;
+  if (abs >= 1e3) return `R$ ${f(n / 1e3, 0)}k`;
+  return `R$ ${f(n, 0)}`;
+}
+
 // Converte valor vindo do Sheets em número. Aceita number nativo (com a leitura
 // UNFORMATTED_VALUE os números chegam assim) e strings em pt-BR ("R$ 1.234,56")
 // ou en ("1234.56") como fallback de robustez.

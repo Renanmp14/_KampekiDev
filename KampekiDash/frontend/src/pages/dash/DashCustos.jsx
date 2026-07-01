@@ -5,7 +5,8 @@ import {
 } from 'recharts';
 import { custosApi, getConfig } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
-import { brl, pct } from '../../utils/format.js';
+import { brl, pct, brlCompact } from '../../utils/format.js';
+import { exportarRelatorioCustos } from '../../utils/exportPdf.js';
 import {
   groupSum, keyToLabel, monthsBetween, previousWindow, filterByPeriod, rowMonthKey, toNum,
 } from '../../utils/agg.js';
@@ -25,6 +26,7 @@ export default function DashCustos() {
   const [selSubcategoria, setSelSubcategoria] = useState('');
   // Mês selecionado no "Comparativo mês a mês" (dropdown / clique na barra).
   const [selMes, setSelMes] = useState('');
+  const [exportando, setExportando] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -144,11 +146,43 @@ export default function DashCustos() {
 
   const topItens = tabelaItens.slice(0, Number(topN) || 10);
 
+  function exportarPdf() {
+    setExportando(true);
+    try {
+      const periodoLabel = selMes
+        ? keyToLabel(selMes)
+        : (deKey ? `${keyToLabel(deKey)} – ${keyToLabel(ateKey)}` : 'Todo o período');
+      const drillParts = [];
+      if (selMes) drillParts.push(`Mês: ${keyToLabel(selMes)}`);
+      if (selCategoria) drillParts.push(`Categoria: ${selCategoria}`);
+      if (selSubcategoria) drillParts.push(`Subcategoria: ${selSubcategoria}`);
+      exportarRelatorioCustos({
+        periodoLabel,
+        drillLabel: drillParts.join(' · ') || null,
+        subLabel: selCategoria || null,
+        totalGeral,
+        nLanc: filtrado.length,
+        porMes,
+        porCategoria,
+        porSubcategoria,
+        topItens,
+        topN: Number(topN) || 10,
+      });
+    } finally {
+      setExportando(false);
+    }
+  }
+
   if (loading) return <div><h1 className="page-title">Dash Custos</h1><div className="empty">Carregando...</div></div>;
 
   return (
     <div>
-      <h1 className="page-title">Dash Custos</h1>
+      <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Dash Custos</h1>
+        <button className="btn btn-ghost" onClick={exportarPdf} disabled={exportando}>
+          {exportando ? 'Gerando PDF...' : '⬇ Exportar PDF'}
+        </button>
+      </div>
 
       <PeriodFilter de={period.de} ate={period.ate} onChange={setPeriod}>
         <div className="field" style={{ maxWidth: 120 }}>
@@ -215,11 +249,12 @@ export default function DashCustos() {
             </select>
           </div>
         </div>
+        <div>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={porMes}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
             <XAxis dataKey="mes" stroke="#93a39b" fontSize={12} />
-            <YAxis stroke="#93a39b" fontSize={12} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+            <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
             <Tooltip
               formatter={(v) => brl(v)}
               contentStyle={{ background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6 }}
@@ -245,11 +280,13 @@ export default function DashCustos() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="grid grid-2">
         <div className="card">
           <h3 className="card-title">Total por categoria <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(clique para filtrar)</span></h3>
+          <div>
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
@@ -285,6 +322,7 @@ export default function DashCustos() {
               />
             </PieChart>
           </ResponsiveContainer>
+          </div>
         </div>
 
         <div className="card">

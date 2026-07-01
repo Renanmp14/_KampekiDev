@@ -1,6 +1,6 @@
 import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
-  updateColumnForUuids,
+  deleteRowsByUuid, updateColumnForUuids,
 } from './sheets.js';
 import { invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
@@ -72,7 +72,8 @@ async function montarLinha(uuid, payload) {
 
   let tag = '';
   if (exigeTag(item.CATEGORIA)) {
-    tag = String(TAG || '').trim();
+    // Tag do lançamento; se não vier, herda a TAG cadastrada no item (folha).
+    tag = String(TAG || '').trim() || String(item.TAG || '').trim();
     if (!tag) throw new Error('TAG é obrigatória para categorias de folha');
     if (!(await tagExiste(tag))) throw new Error('TAG não cadastrada');
   }
@@ -114,7 +115,43 @@ export async function atualizar(uuid, payload) {
 
 export async function remover(uuid) {
   await deleteRowByUuid(TAB, uuid);
+  await limparItensOrfaos();
   return { ok: true };
+}
+
+/**
+ * Exclusão em massa: remove todos os custos cujos UUID estão em `uuids`, numa
+ * única chamada à API (uma leitura + um batchUpdate de deleteDimension).
+ */
+export async function removerEmMassa({ uuids }) {
+  if (!Array.isArray(uuids) || uuids.length === 0) {
+    throw new Error('Nenhum registro selecionado');
+  }
+  const removidos = await deleteRowsByUuid(TAB, uuids);
+  const itensRemovidos = await limparItensOrfaos();
+  return { removidos, itensRemovidos };
+}
+
+/**
+ * Remove de ITENS os itens "a classificar" (sem subcategoria/categoria) que não
+ * têm mais nenhum custo associado — tipicamente após excluir todos os custos de
+ * um item importado de NF-e. Sem isso, o item órfão continuaria aparecendo em
+ * "itens a classificar" sem ter nada para classificar. Itens já classificados
+ * NUNCA são tocados (curados pelo usuário). Retorna quantos itens foram removidos.
+ */
+async function limparItensOrfaos() {
+  const [itens, custos] = await Promise.all([
+    getObjects('ITENS'), getObjects('CUSTOS'),
+  ]);
+  const descComCusto = new Set(custos.map((c) => norm(c.ITEM)));
+  const orfaos = itens
+    .filter((i) => itemSemClassificacao(i) && !descComCusto.has(norm(i.DESCRICAO_ITEM)))
+    .map((i) => i.UUID);
+  if (orfaos.length) {
+    await deleteRowsByUuid('ITENS', orfaos);
+    invalidate('itens');
+  }
+  return orfaos.length;
 }
 
 // Campos permitidos na edição em massa (o mesmo valor é replicado a todos os
@@ -300,7 +337,7 @@ export async function importarLote(rows, { fallbackMesAno } = {}) {
       qtd,
       valorUnit,
       valorTotal,
-      '', // (5) TAG em branco — folha será tageada depois
+      String(item.TAG || '').trim(), // (5) herda a TAG do item quando houver (folha)
     ]);
   });
 
@@ -446,7 +483,7 @@ export async function importarLoteXml(notas) {
         qtd,
         valorUnit,
         valorTotal,
-        '', // (6) TAG
+        String(item.TAG || '').trim(), // (6) herda a TAG do item quando houver
         chave, // (5) CHAVE_NFE
       ]);
     });
@@ -473,12 +510,136 @@ export async function importarLoteXml(notas) {
   };
 }
 
-// Lista os itens que estão "a classificar" (sem subcategoria/categoria).
+/**
+ * Importa UM Custo a partir de uma NFS-e de serviço (DANFSe/PDF), já extraída e
+ * normalizada no frontend. 1 nota = 1 item = 1 custo, sempre QTD = 1.
+ * `payload`: { chaveNfse, numNota, dataNota:'DD/MM/YYYY', fornecedor, item, valor }
+ *
+ * Reaproveita a lógica do import de NF-e XML:
+ *  1. Dedup por CHAVE_NFE → se já existe em CUSTOS, NÃO grava e devolve o aviso.
+ *  2. Fornecedor casado/criado por nome (case-insensitive; vazio → "Sem Fornecedor").
+ *  3. Item casado por descrição; se novo, criado em ITENS "a classificar" (sub/cat
+ *     em branco); se existe, herda SUB_CATEGORIA/CATEGORIA/TAG do sistema.
+ *  4. Datas derivadas de dataNota; VALOR_UNIT = VALOR_TOTAL = valor (2 casas).
+ *  5. TAG herdada do item quando houver (folha).
+ */
+export async function importarNfse(payload) {
+  const {
+    chaveNfse, numNota, dataNota, fornecedor, item, valor,
+  } = payload || {};
+
+  const chave = String(chaveNfse || '').trim();
+  const descricao = String(item || '').trim();
+  const dataStr = String(dataNota || '').trim();
+  const valorNum = num(valor);
+
+  if (!dataStr) throw new Error('Data (competência) é obrigatória');
+  if (!descricao) throw new Error('Item é obrigatório');
+  if (!Number.isFinite(valorNum) || valorNum < 0) throw new Error('Valor inválido');
+
+  const [fornObjs, itemObjs, custoObjs] = await Promise.all([
+    getObjects('FORNECEDOR'), getObjects('ITENS'), getObjects('CUSTOS'),
+  ]);
+
+  // (1) Dedup por chave — bloqueia a nota já importada.
+  if (chave) {
+    const existente = custoObjs.find((c) => String(c.CHAVE_NFE || '').trim() === chave);
+    if (existente) {
+      const err = new Error(`Esta NFS-e já foi importada (nota ${existente.NUM_NOTA || '—'}, ${existente.DATA_NOTA || '—'}).`);
+      err.code = 'CHAVE_DUPLICADA';
+      throw err;
+    }
+  }
+
+  const campos = derivarCamposData(dataStr);
+
+  // (2) Fornecedor: cria se não existir.
+  const fornNome = String(fornecedor || '').trim() || 'Sem Fornecedor';
+  const fornByNorm = new Map(fornObjs.map((f) => [norm(f.NOME_FORNECEDOR), f.NOME_FORNECEDOR]));
+  let fornecedorFinal = fornByNorm.get(norm(fornNome));
+  let fornecedorCriado = false;
+  if (!fornecedorFinal) {
+    fornecedorFinal = fornNome;
+    await appendRows('FORNECEDOR', [[newUuid(), fornecedorFinal]]);
+    invalidate('fornecedores');
+    fornecedorCriado = true;
+  }
+
+  // (3) Item: usa o do sistema se existir; senão cria "a classificar".
+  const itemByNorm = new Map(itemObjs.map((i) => [norm(i.DESCRICAO_ITEM), i]));
+  let itemObj = itemByNorm.get(norm(descricao));
+  let itemCriado = false;
+  if (!itemObj) {
+    itemObj = {
+      DESCRICAO_ITEM: descricao, SUB_CATEGORIA: '', CATEGORIA: '', TAG: '',
+    };
+    await appendRows('ITENS', [[newUuid(), descricao, '', '', '']]);
+    invalidate('itens');
+    itemCriado = true;
+  }
+
+  const aClassificar = itemSemClassificacao(itemObj);
+  const valorTotal = +valorNum.toFixed(2);
+  const tag = String(itemObj.TAG || '').trim(); // (5) herda a tag do item (folha)
+
+  // (4) Ordem CUSTOS: UUID, DATA_NOTA, NUM_NOTA, MES_ANO, MES_NUM, ANO,
+  // DIA_MES_ANO, FORNECEDOR, ITEM, SUB_CATEGORIA, CATEGORIA, QTD, VALOR_UNIT,
+  // VALOR_TOTAL, TAG, CHAVE_NFE
+  const uuid = newUuid();
+  await appendRows(TAB, [[
+    uuid,
+    campos.DIA_MES_ANO,
+    String(numNota || 'Sem Nota'),
+    campos.MES_ANO,
+    campos.MES_NUM,
+    campos.ANO,
+    campos.DIA_MES_ANO,
+    fornecedorFinal,
+    itemObj.DESCRICAO_ITEM,
+    itemObj.SUB_CATEGORIA || '',
+    itemObj.CATEGORIA || '',
+    1, // QTD sempre 1
+    valorTotal, // VALOR_UNIT = VALOR_TOTAL
+    valorTotal,
+    tag,
+    chave,
+  ]]);
+
+  return {
+    UUID: uuid,
+    fornecedorCriado,
+    itemCriado,
+    aClassificar,
+    fornecedor: fornecedorFinal,
+    item: itemObj.DESCRICAO_ITEM,
+    valor: valorTotal,
+  };
+}
+
+// Lista os itens que estão "a classificar" (sem subcategoria/categoria),
+// já com a contagem de custos pendentes (sem classificação) de cada um — útil
+// para o usuário priorizar quais classificar primeiro.
 export async function itensAClassificar() {
-  const itens = await getObjects('ITENS');
+  const [itens, custos] = await Promise.all([
+    getObjects('ITENS'), getObjects('CUSTOS'),
+  ]);
+  const pendentesPorItem = new Map();
+  for (const c of custos) {
+    if (itemSemClassificacao(c)) {
+      const k = norm(c.ITEM);
+      pendentesPorItem.set(k, (pendentesPorItem.get(k) || 0) + 1);
+    }
+  }
   return itens
     .filter(itemSemClassificacao)
-    .map((i) => ({ UUID: i.UUID, DESCRICAO_ITEM: i.DESCRICAO_ITEM }));
+    .map((i) => ({
+      UUID: i.UUID,
+      DESCRICAO_ITEM: i.DESCRICAO_ITEM,
+      custos: pendentesPorItem.get(norm(i.DESCRICAO_ITEM)) || 0,
+    }))
+    // Item sem nenhum custo pendente não tem o que classificar (ex.: todos os
+    // custos foram excluídos) — não deve mais aparecer na fila.
+    .filter((i) => i.custos > 0);
 }
 
 /**
@@ -514,5 +675,53 @@ export async function classificarItem({ ITEM_UUID, SUB_CATEGORIA }) {
 
   return {
     item: item.DESCRICAO_ITEM, SUB_CATEGORIA: sub, CATEGORIA: categoria, custosAtualizados: uuids.length,
+  };
+}
+
+/**
+ * Classificação em lote: aplica a MESMA subcategoria a vários itens pendentes de
+ * uma vez e faz o back-fill nos custos sem classificação de todos eles. Os itens
+ * podem ser diferentes, mas recebem a mesma subcategoria/categoria (caso de uso:
+ * marcar de uma vez vários itens que pertencem à mesma subcategoria).
+ *
+ * Lê ITENS/CUSTOS uma única vez e usa updateColumnForUuids (uma chamada por
+ * coluna), evitando o custo de classificar item a item.
+ */
+export async function classificarItensEmLote({ ITEM_UUIDS, SUB_CATEGORIA }) {
+  if (!Array.isArray(ITEM_UUIDS) || ITEM_UUIDS.length === 0) {
+    throw new Error('Nenhum item selecionado');
+  }
+  const sub = String(SUB_CATEGORIA || '').trim().toUpperCase();
+  if (!sub) throw new Error('Subcategoria é obrigatória');
+  const categoria = categoriaDe(sub);
+  if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
+
+  const itens = await getObjects('ITENS');
+  const alvo = new Set(ITEM_UUIDS);
+  const selecionados = itens.filter((i) => alvo.has(i.UUID));
+  if (!selecionados.length) throw new Error('Itens não encontrados');
+  const itemUuids = selecionados.map((i) => i.UUID);
+  const descricoes = new Set(selecionados.map((i) => norm(i.DESCRICAO_ITEM)));
+
+  // Atualiza a classificação dos itens (DESCRICAO_ITEM permanece intacta).
+  await updateColumnForUuids('ITENS', 'SUB_CATEGORIA', itemUuids, sub);
+  await updateColumnForUuids('ITENS', 'CATEGORIA', itemUuids, categoria);
+  invalidate('itens');
+
+  // Back-fill: custos desses itens ainda sem classificação.
+  const custos = await getObjects('CUSTOS');
+  const custoUuids = custos
+    .filter((c) => descricoes.has(norm(c.ITEM)) && itemSemClassificacao(c))
+    .map((c) => c.UUID);
+  if (custoUuids.length) {
+    await updateColumnForUuids(TAB, 'SUB_CATEGORIA', custoUuids, sub);
+    await updateColumnForUuids(TAB, 'CATEGORIA', custoUuids, categoria);
+  }
+
+  return {
+    itensClassificados: itemUuids.length,
+    SUB_CATEGORIA: sub,
+    CATEGORIA: categoria,
+    custosAtualizados: custoUuids.length,
   };
 }

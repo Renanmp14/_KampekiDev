@@ -14,9 +14,24 @@ router.get('/categorias', (req, res) => {
   res.json(subcategoria.categorias());
 });
 
+// Subcategorias para a tela de gestão (com flag fixa/personalizada e uso).
+router.get('/subcategorias-gestao', async (req, res, next) => {
+  try { res.json(await subcategoria.listarGestao()); } catch (e) { next(e); }
+});
+
 // Cria uma subcategoria nova: { SUB_CATEGORIA, CATEGORIA }
 router.post('/subcategorias', async (req, res, next) => {
   try { res.status(201).json(await subcategoria.criar(req.body || {})); } catch (e) { next(e); }
+});
+
+// Exclui uma subcategoria personalizada: { SUB_CATEGORIA }
+router.post('/subcategorias/remover', async (req, res, next) => {
+  try { res.json(await subcategoria.remover(req.body || {})); } catch (e) { next(e); }
+});
+
+// Reprocessa as TAGs nos custos a partir da tag cadastrada em cada item.
+router.post('/reprocessar-tags', async (req, res, next) => {
+  try { res.json(await service.reprocessarTagsNosCustos()); } catch (e) { next(e); }
 });
 
 router.get('/', async (req, res, next) => {

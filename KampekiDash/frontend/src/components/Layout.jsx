@@ -17,6 +17,10 @@ const dashboards = [
   { to: '/dash/periodo', label: 'Análise por Período' },
 ];
 
+const saidas = [
+  { to: '/saida', label: 'Saída (Backup mensal)' },
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,6 +58,13 @@ export default function Layout() {
         {lancamentos.map((l) => (
           <NavLink key={l.to} to={l.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             {l.label}
+          </NavLink>
+        ))}
+
+        <div className="nav-section">Saída</div>
+        {saidas.map((s) => (
+          <NavLink key={s.to} to={s.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            {s.label}
           </NavLink>
         ))}
 

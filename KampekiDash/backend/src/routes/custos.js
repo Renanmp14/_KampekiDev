@@ -28,6 +28,17 @@ router.post('/import-xml', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Importação de UMA NFS-e de serviço (PDF já extraído no frontend).
+// Chave duplicada devolve 409 para a tela de conferência tratar/bloquear.
+router.post('/import-nfse', async (req, res, next) => {
+  try {
+    res.status(201).json(await service.importarNfse(req.body || {}));
+  } catch (e) {
+    if (e.code === 'CHAVE_DUPLICADA') { res.status(409).json({ error: e.message, code: e.code }); return; }
+    next(e);
+  }
+});
+
 // Itens pendentes de classificação (sem subcategoria/categoria).
 router.get('/itens-a-classificar', async (req, res, next) => {
   try { res.json(await service.itensAClassificar()); } catch (e) { next(e); }
@@ -38,9 +49,19 @@ router.post('/classificar', async (req, res, next) => {
   try { res.json(await service.classificarItem(req.body || {})); } catch (e) { next(e); }
 });
 
+// Classificação em lote: { ITEM_UUIDS: [...], SUB_CATEGORIA }
+router.post('/classificar-lote', async (req, res, next) => {
+  try { res.json(await service.classificarItensEmLote(req.body || {})); } catch (e) { next(e); }
+});
+
 // Edição em massa: { uuids: [...], campo: 'TAG'|'FORNECEDOR', valor }
 router.post('/bulk', async (req, res, next) => {
   try { res.json(await service.atualizarEmMassa(req.body || {})); } catch (e) { next(e); }
+});
+
+// Exclusão em massa: { uuids: [...] }
+router.post('/bulk-delete', async (req, res, next) => {
+  try { res.json(await service.removerEmMassa(req.body || {})); } catch (e) { next(e); }
 });
 
 router.put('/:uuid', async (req, res, next) => {

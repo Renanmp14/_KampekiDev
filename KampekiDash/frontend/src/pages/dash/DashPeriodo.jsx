@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import { custosApi, folhaApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
-import { brl, pct } from '../../utils/format.js';
+import { brl, pct, brlCompact } from '../../utils/format.js';
 import { groupSum, filterByPeriod, toNum } from '../../utils/agg.js';
 
 const A_COLOR = '#4f868f'; // Período A (teal)
@@ -40,7 +40,7 @@ function ComparativoSecao({ titulo, labelCol, rows, topN = 8 }) {
           <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 46)}>
             <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
-              <XAxis type="number" stroke="#93a39b" fontSize={11} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+              <XAxis type="number" stroke="#93a39b" fontSize={11} tickFormatter={brlCompact} />
               <YAxis type="category" dataKey="nome" stroke="#93a39b" fontSize={11} width={130} />
               <Tooltip
                 formatter={(v) => brl(v)}

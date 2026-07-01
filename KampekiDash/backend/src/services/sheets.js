@@ -8,7 +8,7 @@ export const DATA_START_ROW = 3;
 export const TABS = {
   FORNECEDOR: ['UUID', 'NOME_FORNECEDOR'],
   TAG: ['UUID', 'TAG'],
-  ITENS: ['UUID', 'DESCRICAO_ITEM', 'SUB_CATEGORIA', 'CATEGORIA'],
+  ITENS: ['UUID', 'DESCRICAO_ITEM', 'SUB_CATEGORIA', 'CATEGORIA', 'TAG'],
   SUBCATEGORIA: ['UUID', 'SUB_CATEGORIA', 'CATEGORIA'],
   CUSTOS: [
     'UUID', 'DATA_NOTA', 'NUM_NOTA', 'MES_ANO', 'MES_NUM', 'ANO',
@@ -233,6 +233,45 @@ export async function updateRowByUuid(tab, uuid, rowArray) {
     requestBody: { values: [rowArray] },
   });
   return row;
+}
+
+// Remove VÁRIAS linhas identificadas por UUID em uma única chamada à API.
+// Lê os registros uma vez, agrupa as linhas em intervalos contíguos e aplica as
+// exclusões de baixo para cima (índices maiores primeiro) — assim cada remoção
+// não invalida os índices das próximas. Retorna quantas linhas foram removidas.
+export async function deleteRowsByUuid(tab, uuids) {
+  const alvo = new Set(uuids || []);
+  if (!alvo.size) return 0;
+  const objs = await getObjects(tab);
+  const linhas = objs.filter((o) => alvo.has(o.UUID)).map((o) => o._row).sort((a, b) => a - b);
+  if (!linhas.length) return 0;
+
+  // Agrupa linhas consecutivas em intervalos [startIndex, endIndex) 0-based.
+  const ranges = [];
+  let inicio = linhas[0];
+  let anterior = linhas[0];
+  for (let k = 1; k < linhas.length; k += 1) {
+    if (linhas[k] === anterior + 1) { anterior = linhas[k]; continue; }
+    ranges.push([inicio - 1, anterior]); // start 0-based, end exclusivo
+    inicio = linhas[k];
+    anterior = linhas[k];
+  }
+  ranges.push([inicio - 1, anterior]);
+  // De baixo para cima, para não deslocar os índices ainda não processados.
+  ranges.sort((a, b) => b[0] - a[0]);
+
+  const sheetId = getSheetId(tab);
+  const sheets = await getSheets();
+  const spreadsheetId = getSpreadsheetId();
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: ranges.map(([startIndex, endIndex]) => ({
+        deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex, endIndex } },
+      })),
+    },
+  });
+  return linhas.length;
 }
 
 // Remove a linha de um registro identificado pelo UUID (shift para cima).
