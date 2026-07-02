@@ -229,6 +229,23 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .modal-summary div { display: flex; justify-content: space-between; padding: 3px 0; }
 .modal-summary .total { font-weight: 700; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
 
+/* ---------- Barra de uso de células (informativo) ---------- */
+.cell-usage {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px;
+}
+.cell-usage-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; margin-bottom: 6px;
+}
+.cell-usage-head span { text-transform: uppercase; letter-spacing: 0.5px; }
+.cell-usage-track {
+  height: 8px; border-radius: 999px; background: var(--surface-2);
+  overflow: hidden;
+}
+.cell-usage-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease, background 0.4s ease; }
+.cell-usage-sub { font-size: 11px; margin-top: 5px; }
+
 /* ---------- Misc ---------- */
 .toolbar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
 .muted { color: var(--muted); }

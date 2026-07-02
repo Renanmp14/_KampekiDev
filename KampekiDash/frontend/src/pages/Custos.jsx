@@ -9,6 +9,7 @@ import ImportModalXml from '../components/ImportModalXml.jsx';
 import ImportNfsePdfModal from '../components/ImportNfsePdfModal.jsx';
 import ImportResult from '../components/ImportResult.jsx';
 import ClassificarItensModal from '../components/ClassificarItensModal.jsx';
+import CellUsageBar from '../components/CellUsageBar.jsx';
 import { parseCustos } from '../utils/importParse.js';
 import { brl, toNum, categoriaBadgeClass } from '../utils/format.js';
 
@@ -486,6 +487,8 @@ export default function Custos() {
   return (
     <div>
       <h1 className="page-title">Custos</h1>
+
+      <CellUsageBar />
 
       <div className="toolbar">
         <button className="btn" onClick={abrirNovo}>+ Novo lançamento</button>

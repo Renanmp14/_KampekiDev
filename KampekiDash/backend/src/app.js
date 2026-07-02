@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 
 import { authRequired } from './middleware/auth.js';
-import { initSheets } from './services/sheets.js';
+import { initSheets, getCellUsage } from './services/sheets.js';
 import { carregar as carregarSubcategorias } from './services/subcategoria.js';
 
 import authRoutes from './routes/auth.js';
@@ -29,6 +29,16 @@ app.get('/api/config', authRequired, (req, res) => {
   res.json({
     growthAlertThreshold: Number(process.env.GROWTH_ALERT_THRESHOLD || 20),
   });
+});
+
+// Uso de células da planilha (informativo — proximidade do limite de 10M do
+// Google Sheets). Protegido por JWT.
+app.get('/api/meta/cell-usage', authRequired, async (req, res, next) => {
+  try {
+    res.json(await getCellUsage());
+  } catch (e) {
+    next(e);
+  }
 });
 
 // Rotas protegidas por JWT.

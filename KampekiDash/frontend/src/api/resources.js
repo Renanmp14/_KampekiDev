@@ -8,6 +8,9 @@ export async function login(email, password) {
 
 export const getConfig = () => api.get('/config');
 
+// Uso de células da planilha (informativo, contra o limite de 10M do Sheets).
+export const getCellUsage = () => api.get('/meta/cell-usage');
+
 // Fábrica de CRUD simples para os recursos de cadastro.
 function crud(base) {
   return {

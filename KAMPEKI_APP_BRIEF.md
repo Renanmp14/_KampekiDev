@@ -914,3 +914,50 @@ No **Dash Custos**, botão **"⬇ Exportar PDF"** (ao lado do título) gera um P
 ### Correção — escala compacta dos gráficos (milhão/bilhão)
 
 Os eixos/rótulos dos gráficos só formatavam até **milhar** (`R$${(v/1000).toFixed(0)}k`), então valores em **milhão** apareciam feios (ex.: `1.500.000` → "1.500k"). Novo helper **`brlCompact(value)`** em `src/utils/format.js` trata **k / mi / bi** (`R$ 12k`, `R$ 1,5mi`, `R$ 1,2bi`) e foi aplicado em **todos os gráficos**: eixos do **Dash Custos**, **Dash Folha** e **Análise por Período** (`tickFormatter`), e os rótulos de valor do **PDF** (`exportPdf.js`). `vite build` OK.
+
+---
+
+## Atualizações — 02/07/2026
+
+> Duas frentes: **Exportar PDF** replicado no Dash Folha e no Dash por Período (antes só existia no Dash Custos), e uma **barra informativa de uso de células** da planilha no lançamento de Custos.
+
+### Exportar Relatório em PDF — Dash Folha e Análise por Período
+
+O botão **"⬇ Exportar PDF"** que existia só no **Dash Custos** foi estendido ao **Dash Folha** e à **Análise por Período** (abas Custos e Folha), reaproveitando o mesmo padrão: **gráficos vetoriais desenhados para o relatório** (tema claro, cores da marca), sem captura da tela escura, e refletindo **os filtros/drill-down ativos** no momento (exporta o que está na tela).
+
+**`src/utils/exportPdf.js`** ganhou:
+- `barrasMes(doc, ..., color = CORAL)` — o gráfico de barras por mês passou a aceitar cor (coral nos Custos, **teal** na Folha).
+- Helpers compartilhados `rodape(doc, M)` (paginação em todas as páginas) e `ensureSpace(doc, y, need, M)` (quebra de página quando o próximo bloco não cabe) — extraídos do fluxo de Custos e reusados nos novos relatórios.
+- `barrasAB(doc, x, y, w, rows, topN)` — **barras horizontais agrupadas Período A (teal) × B (coral)** com legenda e rótulos compactos, para a Análise por Período.
+- **`exportarRelatorioFolha({...})`** — cabeçalho com a marca + data, Período/Filtros, KPIs (Total e Nº de lançamentos), gráfico **Folha por mês** (barras teal), **Participação por Tag** (barras horizontais), tabela **Subtotal por Item** (top N) e o **Cruzamento Tag × Categoria** (autoTable com linha de Subtotal/Total geral). Arquivo: `relatorio-folha-AAAA-MM-DD.pdf`.
+- **`exportarRelatorioPeriodo({ tipo, periodoALabel, periodoBLabel, totalA, totalB, secoes })`** — genérico para Custos e Folha; KPIs A/B + variação e, por seção, o **gráfico A×B (top 8)** seguido da **tabela detalhada** (todas as chaves + Δ absoluto/percentual). Arquivo: `analise-periodo-{custos|folha}-AAAA-MM-DD.pdf`.
+
+**Wiring (frontend):**
+- `src/pages/dash/DashFolha.jsx` — botão no cabeçalho + handler `exportarPdf()` (usa `porMes`/`porTag`/`porItem`/`cruzamento` já computados; rótulos refletem o filtro de tag, o mês e o drill de tag ativos).
+- `src/pages/dash/DashPeriodo.jsx` — botão por aba (componente `AnaliseHeader`); as comparações (`comparar(...)`) viraram `useMemo` reaproveitados por tela + PDF; novo helper `periodLabel({de, ate})` para rotular os períodos A/B.
+
+### Custos — barra informativa de uso de células (limite de 10M do Google Sheets)
+
+No **canto superior esquerdo** do lançamento de **Custos** (logo abaixo do título), uma **barra de progresso informativa** mostra quão perto a planilha está do **limite de 10 milhões de células** do Google Sheets. **É apenas informativo — não bloqueia nada.**
+
+- **Cores (traffic-light):** **verde até 60%**, **laranja de 60% a 90%**, **vermelho a partir de 90%**.
+- **Métrica (decisão de modelagem):** conta a **grade** de células — `Σ (rowCount × colCount)` de todas as abas — que é **exatamente o que o Google mede contra o limite de 10M** (inclui células vazias dentro da grade e o buffer de linhas do `appendRows`). Preferido a "só células com dado" de propósito: como alerta de proximidade do teto, precisa refletir o que o Google conta, senão a barra mostraria um número otimista e o limite seria atingido de surpresa. O tooltip/sublinha deixam claro que é "vs. limite do Google Sheets".
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/sheets.js` | Novo `getCellUsage()` — 1 chamada de metadados (`fields: sheets(properties(title,gridProperties(rowCount,columnCount)))`); retorna `{ used, limit, sheets: [...] }`. Limite = `SHEETS_CELL_LIMIT` do `.env` ou `10_000_000`. |
+| `src/app.js` | Nova rota `GET /api/meta/cell-usage` (protegida por JWT). |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/api/resources.js` | Novo `getCellUsage()` (`GET /meta/cell-usage`). |
+| `src/components/CellUsageBar.jsx` | **Novo** — busca o uso no mount, renderiza a barra com a cor por faixa; se a chamada falhar, **some** (informativo, não atrapalha a página). |
+| `src/pages/Custos.jsx` | Renderiza `<CellUsageBar />` entre o título e a toolbar. |
+| `src/styles.css` | Classes `.cell-usage`, `.cell-usage-head/-track/-fill/-sub`. |
+
+### Validação
+- Backend: `node --check` OK em `sheets.js` e `app.js`.
+- Frontend: `vite build` OK (1253 módulos; único aviso é o de tamanho de chunk, pré-existente).
+- Execução real do app **não** foi possível nesta sessão por falta do `.env` (credenciais da Service Account). Pendente de teste manual no navegador: baixar os PDFs de Folha e de Período, e ver a barra de uso de células com os números reais da planilha.

@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { folhaApi, tagApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import { exportarRelatorioFolha } from '../../utils/exportPdf.js';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import {
   groupSum, keyToLabel, monthsBetween, filterByPeriod, rowMonthKey, toNum,
@@ -21,6 +22,7 @@ export default function DashFolha() {
   const [selMes, setSelMes] = useState(''); // mês selecionado na evolução (filtro global)
   const [selTag, setSelTag] = useState(''); // tag selecionada na pizza (drill-down)
   const [loading, setLoading] = useState(true);
+  const [exportando, setExportando] = useState(false);
 
   function toggleMes(key) {
     if (!key) return;
@@ -123,11 +125,41 @@ export default function DashFolha() {
     };
   }, [baseTag, tags]);
 
+  function exportarPdf() {
+    setExportando(true);
+    try {
+      const periodoLabel = selMes
+        ? keyToLabel(selMes)
+        : (deKey ? `${keyToLabel(deKey)} – ${keyToLabel(ateKey)}` : 'Todo o período');
+      const filtrosParts = [];
+      if (fTag) filtrosParts.push(`Filtro tag: ${fTag}`);
+      if (selMes) filtrosParts.push(`Mês: ${keyToLabel(selMes)}`);
+      if (selTag) filtrosParts.push(`Tag: ${selTag}`);
+      exportarRelatorioFolha({
+        periodoLabel,
+        filtrosLabel: filtrosParts.join(' · ') || null,
+        total,
+        nLanc: baseTag.length,
+        porMes,
+        porTag,
+        porItem,
+        cruzamento,
+      });
+    } finally {
+      setExportando(false);
+    }
+  }
+
   if (loading) return <div><h1 className="page-title">Dash Folha</h1><div className="empty">Carregando...</div></div>;
 
   return (
     <div>
-      <h1 className="page-title">Dash Folha</h1>
+      <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Dash Folha</h1>
+        <button className="btn btn-ghost" onClick={exportarPdf} disabled={exportando}>
+          {exportando ? 'Gerando PDF...' : '⬇ Exportar PDF'}
+        </button>
+      </div>
 
       <PeriodFilter de={period.de} ate={period.ate} onChange={setPeriod}>
         <div className="field" style={{ maxWidth: 180 }}>

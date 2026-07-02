@@ -4,8 +4,18 @@ import {
 } from 'recharts';
 import { custosApi, folhaApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import { exportarRelatorioPeriodo } from '../../utils/exportPdf.js';
 import { brl, pct, brlCompact } from '../../utils/format.js';
-import { groupSum, filterByPeriod, toNum } from '../../utils/agg.js';
+import {
+  groupSum, filterByPeriod, toNum, keyToLabel,
+} from '../../utils/agg.js';
+
+// Rótulo de período a partir de { de, ate } (chaves 'YYYY-MM' do month input).
+function periodLabel(p) {
+  if (!p.de && !p.ate) return '';
+  const l = (k) => (k ? keyToLabel(k) : '…');
+  return `${l(p.de)} – ${l(p.ate)}`;
+}
 
 const A_COLOR = '#4f868f'; // Período A (teal)
 const B_COLOR = '#ff8b7c'; // Período B (coral)
@@ -127,9 +137,21 @@ function TotaisAB({ totalA, totalB }) {
   );
 }
 
+// Cabeçalho da análise com o botão de exportar PDF.
+function AnaliseHeader({ exportando, onExport }) {
+  return (
+    <div className="row-actions" style={{ justifyContent: 'flex-end', marginBottom: 12 }}>
+      <button className="btn btn-ghost" onClick={onExport} disabled={exportando}>
+        {exportando ? 'Gerando PDF...' : '⬇ Exportar PDF'}
+      </button>
+    </div>
+  );
+}
+
 function AnaliseCustos({ custos }) {
   const [periodoA, setPeriodoA] = useState({ de: '', ate: '' });
   const [periodoB, setPeriodoB] = useState({ de: '', ate: '' });
+  const [exportando, setExportando] = useState(false);
   const val = (r) => toNum(r.VALOR_TOTAL);
 
   const a = useMemo(() => filterByPeriod(custos, periodoA.de, periodoA.ate), [custos, periodoA]);
@@ -138,13 +160,38 @@ function AnaliseCustos({ custos }) {
   const totalA = a.reduce((s, r) => s + val(r), 0);
   const totalB = b.reduce((s, r) => s + val(r), 0);
 
+  const porCategoria = useMemo(() => comparar(a, b, (r) => r.CATEGORIA, val), [a, b]);
+  const porSubcategoria = useMemo(() => comparar(a, b, (r) => r.SUB_CATEGORIA, val), [a, b]);
+  const porItem = useMemo(() => comparar(a, b, (r) => r.ITEM, val), [a, b]);
+
+  function exportarPdf() {
+    setExportando(true);
+    try {
+      exportarRelatorioPeriodo({
+        tipo: 'Custos',
+        periodoALabel: periodLabel(periodoA),
+        periodoBLabel: periodLabel(periodoB),
+        totalA,
+        totalB,
+        secoes: [
+          { titulo: 'Comparativo por Categoria', labelCol: 'Categoria', rows: porCategoria },
+          { titulo: 'Comparativo por Subcategoria', labelCol: 'Subcategoria', rows: porSubcategoria },
+          { titulo: 'Comparativo por Item', labelCol: 'Item', rows: porItem },
+        ],
+      });
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
+      <AnaliseHeader exportando={exportando} onExport={exportarPdf} />
       <PeriodHeaders {...{ periodoA, setPeriodoA, periodoB, setPeriodoB }} />
       <TotaisAB totalA={totalA} totalB={totalB} />
-      <ComparativoSecao titulo="Comparativo por Categoria" labelCol="Categoria" rows={comparar(a, b, (r) => r.CATEGORIA, val)} />
-      <ComparativoSecao titulo="Comparativo por Subcategoria" labelCol="Subcategoria" rows={comparar(a, b, (r) => r.SUB_CATEGORIA, val)} />
-      <ComparativoSecao titulo="Comparativo por Item" labelCol="Item" rows={comparar(a, b, (r) => r.ITEM, val)} />
+      <ComparativoSecao titulo="Comparativo por Categoria" labelCol="Categoria" rows={porCategoria} />
+      <ComparativoSecao titulo="Comparativo por Subcategoria" labelCol="Subcategoria" rows={porSubcategoria} />
+      <ComparativoSecao titulo="Comparativo por Item" labelCol="Item" rows={porItem} />
     </div>
   );
 }
@@ -152,6 +199,7 @@ function AnaliseCustos({ custos }) {
 function AnaliseFolha({ folha }) {
   const [periodoA, setPeriodoA] = useState({ de: '', ate: '' });
   const [periodoB, setPeriodoB] = useState({ de: '', ate: '' });
+  const [exportando, setExportando] = useState(false);
   const val = (r) => toNum(r.VALOR);
 
   const a = useMemo(() => filterByPeriod(folha, periodoA.de, periodoA.ate), [folha, periodoA]);
@@ -160,12 +208,35 @@ function AnaliseFolha({ folha }) {
   const totalA = a.reduce((s, r) => s + val(r), 0);
   const totalB = b.reduce((s, r) => s + val(r), 0);
 
+  const porTag = useMemo(() => comparar(a, b, (r) => r.TAG, val), [a, b]);
+  const porItem = useMemo(() => comparar(a, b, (r) => r.ITEM_FOLHA, val), [a, b]);
+
+  function exportarPdf() {
+    setExportando(true);
+    try {
+      exportarRelatorioPeriodo({
+        tipo: 'Folha',
+        periodoALabel: periodLabel(periodoA),
+        periodoBLabel: periodLabel(periodoB),
+        totalA,
+        totalB,
+        secoes: [
+          { titulo: 'Comparativo por Tag', labelCol: 'Tag', rows: porTag },
+          { titulo: 'Comparativo por Item Folha', labelCol: 'Item Folha', rows: porItem },
+        ],
+      });
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
+      <AnaliseHeader exportando={exportando} onExport={exportarPdf} />
       <PeriodHeaders {...{ periodoA, setPeriodoA, periodoB, setPeriodoB }} />
       <TotaisAB totalA={totalA} totalB={totalB} />
-      <ComparativoSecao titulo="Comparativo por Tag" labelCol="Tag" rows={comparar(a, b, (r) => r.TAG, val)} />
-      <ComparativoSecao titulo="Comparativo por Item Folha" labelCol="Item Folha" rows={comparar(a, b, (r) => r.ITEM_FOLHA, val)} />
+      <ComparativoSecao titulo="Comparativo por Tag" labelCol="Tag" rows={porTag} />
+      <ComparativoSecao titulo="Comparativo por Item Folha" labelCol="Item Folha" rows={porItem} />
     </div>
   );
 }

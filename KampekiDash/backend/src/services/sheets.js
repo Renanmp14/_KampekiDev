@@ -53,6 +53,29 @@ export function getSheetId(tab) {
   return sheetIdByTitle[tab];
 }
 
+// Uso de células da planilha inteira (todas as abas) contra o limite do Google
+// Sheets (10 milhões de células por planilha). O Google conta a GRADE de cada
+// aba (rowCount × columnCount), incluindo células vazias dentro da grade — é
+// exatamente esse número que se aproxima do limite. Retorna também o detalhe por
+// aba, para depuração. Uma única chamada de metadados (barata).
+export async function getCellUsage() {
+  const sheets = await getSheets();
+  const spreadsheetId = getSpreadsheetId();
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets(properties(title,gridProperties(rowCount,columnCount)))',
+  });
+  const detalhe = (meta.data.sheets || []).map((s) => {
+    const gp = s.properties.gridProperties || {};
+    const rows = gp.rowCount || 0;
+    const cols = gp.columnCount || 0;
+    return { title: s.properties.title, rows, cols, cells: rows * cols };
+  });
+  const used = detalhe.reduce((sum, d) => sum + d.cells, 0);
+  const limit = Number(process.env.SHEETS_CELL_LIMIT || 10_000_000);
+  return { used, limit, sheets: detalhe };
+}
+
 // Cria as abas faltantes com seus cabeçalhos. Não modifica dados existentes.
 export async function initSheets() {
   const sheets = await getSheets();
