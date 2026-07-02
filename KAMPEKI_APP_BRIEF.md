@@ -1018,3 +1018,34 @@ No **canto superior esquerdo** do lançamento de **Custos** (logo abaixo do tít
 - Ao passar de 1 usuário, **migrar para backend hospedado** para não distribuir credenciais.
 - **Rotacionar/revogar** a chave da Service Account embutida após o Beta.
 - Assinatura de código (code signing) opcional — sem ela, o Windows SmartScreen exibe aviso na 1ª execução.
+
+---
+
+## Atualizações — 02/07/2026 (parte 3) — 1º teste em máquina do cliente + trava de credenciais
+
+> O instalador foi levado a **outro computador** e o app abriu normalmente, mas o **login não entrava**. Diagnóstico, correção e uma trava para não repetir.
+
+### Bug — login não autentica no app instalado
+
+**Sintoma:** app instala e abre, mas `admin@financesheet.local` / senha real → "Credenciais inválidas".
+
+**Causa (confirmada inspecionando `dist/win-unpacked/resources/.env`):** o instalador foi **gerado enquanto o `desktop/build/.env` ainda tinha os valores de exemplo** (`ADMIN_EMAIL=admin@kampeki.local`, `ADMIN_PASSWORD=defina_uma_senha`). As credenciais reais foram preenchidas **depois**, mas o `.exe` não foi regerado. O login compara contra o `.env` empacotado (`routes/auth.js`), então só as credenciais de exemplo "funcionariam" naquele build — não as reais.
+
+**Correção:** com o `build/.env` já contendo as credenciais reais (admin real + `JWT_SECRET` + `GOOGLE_SHEET_ID` + `GOOGLE_CREDENTIALS_JSON` com `private_key`), **regerar o instalador** e reinstalar. Versão subida para **1.0.1** (aparece no selo do rodapé — confirma visualmente que o build novo está rodando).
+
+### Trava nova — `check-env` (barra placeholders antes de empacotar)
+
+Para o erro não se repetir, um **pré-build** valida o `.env` e **falha o build** se algo estiver faltando/placeholder — antes era possível empacotar silenciosamente um `.env` de exemplo.
+
+| Arquivo | O que é |
+|---|---|
+| `desktop/check-env.js` | **Novo** — lê `build/.env` (via dotenv) e aborta (exit 1) se: arquivo ausente; `ADMIN_EMAIL` vazio/`admin@kampeki.local`; `ADMIN_PASSWORD` vazio/`defina_uma_senha`; `JWT_SECRET` placeholder; `GOOGLE_SHEET_ID` vazio/placeholder; `GOOGLE_CREDENTIALS_JSON` ausente/JSON inválido/sem `private_key`+`client_email`. Sucesso imprime o email de login que vai no build. |
+| `desktop/package.json` | Script `dist` agora roda `node check-env.js` **antes** do `vite build`/`electron-builder`; novo script avulso `check-env`. Versão → `1.0.1`. |
+
+### Entrega ao cliente — qual arquivo enviar
+
+**Apenas 1 arquivo:** `desktop/dist/KampekiFinance-Setup-<versao>.exe` (autocontido — Node + backend + frontend + `.env` embutidos; ~300 MB, enviar por Drive/WeTransfer). **Não** enviar `latest.yml`, `.blockmap`, `builder-*.yml/.yaml` (só auto-update/diagnóstico) nem `win-unpacked/` (teste local). No cliente: fechar o app → rodar o Setup (sobrescreve) → login com as credenciais reais → conferir a versão no rodapé.
+
+### Validação
+- `check-env` roda OK contra o `build/.env` atual (credenciais reais; login `admin@financesheet.local`).
+- Build **1.0.1** gerado com sucesso (`KampekiFinance-Setup-1.0.1.exe`). Pendente: reinstalar no PC do cliente e confirmar o login real + o `v1.0.1` no rodapé.

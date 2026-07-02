@@ -1,6 +1,6 @@
 {
   "name": "kampeki-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Kampeki Finance — aplicativo desktop (Windows)",
   "author": "Kampeki",
   "main": "main.js",
@@ -8,9 +8,10 @@
   "scripts": {
     "start": "electron .",
     "icon": "node build-icon.js",
+    "check-env": "node check-env.js",
     "build:frontend": "npm --prefix ../frontend run build",
     "pack": "electron-builder",
-    "dist": "npm run build:frontend && electron-builder"
+    "dist": "node check-env.js && npm run build:frontend && electron-builder"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
