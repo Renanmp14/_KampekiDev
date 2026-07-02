@@ -1,0 +1,5 @@
+node_modules/
+dist/
+
+# Config fixa com segredos — NUNCA versionar (só o .env.example vai pro git).
+build/.env

@@ -1,0 +1,36 @@
+# ============================================================
+# .gitignore raiz — Kampeki (gerencie aqui o que sobe ao repo)
+# Os .gitignore de subpasta (backend/, frontend/, desktop/) continuam
+# valendo em conjunto com este.
+# ============================================================
+
+# ---- Dependências ----
+node_modules/
+
+# ---- Builds / saídas ----
+KampekiDash/frontend/dist/
+KampekiDash/desktop/dist/
+
+# Zips (ex.: o dist.zip do empacotamento) — arquivos grandes, nunca subir
+*.zip
+
+# ---- Segredos: NUNCA subir ----
+# Pega qualquer arquivo .env em qualquer pasta (backend/.env, desktop/build/.env, etc.)
+#.env
+#.env.*
+# ...mas mantém os modelos versionados:
+#!.env.example
+#!.env.*.example
+
+# ---- Logs ----
+*.log
+npm-debug.log*
+
+# ---- Sistema operacional / temporários ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- Editor (descomente se NÃO quiser versionar config do VSCode) ----
+# .vscode/

@@ -961,3 +961,60 @@ No **canto superior esquerdo** do lançamento de **Custos** (logo abaixo do tít
 - Backend: `node --check` OK em `sheets.js` e `app.js`.
 - Frontend: `vite build` OK (1253 módulos; único aviso é o de tamanho de chunk, pré-existente).
 - Execução real do app **não** foi possível nesta sessão por falta do `.env` (credenciais da Service Account). Pendente de teste manual no navegador: baixar os PDFs de Folha e de Período, e ver a barra de uso de células com os números reais da planilha.
+
+---
+
+## Atualizações — 02/07/2026 (parte 2) — Instalador Windows (app desktop Electron)
+
+> Objetivo: entregar a um **usuário Beta** um instalador `.exe` que ele instala e roda na própria máquina Windows, **sem precisar instalar Node** nem configurar nada. Conexão fixa embutida, controle de versão por build, e caminho de atualização (sobrescreve e roda a versão nova). Investigação e decisões alinhadas ponto a ponto antes de implementar.
+
+### Decisões de arquitetura (alinhadas)
+
+- **Empacotamento: Electron + `electron-builder` (NSIS) + `electron-updater`.** O app sobe o backend Express embutido em `127.0.0.1` numa **porta livre** e abre uma janela apontando pra ele; o próprio Express serve o build do frontend + as rotas `/api` (mesma origem, então o `/api` relativo do `client.js` funciona sem mudança). Node vem dentro do Electron — o usuário não instala nada.
+- **Distribuição do update: handoff manual por agora.** Você gera um `.exe` novo e envia; o instalador **sobrescreve** a versão anterior. O `electron-updater` já está **cabeado e dormente**: quando quiser auto-update, basta definir `UPDATE_FEED_URL` (provider `generic`, um host HTTP estático) no `build/.env` — sem retrabalho de código.
+- **Config fixa "vai junto no build":** as credenciais (Service Account, `JWT_SECRET`, admin, `GOOGLE_SHEET_ID`) ficam em `desktop/build/.env` (não versionado), empacotado como `extraResources` → `resources/.env`. O Electron carrega esse `.env` para `process.env` antes de subir o backend.
+- **⚠ Ponto sensível registrado:** o `.env` empacotado vai **plaintext** para o disco do cliente — qualquer um com o app instalado consegue extrair a chave da Service Account, o segredo JWT e a senha admin. **Aceitável para 1 Beta de confiança**, tratando a chave como **descartável** (SA com acesso só a essa planilha; rotacionar/revogar após o Beta; nunca comitar credenciais). O "conserto de verdade" ao passar de 1 usuário é **hospedar o backend central** (cliente vira thin client; nenhum segredo é distribuído) — recomendado como evolução.
+
+### Mudanças no código
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `backend/src/app.js` | Refatorado para **exportar `startServer({ port, staticDir })`** (o Electron controla start/porta; `port: 0` = porta livre em `127.0.0.1`), mantendo o modo standalone (`node src/app.js` ainda sobe sozinho via checagem `invokedDirectly`). Passou a **servir `frontend/dist` estático + fallback SPA** quando há build disponível (via `FRONTEND_DIST` ou caminho relativo). Novo endpoint **público `GET /api/version`** (`{ version }`, de `APP_VERSION` injetado pelo Electron ou do `package.json`). |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/components/VersionBadge.jsx` | **Novo** — selo fixo no **canto inferior direito**, em **todas as telas (inclusive login)**, mostrando `v<versão>`. Lê `/api/version` (público). |
+| `src/main.jsx` | Renderiza `<VersionBadge />` junto do `<App />`. |
+| `src/styles.css` | Classe `.version-badge` (fixed, bottom-right, pill discreta). |
+
+**Camada desktop (nova pasta `desktop/`)**
+| Arquivo | O que é |
+|---|---|
+| `desktop/main.js` | Processo principal do Electron (CJS). Carrega o `.env` empacotado, sobe o backend (import dinâmico do ESM por caminho absoluto), abre a janela; instância única; links externos no navegador; `setupAutoUpdate()` só age se `UPDATE_FEED_URL` estiver definida. |
+| `desktop/package.json` | Deps do Electron + config do `electron-builder`. **`version` = fonte única da versão.** `extraResources`: `backend` (com node_modules, menos `.env`), `frontend/dist` → `frontend-dist`, `build/.env` → `.env`. Alvo `win/nsis` (por-usuário, sem admin, atalho). Scripts `start`, `icon`, `build:frontend`, `pack`, `dist`. |
+| `desktop/build/.env.example` | Modelo da config fixa (copiar p/ `build/.env` e preencher). |
+| `desktop/build-icon.js` | Gera `build/icon.ico` (multi-resolução 16→256) a partir de `frontend/public/favicon.svg` usando `sharp` + `png-to-ico`. O `.ico` é versionado; regenerar só se mudar a logo (`npm i -D sharp png-to-ico && npm run icon`). |
+| `desktop/build/icon.ico` | Ícone da marca (selo KMPK) usado no `.exe`/instalador/janela. |
+| `desktop/.gitignore` | Ignora `node_modules/`, `dist/` e **`build/.env`** (segredo). |
+| `desktop/README-INSTALADOR.md` | Passo a passo: pré-requisitos, definir versão, `npm run dist`, onde fica o `.exe`, e como ligar o auto-update depois. |
+
+### Fluxo de build/versão/entrega
+
+1. **Versão:** editar `desktop/package.json` → campo `version` (SemVer). É o número do rodapé do app e o que o updater compara quando ligado.
+2. **Build:** dentro de `desktop/` → `npm run dist` (faz `vite build` do frontend → empacota backend+frontend+`.env` → gera o NSIS).
+3. **Saída:** `desktop/dist/KampekiFinance-Setup-<versao>.exe` (entregue ao cliente), mais `latest.yml` + `.blockmap` (usados só no auto-update) e `win-unpacked/` (teste sem instalar).
+4. **Atualizar cliente (manual):** subir a `version` → `npm run dist` → enviar o novo `.exe` (sobrescreve).
+
+### Validação
+- Backend: `node --check` OK (`app.js`). Frontend: `vite build` OK (1253 módulos; aviso de chunk pré-existente).
+- Desktop: `node --check main.js` OK; `package.json` válido; **`build/icon.ico` gerado** (370 KB, multi-resolução) a partir do favicon.
+- **1º build real gerado pelo usuário** com `electron-builder 24.13.3` / `electron 31.7.7`: `KampekiFinance-Setup-1.0.0.exe` criado com sucesso (inicialmente com o ícone padrão do Electron; **corrigido nesta sessão** apontando `win.icon` → `build/icon.ico`).
+- Pendente: instalar o `.exe` numa máquina limpa e validar o app conectando à planilha (depende do `desktop/build/.env` com credenciais reais).
+
+### Pendências em aberto (instalador)
+- Ligar o **auto-update** quando houver host HTTP definido (`UPDATE_FEED_URL` no `build/.env`) e publicar `.exe` + `latest.yml` + `.blockmap` a cada release.
+- Ao passar de 1 usuário, **migrar para backend hospedado** para não distribuir credenciais.
+- **Rotacionar/revogar** a chave da Service Account embutida após o Beta.
+- Assinatura de código (code signing) opcional — sem ela, o Windows SmartScreen exibe aviso na 1ª execução.

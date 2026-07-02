@@ -6,6 +6,7 @@ O **Google Sheets** é a camada de persistência; toda a lógica de negócio fic
 - **Backend:** Node.js + Express + Google Sheets API v4 (porta `3001`)
 - **Frontend:** React + Vite + Recharts (porta `5173`)
 - **Auth:** JWT (email/senha do `.env`)
+- **Desktop (Beta):** app Windows via Electron — instalador `.exe` (ver [Gerar o instalador Windows](#gerar-o-instalador-windows-executável)).
 
 ## Pré-requisitos
 
@@ -48,6 +49,57 @@ npm run dev
 
 O Vite faz proxy de `/api` para `http://localhost:3001`. Acesse `http://localhost:5173`
 e faça login com o `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+## Gerar o instalador Windows (executável)
+
+Empacota o backend + o frontend num único instalador `.exe` (Electron). O usuário
+Beta **não precisa instalar Node** nem configurar nada — a conexão vai fixa no build.
+Comandos abaixo em **PowerShell**, a partir da pasta `KampekiDash/`.
+
+Detalhes completos (auto-update, ícone) em [`desktop/README-INSTALADOR.md`](desktop/README-INSTALADOR.md).
+
+**1. Dependências (só na primeira vez):**
+
+```powershell
+npm --prefix backend  install
+npm --prefix frontend install
+npm --prefix desktop  install
+```
+
+> A instalação do `desktop` baixa o Electron (~200 MB) — pode demorar na 1ª vez.
+
+**2. Credenciais que vão embutidas no app** (arquivo não versionado):
+
+```powershell
+Copy-Item desktop\build\.env.example desktop\build\.env
+notepad desktop\build\.env
+```
+
+Preencha e salve: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `GOOGLE_SHEET_ID` e
+`GOOGLE_CREDENTIALS_JSON` (o JSON da Service Account **em uma única linha**).
+
+**3. Definir a versão:** edite `desktop/package.json` → campo `"version"` (SemVer, ex.:
+`1.0.0` → `1.0.1`). É o número exibido no rodapé do app.
+
+**4. Gerar o instalador:**
+
+```powershell
+cd desktop
+npm run dist
+```
+
+(`npm run dist` = `vite build` do frontend → empacota tudo → gera o instalador NSIS.)
+
+**5. Onde fica o executável:**
+
+```
+desktop\dist\KampekiFinance-Setup-<versao>.exe   ← entregue este ao cliente
+desktop\dist\latest.yml                          ← manifesto (só usado no auto-update)
+desktop\dist\win-unpacked\                        ← app "cru" p/ testar sem instalar
+```
+
+**Atualizar o cliente:** suba a `version` no `desktop/package.json` → `npm run dist` →
+envie o novo `.exe`; ao rodar, o instalador **sobrescreve** a versão anterior.
 
 ## Endpoints
 
