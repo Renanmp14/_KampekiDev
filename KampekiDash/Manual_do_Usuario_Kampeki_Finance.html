@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#18322E">
+<title>Kampeki Finance — Manual do Usuário</title>
+<style>
+  :root{
+    --verde:#18322E; --verde-esc:#0e1b18; --surface:#16302b; --surface2:#1f3d37;
+    --border:#2c4a43; --coral:#FF8B7C; --teal:#4F868F; --sand:#D7C4B6;
+    --olive:#BFCB7F; --vinho:#623232; --claro:#e9ebe6; --muted:#93a39b;
+    --ink:#22332f; --paper:#ffffff; --paper-soft:#FBF7F3;
+  }
+  @page{ size:A4; margin:20mm 16mm 18mm; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    font-family:'Segoe UI','Inter','Helvetica Neue',Helvetica,Arial,sans-serif;
+    color:var(--ink); font-size:11.2pt; line-height:1.55; background:#fff;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+
+  /* ---- Apresentação em TELA (navegador): documento centralizado ---- */
+  @media screen{
+    html{
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(24,50,46,.18), transparent 60%),
+        linear-gradient(160deg,#e7ede9,#dbe3de 60%,#d3ddd7);
+      min-height:100%;
+    }
+    body{
+      width:210mm; max-width:100%;
+      margin:0 auto; background:#fff;
+      box-shadow:0 0 1px rgba(0,0,0,.2), 0 22px 60px rgba(14,27,24,.28);
+    }
+    .content{ padding:14mm 20mm 24mm; }
+    .cover{ height:auto; min-height:290mm; }
+    h2{ scroll-margin-top:14px; }
+    .toc a:hover{ background:var(--paper-soft); }
+    .toc a:hover .t{ color:var(--teal); }
+  }
+
+  /* ---- Tablet / janela estreita ---- */
+  @media screen and (max-width:840px){
+    body{ width:100%; box-shadow:none; }
+    .content{ padding:22px 20px 44px; }
+    .cover{ padding:34px 28px; min-height:0; }
+    .cover-title{ font-size:44pt; }
+    .cover-sub{ max-width:100%; font-size:13pt; }
+    .wordmark{ height:30px; }
+    .seal{ width:56px; height:56px; }
+    .cover .glow, .cover .glow2{ display:none; }
+  }
+
+  /* ---- Celular ---- */
+  @media screen and (max-width:560px){
+    body{ font-size:11pt; }
+    .content{ padding:16px 14px 34px; }
+    h2{ font-size:16pt; }
+    h2 + .lead{ font-size:11pt; }
+    h3{ font-size:12.5pt; }
+
+    .cover{ padding:26px 20px; }
+    .cover-top{ gap:12px; }
+    .cover-kicker{ font-size:10pt; letter-spacing:3px; }
+    .cover-title{ font-size:27pt; }
+    .cover-sub{ font-size:12pt; }
+    .cover-bottom{ flex-direction:column; align-items:flex-start; gap:14px; }
+    .cover-meta{ text-align:left; }
+
+    /* índice: título e número quebram bem */
+    .toc a{ flex-wrap:wrap; gap:2px 8px; }
+    .toc a .t{ flex:1 1 auto; }
+
+    /* callouts e passos mais compactos */
+    .box{ padding:12px 14px; }
+    ol.steps > li{ padding-left:36px; }
+
+    /* “prints” da interface: encolhem para caber; se faltar espaço, rolam por dentro */
+    .ui, .modal-ui{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .ui-side{ width:118px; flex:0 0 auto; }
+    .ui-body{ min-width:0; }
+    .kpis{ flex-wrap:wrap; }
+    .kpi{ flex:1 1 130px; }
+    .login-ui{ padding:26px 22px; }
+
+    /* tabelas de conteúdo: fonte menor; o texto quebra dentro das células */
+    table.data{ font-size:9.5pt; }
+    table.data th, table.data td{ padding:6px 7px; }
+  }
+
+  /* ---- Tela bem pequena (ex.: terminal/janela minúscula) ---- */
+  @media screen and (max-width:380px){
+    .cover-title{ font-size:23pt; }
+    .content{ padding:14px 11px 30px; }
+    h2{ font-size:15pt; }
+  }
+  @media print{ .content{ padding:0; } }
+  h1,h2,h3,h4{ font-weight:700; color:var(--verde); line-height:1.2; }
+  h2{ font-size:19pt; text-transform:uppercase; letter-spacing:.5px; margin:0 0 4px;
+      page-break-before:always; padding-top:2px; }
+  h2 .num{ color:var(--coral); }
+  h2 + .lead{ color:var(--teal); font-weight:600; margin:0 0 18px; font-size:11.5pt;
+      border-bottom:2px solid var(--sand); padding-bottom:12px; }
+  h3{ font-size:13.5pt; margin:22px 0 6px; }
+  h3::before{ content:""; display:inline-block; width:9px; height:9px; background:var(--coral);
+      border-radius:2px; margin-right:9px; vertical-align:middle; }
+  h4{ font-size:11.5pt; margin:16px 0 4px; color:var(--teal); }
+  p{ margin:7px 0; }
+  ul,ol{ margin:7px 0 7px 0; padding-left:22px; }
+  li{ margin:4px 0; }
+  strong{ color:var(--verde); }
+  code{ background:#eef2f0; color:#0e1b18; padding:1px 5px; border-radius:4px;
+      font-family:'Consolas','Courier New',monospace; font-size:9.6pt; }
+  a{ color:var(--teal); }
+  .avoid-break{ page-break-inside:avoid; }
+
+  /* ---------- CAPA ---------- */
+  .cover{ height:257mm; background:var(--verde); color:var(--claro);
+      display:flex; flex-direction:column; justify-content:space-between;
+      padding:26mm 22mm; page-break-after:always; position:relative; overflow:hidden; }
+  .cover .glow{ position:absolute; width:520px; height:520px; border-radius:50%;
+      background:radial-gradient(circle, rgba(255,139,124,.22), transparent 70%);
+      right:-120px; top:-120px; }
+  .cover .glow2{ position:absolute; width:460px; height:460px; border-radius:50%;
+      background:radial-gradient(circle, rgba(79,134,143,.20), transparent 70%);
+      left:-140px; bottom:40px; }
+  .cover-top{ display:flex; align-items:center; gap:16px; z-index:2; }
+  .seal{ width:66px; height:66px; }
+  .wordmark{ height:34px; color:var(--claro); }
+  .cover-mid{ z-index:2; }
+  .cover-kicker{ letter-spacing:4px; text-transform:uppercase; color:var(--coral);
+      font-size:12pt; font-weight:600; margin-bottom:10px; }
+  .cover-title{ font-size:52pt; line-height:1.02; font-weight:800; color:#fff; margin:0; }
+  .cover-title .fin{ color:var(--coral); }
+  .cover-sub{ font-size:15pt; color:var(--sand); margin-top:18px; max-width:78%; }
+  .cover-bottom{ z-index:2; display:flex; justify-content:space-between; align-items:flex-end;
+      border-top:1px solid rgba(255,255,255,.18); padding-top:16px; }
+  .cover-tag{ font-size:13pt; letter-spacing:2px; text-transform:uppercase; color:var(--claro); }
+  .cover-meta{ text-align:right; color:var(--muted); font-size:10pt; line-height:1.5; }
+  .cover-credit{ color:var(--sand); }
+  .cover-credit strong{ color:var(--coral); font-weight:700; }
+
+  /* ---------- Callouts ---------- */
+  .box{ border-radius:10px; padding:13px 16px; margin:14px 0; page-break-inside:avoid; }
+  .box p:first-child, .box ul{ margin-top:0; }
+  .box p:last-child{ margin-bottom:0; }
+  .box-title{ font-weight:700; display:block; margin-bottom:3px; }
+  .tip{ background:#f2f6e9; border-left:5px solid var(--olive); }
+  .tip .box-title{ color:#5c6b1f; }
+  .warn{ background:#fbf1ea; border-left:5px solid var(--coral); }
+  .warn .box-title{ color:#b4503f; }
+  .note{ background:#eef3f4; border-left:5px solid var(--teal); }
+  .note .box-title{ color:#2f5a62; }
+  .key{ background:var(--verde); color:var(--claro); border-left:5px solid var(--coral); }
+  .key .box-title{ color:var(--coral); }
+  .key code{ background:rgba(255,255,255,.12); color:#fff; }
+
+  /* Steps */
+  ol.steps{ counter-reset:st; list-style:none; padding-left:0; margin:12px 0; }
+  ol.steps > li{ position:relative; padding:2px 0 10px 40px; margin:0; }
+  ol.steps > li::before{ counter-increment:st; content:counter(st);
+      position:absolute; left:0; top:0; width:26px; height:26px; border-radius:50%;
+      background:var(--coral); color:var(--verde); font-weight:700; font-size:11pt;
+      display:flex; align-items:center; justify-content:center; }
+
+  /* Tables */
+  table.data{ width:100%; border-collapse:collapse; margin:12px 0; font-size:10pt;
+      page-break-inside:avoid; }
+  table.data th{ background:var(--verde); color:var(--claro); text-align:left;
+      padding:8px 10px; font-weight:600; }
+  table.data td{ padding:7px 10px; border-bottom:1px solid #e3e8e5; vertical-align:top; }
+  table.data tr:nth-child(even) td{ background:var(--paper-soft); }
+
+  .pill{ display:inline-block; padding:1px 9px; border-radius:20px; font-size:8.5pt;
+      font-weight:700; letter-spacing:.3px; }
+  .pill-coral{ background:var(--coral); color:var(--verde); }
+  .pill-teal{ background:var(--teal); color:#fff; }
+  .pill-sand{ background:var(--sand); color:#4a3b30; }
+  .pill-olive{ background:var(--olive); color:#40460f; }
+
+  .section-intro{ background:var(--paper-soft); border:1px solid #ece3da; border-radius:10px;
+      padding:14px 18px; margin:10px 0 4px; }
+
+  /* ---------- MOCKUPS (interface escura reproduzida) ---------- */
+  .shot{ margin:16px 0 8px; page-break-inside:avoid; }
+  .shot-cap{ font-size:9pt; color:var(--muted); margin-top:6px; text-align:center;
+      font-style:italic; }
+  .ui{ background:var(--verde-esc); border:1px solid var(--border); border-radius:12px;
+      overflow:hidden; color:var(--claro); font-size:9pt; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .ui-title{ text-transform:uppercase; letter-spacing:.5px; font-weight:700; font-size:12pt;
+      color:#fff; margin:0 0 12px; }
+  .ui-pad{ padding:16px 18px; }
+  .ui-flex{ display:flex; }
+  .ui-side{ width:150px; background:var(--surface); border-right:1px solid var(--border);
+      padding:14px 10px; }
+  .ui-brand{ color:var(--coral); font-weight:800; letter-spacing:1px; font-size:12pt;
+      padding:2px 8px 12px; }
+  .ui-navsec{ color:var(--muted); font-size:7.5pt; text-transform:uppercase; letter-spacing:.6px;
+      padding:10px 8px 4px; }
+  .ui-nav{ padding:7px 10px; border-radius:7px; color:var(--muted); margin:2px 0; }
+  .ui-nav.on{ background:var(--coral); color:var(--verde); font-weight:700; }
+  .ui-body{ flex:1; padding:14px 16px; }
+  .kpis{ display:flex; gap:10px; margin:4px 0 12px; }
+  .kpi{ flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+      padding:11px 13px; }
+  .kpi .lab{ color:var(--muted); font-size:7.5pt; text-transform:uppercase; letter-spacing:.5px; }
+  .kpi .val{ font-size:15pt; font-weight:800; color:#fff; margin-top:3px; }
+  .kpi .val.coral{ color:var(--coral); }
+  .kpi .val.teal{ color:var(--teal); }
+  .card2{ background:var(--surface); border:1px solid var(--border); border-radius:10px;
+      padding:12px 14px; margin:10px 0; color:var(--claro); }
+  .card2 h5{ margin:0 0 10px; color:#fff; font-size:9.5pt; text-transform:uppercase; letter-spacing:.5px; }
+  .btn{ display:inline-block; padding:6px 12px; border-radius:7px; font-weight:700; font-size:8.5pt; }
+  .btn-coral{ background:var(--coral); color:var(--verde); }
+  .btn-teal{ background:var(--teal); color:#fff; }
+  .btn-ghost{ background:var(--surface2); color:var(--claro); border:1px solid var(--border); }
+  .btn-danger{ background:var(--vinho); color:var(--coral); }
+  .inp{ background:var(--surface2); border:1px solid var(--border); border-radius:7px;
+      padding:6px 9px; color:var(--claro); display:inline-block; min-width:90px; }
+  .inp .ph{ color:var(--muted); }
+  .row-g{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  .chip{ background:var(--surface2); border:1px solid var(--teal); color:#cfe3e6;
+      border-radius:16px; padding:3px 10px; font-size:8pt; }
+  table.ui-tb{ width:100%; border-collapse:collapse; font-size:8.2pt; }
+  table.ui-tb th{ text-align:left; color:var(--muted); font-weight:600; padding:5px 7px;
+      border-bottom:1px solid var(--border); text-transform:uppercase; font-size:7pt; letter-spacing:.4px; }
+  table.ui-tb td{ padding:5px 7px; border-bottom:1px solid rgba(44,74,67,.6); }
+  .bars{ display:flex; align-items:flex-end; gap:7px; height:74px; padding-top:6px; }
+  .bar{ flex:1; background:var(--coral); border-radius:3px 3px 0 0; position:relative; }
+  .bar.teal{ background:var(--teal); }
+  .bar.dim{ opacity:.4; }
+  .bar span{ position:absolute; bottom:-14px; left:0; right:0; text-align:center;
+      color:var(--muted); font-size:6.5pt; }
+  .pie{ width:88px; height:88px; border-radius:50%;
+      background:conic-gradient(var(--coral) 0 46%, var(--teal) 46% 70%, var(--olive) 70% 86%, var(--sand) 86% 100%); }
+  .legend{ font-size:8pt; }
+  .legend i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+  .modal-ui{ background:var(--surface); border:1px solid var(--border); border-radius:12px;
+      padding:16px 18px; max-width:560px; margin:0 auto; box-shadow:0 10px 30px rgba(0,0,0,.4);
+      color:var(--claro); }
+  .login-ui{ background:var(--verde-esc); border:1px solid var(--border); border-radius:12px;
+      padding:34px; text-align:center; max-width:340px; margin:0 auto; color:var(--claro); }
+  .warn-badge{ background:var(--sand); color:#4a3b30; border-radius:7px; padding:5px 10px;
+      font-weight:700; font-size:8pt; display:inline-block; }
+  .muted-txt{ color:var(--muted); }
+  .up{ color:var(--coral); } .down{ color:var(--olive); }
+
+  /* Index */
+  .toc{ margin-top:8px; }
+  .toc a{ display:flex; justify-content:space-between; text-decoration:none; color:var(--ink);
+      padding:7px 0; border-bottom:1px dotted #d5ddd8; }
+  .toc a .t{ font-weight:600; }
+  .toc a .n{ color:var(--coral); font-weight:700; }
+  .toc .sub{ padding-left:18px; font-size:10pt; color:#4a5c57; }
+  .toc .sub .t{ font-weight:500; }
+
+  .footer-note{ margin-top:26px; border-top:2px solid var(--sand); padding-top:14px;
+      color:var(--muted); font-size:9.5pt; }
+  .divider{ height:2px; background:linear-gradient(90deg,var(--coral),transparent); margin:22px 0 6px; border:0; }
+</style>
+</head>
+<body>
+
+<!-- ============ CAPA ============ -->
+<section class="cover">
+  <div class="glow"></div><div class="glow2"></div>
+  <div class="cover-top">
+    <svg class="seal" viewBox="0 0 512 512"><rect width="512" height="512" rx="116" fill="#0e1b18"/><g transform="translate(110.4,70.0) scale(0.5956)" fill="#FF8B7C"><path transform="matrix(1,0,0,-1,-1027.2415,853.0085)" d="M1444.2854 783.8705C1431.2134 798.99148 1391.4345 845.0085 1271.6654 845.0085 1151.9104 845.0085 1112.1244 798.9975 1099.0494 783.87649 1057.3054 735.5935 1035.2415 651.51748 1035.2415 540.7375 1035.2415 429.95448 1057.3054 345.87648 1099.0494 297.59248 1112.1224 282.4745 1151.9054 236.46649 1271.6654 236.46649 1391.4395 236.46649 1431.2144 282.47853 1444.2844 297.5985 1486.0285 345.8755 1508.0924 429.9525 1508.0924 540.7375 1508.0924 651.5195 1486.0285 735.5945 1444.2854 783.8705M1432.0374 308.7135C1421.6024 296.64149 1392.3724 262.7865 1309.0564 254.79846V445.8105C1309.0574 445.81153 1309.0574 445.8125 1309.0584 445.8125 1366.0294 445.8805 1414.4484 388.54347 1432.0374 308.71449V308.7135M1131.0574 289.7765C1121.6094 296.99147 1119.4014 310.49348 1126.2654 320.2115 1126.3784 320.37147 1126.4854 320.51747 1126.5845 320.64747 1129.0125 323.75148 1131.6964 326.68049 1134.5354 329.48146 1146.0494 340.60749 1159.8355 349.57649 1174.0254 358.37049 1188.1604 367.28053 1202.9774 376.01148 1216.7315 387.83949 1223.5914 393.74147 1230.1954 400.4635 1235.8204 408.36048 1241.5064 416.19154 1246.0704 425.3025 1248.9634 435.01246 1251.8684 444.70545 1252.8984 455.03346 1252.4334 464.77845 1252.0244 474.58253 1249.9234 484.7425 1245.7444 494.2705 1241.5894 503.80049 1235.1275 512.45046 1227.3954 519.0415 1220.4364 525.05349 1212.6184 529.4305 1204.6785 532.5825H1246.5955C1263.8474 532.5825 1277.8324 518.5635 1277.8324 501.2705V253.13648C1275.8004 253.10846 1273.7494 253.08948 1271.6654 253.08948 1194.3504 253.08948 1153.1204 272.93049 1131.0574 289.7765M1083.8164 728.84249V548.8935C1065.8574 548.8935 1051.6314 564.0465 1052.6244 582.02249 1055.9054 641.3865 1066.4624 690.9385 1083.8164 728.84249M1340.2924 532.5825H1426.7014C1410.7785 497.08045 1389.4324 467.5995 1359.3414 447.53749 1343.5285 454.2685 1326.6685 457.91847 1309.1585 457.91847 1309.1244 457.91847 1309.0903 457.9165 1309.0564 457.9165V501.2705C1309.0564 518.5635 1323.0414 532.5825 1340.2924 532.5825M1288.8964 580.20449V751.4905L1349.2304 610.6935C1350.1494 608.5475 1351.8574 606.7735 1354.0574 606.00747 1358.2494 604.54849 1362.5294 606.6775 1364.0693 610.4845L1429.3324 772.0525V548.8935H1320.1325C1302.8814 548.8935 1288.8964 562.9125 1288.8964 580.20449M1369.7155 650.7395 1293.8403 827.80349C1370.5524 823.7075 1406.2644 798.6905 1422.9924 782.4695L1369.7155 650.7395M1277.9295 828.3365 1278.0693 548.8935C1276.4574 632.2875 1232.0984 703.5245 1177.3114 735.02749 1215.6094 756.2795 1246.7315 788.92349 1265.6834 828.34048 1267.6554 828.36849 1269.6444 828.3855 1271.6654 828.3855 1273.7835 828.3855 1275.8654 828.3655 1277.9295 828.3365M1207.8684 499.90748C1211.8014 494.58546 1214.5034 488.9005 1216.3324 482.8545 1218.1444 476.7945 1219.0134 470.30445 1219.2463 463.4475 1219.4074 456.5315 1218.9424 450.0395 1217.3684 443.63954 1215.8794 437.2495 1213.4594 430.99549 1210.1234 424.80348 1206.7634 418.6435 1202.6284 412.49348 1197.8064 406.51747 1188.1244 394.5705 1176.1864 383.20948 1163.7504 372.0625 1151.4274 360.75245 1138.2234 349.83045 1126.9584 336.51454 1124.1464 333.1925 1119.0704 328.24549 1114.3684 319.36354V529.9245C1117.6004 529.9845 1120.8324 530.0055 1124.0654 529.9745 1128.2274 529.9735 1132.3894 529.7965 1136.5514 529.6965L1142.7944 529.3915C1144.8403 529.27249 1147.0454 529.2295 1148.9124 529.03347 1164.6334 527.56948 1180.3594 522.4265 1192.6244 514.1875 1198.7354 510.0525 1203.9584 505.2245 1207.8684 499.90748M1114.0654 548.8935V740.6045C1114.0664 740.60549 1114.0674 740.60647 1114.0674 740.60647 1182.4834 740.6875 1243.9135 655.31149 1245.7474 548.8935H1114.0654M1232.7664 826.5315C1216.8775 791.3075 1192.4574 762.0625 1162.7804 742.27749 1147.4624 748.79849 1131.1275 752.3345 1114.1644 752.3345 1114.1314 752.3345 1114.0994 752.3335 1114.0654 752.3335V775.92349C1126.4854 789.8125 1156.9834 818.9225 1232.7664 826.5315M1083.8164 532.5825V352.62745C1066.4624 390.5315 1055.9054 440.08546 1052.6244 499.4535 1051.6314 517.42849 1065.8574 532.5825 1083.8164 532.5825M1374.3405 440.05348C1412.6444 461.30848 1440.4684 493.58546 1459.7184 532.5825 1477.5364 532.5825 1491.7024 517.56948 1490.7244 499.73548 1487.1394 434.3495 1474.7365 380.85145 1454.1554 341.69447 1436.9324 385.37049 1408.7144 420.28846 1374.3405 440.05348M1459.4194 548.8935V729.05349C1476.8305 691.1255 1487.4214 641.5005 1490.7084 582.0245 1491.7014 564.04849 1477.4774 548.8935 1459.5164 548.8935H1459.4194Z"/></g></svg>
+    <svg class="wordmark" viewBox="0 0 683 159.6" fill="currentColor"><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1302.4978 612.1678 1252.5878 489.06178 1199.7068 612.1678H1192.6638L1192.7349 470.46583H1198.0838V572.6378L1241.2588 472.12678C1242.0999 470.16883 1244.0258 468.89979 1246.1569 468.89979 1248.2798 468.89979 1250.1908 470.1878 1250.9878 472.1548L1294.0308 578.3208V470.46583H1308.8988V612.1678H1302.4978Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1499.961 606.7399V612.16799H1429.0161V470.46595H1499.961V475.89393H1443.885V567.3999H1493.034V572.8269H1443.885V606.7399H1499.961Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1631.132 470.466H1646V612.16799H1631.132Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1020.9548 564.3413C1040.4508 575.1333 1056.1837 591.9063 1065.3848 612.1673L1049.4998 612.1533C1041.7548 593.5633 1029.2218 578.1443 1013.81277 567.8963 1006.2828 571.0933 998.2538 572.8273 989.91677 572.8273 989.90078 572.8273 989.88479 572.8263 989.8678 572.8263V612.1673H974.99978V470.4663H989.8678V567.0763C989.88479 567.0763 989.90078 567.07736 989.91677 567.07736 1024.0838 567.07736 1051.7827 523.82736 1051.7998 470.4663H1067.7008C1067.6868 512.4773 1048.4548 548.5663 1020.9548 564.3413Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1564.9911 564.3413C1584.487 575.1333 1600.2201 591.9063 1609.4212 612.1673L1593.5361 612.1533C1585.7911 593.5633 1573.258 578.1443 1557.8491 567.8963 1550.3191 571.0933 1542.2911 572.8273 1533.9531 572.8273 1533.9371 572.8273 1533.9212 572.8263 1533.904 572.8263V612.1673H1519.0361V470.4663H1533.904V567.0763C1533.9212 567.0763 1533.9371 567.07736 1533.9531 567.07736 1568.1201 567.07736 1595.8191 523.82736 1595.836 470.4663H1611.737C1611.7232 512.4773 1592.4921 548.5663 1564.9911 564.3413Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1411.9022 575.2936C1411.7033 580.0536 1410.6813 584.9856 1408.6472 589.6106 1406.6253 594.23757 1403.4802 598.4376 1399.7172 601.6376 1395.9642 604.8716 1391.6973 607.13858 1387.4053 608.69259 1383.1093 610.2716 1378.7562 611.1556 1374.4662 611.6986 1371.4442 612.07656 1368.4602 612.14956 1365.4633 612.1626V612.16958L1344.7122 612.1636V612.1676H1329.8442V470.46656H1344.7122V489.6516C1344.7162 493.4436 1345.8152 497.18556 1347.5842 500.5276 1348.4533 502.2066 1349.4943 503.8036 1350.6572 505.3216 1351.8392 506.8286 1353.1453 508.2506 1354.5272 509.6106 1360.1303 515.0116 1366.8392 519.3666 1373.7453 523.63558 1380.6232 527.9606 1387.8342 532.1996 1394.5272 537.9416 1397.8662 540.80758 1401.0802 544.07058 1403.8173 547.9046 1406.5842 551.70559 1408.8052 556.1286 1410.2142 560.8426 1411.6272 565.5486 1412.1293 570.5626 1411.9022 575.2936M1394.8383 565.03158C1394.1133 561.9286 1392.9352 558.8926 1391.3123 555.8876 1389.6773 552.8966 1387.6642 549.9106 1385.3173 547.0096 1380.6062 541.2096 1374.7963 535.6946 1368.7443 530.2826 1362.7472 524.79159 1356.3212 519.48959 1350.8392 513.0246 1349.4702 511.41157 1347.0012 509.00959 1344.7122 504.6986V606.9206C1346.2853 606.9496 1347.8583 606.9596 1349.4313 606.9446 1351.4573 606.9436 1353.4822 606.85757 1355.5072 606.8096L1358.5463 606.6616C1359.5422 606.6036 1360.6152 606.5826 1361.5232 606.48757 1369.1742 605.7776 1376.8273 603.27957 1382.7963 599.2806 1385.7692 597.27359 1388.3123 594.92959 1390.2142 592.3476 1392.1282 589.7646 1393.4432 587.0046 1394.3333 584.0686 1395.2152 581.1266 1395.6382 577.97659 1395.7522 574.6476 1395.8292 571.2906 1395.6043 568.13858 1394.8383 565.03158Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1177.1475 470.46607 1130.8734 612.1681H1114.9475L1119.3104 598.8091C1122.5165 587.86209 1121.7274 575.86508 1117.6394 565.2621 1113.0494 553.5231 1105.6644 543.3661 1098.0695 533.1731 1092.7455 525.87606 1086.8455 519.07009 1082.9015 510.49409 1076.8884 498.04206 1077.7265 481.51106 1089.6505 472.31709 1099.4505 464.61708 1112.6425 467.74909 1121.6885 474.76808 1127.2075 478.79109 1131.4575 484.44306 1135.9664 489.0431 1140.3374 493.45509 1145.9905 497.58009 1152.1325 498.29908L1161.2214 470.46607H1177.1475M1131.7565 494.14509C1123.7245 489.02607 1115.7935 481.63905 1106.1334 482.2621 1095.0625 483.63105 1092.5344 496.69508 1095.1444 506.07106 1096.9915 513.75607 1101.5564 520.94009 1105.9075 527.80709 1110.4865 535.1241 1115.1045 542.6211 1118.9525 550.6271 1123.0645 558.67709 1125.7785 567.43209 1126.6535 576.32308L1150.7395 502.56605C1143.8325 501.70307 1137.4275 498.08406 1131.7565 494.14509Z"/></svg>
+  </div>
+
+  <div class="cover-mid">
+    <div class="cover-kicker">Manual do Usuário</div>
+    <h1 class="cover-title">Kampeki<br><span class="fin">Finance</span></h1>
+    <div class="cover-sub">O guia completo para lançar custos, importar notas, ler os painéis e gerar relatórios — do primeiro login ao backup do mês.</div>
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-tag">Seu momento único.</div>
+    <div class="cover-meta">
+      <div class="cover-credit">Criado e desenvolvido por<br><strong>Renan Milech Pereira</strong></div>
+      <div style="margin-top:8px;opacity:.85;">Guia de teste (Beta) · Julho / 2026 · versão 1.0</div>
+    </div>
+  </div>
+</section>
+
+<div class="content">
+
+<!-- ============ BEM-VINDA + ÍNDICE ============ -->
+<h2 style="page-break-before:avoid;"><span class="num">•</span> Bem-vinda ao Kampeki Finance</h2>
+<p class="lead">A ferramenta que organiza os custos e a folha do restaurante em um lugar só.</p>
+
+<p>O <strong>Kampeki Finance</strong> é o programa que você vai usar para <strong>registrar tudo o que o restaurante gasta</strong> (as notas, os fornecedores, a folha de pagamento) e depois <strong>enxergar esses números de forma clara</strong> em painéis e relatórios. Por baixo, tudo fica guardado com segurança numa planilha do Google — mas você <strong>não precisa mexer na planilha</strong>: é só usar o aplicativo.</p>
+
+<div class="box tip">
+  <span class="box-title">Como ler este guia</span>
+  Você não precisa ler tudo de uma vez. Comece pelo <strong>login</strong> (item 1) e por <strong>Lançamentos</strong> (item 3) — é a parte que você vai usar todo dia. Os painéis e relatórios (itens 4 e 5) são para <em>olhar os resultados</em> quando quiser. As imagens ao longo do guia são <strong>representações da tela</strong> para você reconhecer cada botão.
+</div>
+
+<h3>O que dá para fazer</h3>
+<table class="data">
+  <tr><th>Você quer…</th><th>Vá em…</th></tr>
+  <tr><td>Registrar uma compra / nota manualmente</td><td>Lançamentos → <strong>Custos</strong> → "+ Novo custo"</td></tr>
+  <tr><td>Subir várias notas de uma vez (planilha, .zip ou PDF)</td><td><strong>Custos</strong> → botões de "Importar"</td></tr>
+  <tr><td>Ver quanto gastou no mês, por categoria, por item</td><td><strong>Dash Custos</strong></td></tr>
+  <tr><td>Ver a folha de pagamento por equipe (tag)</td><td><strong>Dash Folha</strong></td></tr>
+  <tr><td>Comparar dois períodos (ex.: este ano x ano passado)</td><td><strong>Análise por Período</strong></td></tr>
+  <tr><td>Gerar um relatório em PDF para enviar</td><td>Botão <strong>"⬇ Exportar PDF"</strong> dentro de cada painel</td></tr>
+  <tr><td>Guardar uma cópia dos custos do mês</td><td>Saída → <strong>Backup mensal</strong></td></tr>
+</table>
+
+<h3>Índice</h3>
+<nav class="toc">
+  <a href="#s1"><span class="t">Como acessar (login e senha)</span><span class="n">01</span></a>
+  <a href="#s2"><span class="t">Conhecendo a tela e o menu</span><span class="n">02</span></a>
+  <a href="#s3"><span class="t">Lançamentos — o coração da ferramenta</span><span class="n">03</span></a>
+  <a href="#s3" class="sub"><span class="t">3.1 Os conceitos: custo, item, classe, subcategoria, fornecedor e tag</span><span class="n"></span></a>
+  <a href="#s32" class="sub"><span class="t">3.2 Fornecedores</span><span class="n"></span></a>
+  <a href="#s33" class="sub"><span class="t">3.3 Tags</span><span class="n"></span></a>
+  <a href="#s34" class="sub"><span class="t">3.4 Itens, subcategoria e categoria</span><span class="n"></span></a>
+  <a href="#s35" class="sub"><span class="t">3.5 Lançar um custo (passo a passo)</span><span class="n"></span></a>
+  <a href="#s36" class="sub"><span class="t">3.6 Importar em massa: planilha, .zip de NF-e e PDF de NFS-e</span><span class="n"></span></a>
+  <a href="#s37" class="sub"><span class="t">3.7 Encontrar e filtrar lançamentos</span><span class="n"></span></a>
+  <a href="#s38" class="sub"><span class="t">3.8 Corrigir um lançamento</span><span class="n"></span></a>
+  <a href="#s39" class="sub"><span class="t">3.9 Colocar tag (uma ou várias de uma vez)</span><span class="n"></span></a>
+  <a href="#s310" class="sub"><span class="t">3.10 Classificar itens / colocar categoria</span><span class="n"></span></a>
+  <a href="#s311" class="sub"><span class="t">3.11 Excluir lançamentos</span><span class="n"></span></a>
+  <a href="#s4"><span class="t">Painéis (Dashboards)</span><span class="n">04</span></a>
+  <a href="#s5"><span class="t">Relatórios em PDF (Exportar)</span><span class="n">05</span></a>
+  <a href="#s6"><span class="t">Backup mensal (Saída)</span><span class="n">06</span></a>
+  <a href="#s7"><span class="t">Dúvidas rápidas e boas práticas</span><span class="n">07</span></a>
+</nav>
+
+<!-- ============ 1. LOGIN ============ -->
+<h2 id="s1"><span class="num">01.</span> Como acessar</h2>
+<p class="lead">Abrir o programa e entrar com seu usuário e senha.</p>
+
+<p>O Kampeki Finance foi instalado no seu computador como um programa comum do Windows. Para abrir, procure o ícone <strong>Kampeki Finance</strong> (o selinho coral "KMPK") na área de trabalho ou no menu Iniciar e dê dois cliques.</p>
+
+<ol class="steps">
+  <li>Abra o programa <strong>Kampeki Finance</strong>. Vai aparecer a tela de login com a marca.</li>
+  <li>No campo <strong>E-mail</strong>, digite o usuário abaixo.</li>
+  <li>No campo <strong>Senha</strong>, digite a senha abaixo.</li>
+  <li>Clique em <strong>Entrar</strong>. Pronto — você já está dentro.</li>
+</ol>
+
+<div class="box key">
+  <span class="box-title">🔑 Seus dados de acesso</span>
+  <p><strong>Usuário (e-mail):</strong> <code>admin@financesheet.local</code></p>
+  <p><strong>Senha:</strong> <code>admin@2026</code></p>
+  <p style="margin-top:6px;" class="muted-txt">Digite exatamente como está aqui (tudo minúsculo, sem espaços). Guarde este dado em local seguro.</p>
+</div>
+
+<div class="shot">
+  <div class="login-ui">
+    <div style="color:#FF8B7C;font-weight:800;letter-spacing:2px;font-size:16pt;margin-bottom:6px;">KAMPEKI</div>
+    <div style="color:#93a39b;font-size:8pt;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">Finance</div>
+    <div style="text-align:left;">
+      <div style="color:#93a39b;font-size:8pt;margin-bottom:3px;">E-MAIL</div>
+      <div class="inp" style="display:block;margin-bottom:12px;">admin@financesheet.local</div>
+      <div style="color:#93a39b;font-size:8pt;margin-bottom:3px;">SENHA</div>
+      <div class="inp" style="display:block;margin-bottom:18px;"><span class="ph">••••••••••</span></div>
+    </div>
+    <div class="btn btn-coral" style="display:block;text-align:center;padding:9px;">Entrar</div>
+    <div style="color:#93a39b;font-size:7pt;margin-top:14px;">v1.0.1</div>
+  </div>
+  <div class="shot-cap">Tela de login. No canto inferior direito de qualquer tela aparece a versão do app (ex.: v1.0.1).</div>
+</div>
+
+<div class="box note">
+  <span class="box-title">Precisa entrar de novo?</span>
+  O programa mantém você conectada por vários dias. Se algum dia pedir login novamente, é só repetir o usuário e a senha acima. Se aparecer <em>"Credenciais inválidas"</em>, confira se não há espaço sobrando ou letra maiúscula.
+</div>
+
+<!-- ============ 2. A TELA ============ -->
+<h2 id="s2"><span class="num">02.</span> Conhecendo a tela</h2>
+<p class="lead">Um menu à esquerda leva você a tudo. O conteúdo aparece à direita.</p>
+
+<p>Depois de entrar, a tela se divide em duas partes: o <strong>menu lateral</strong> (à esquerda), que é sua bússola, e a <strong>área de conteúdo</strong> (o resto da tela), onde as coisas acontecem. Basta clicar num item do menu para ir até ele. O item em que você está fica <strong>destacado em coral</strong>.</p>
+
+<div class="shot">
+  <div class="ui ui-flex">
+    <div class="ui-side">
+      <div class="ui-brand">KAMPEKI</div>
+      <div class="ui-navsec">Painéis</div>
+      <div class="ui-nav">Dash Custos</div>
+      <div class="ui-nav">Dash Folha</div>
+      <div class="ui-nav">Análise por Período</div>
+      <div class="ui-navsec">Lançamentos</div>
+      <div class="ui-nav on">Custos</div>
+      <div class="ui-nav">Folha</div>
+      <div class="ui-nav">Itens</div>
+      <div class="ui-nav">Fornecedores</div>
+      <div class="ui-nav">Tags</div>
+      <div class="ui-navsec">Saída</div>
+      <div class="ui-nav">Backup mensal</div>
+      <div style="margin-top:14px;" class="ui-nav">Sair</div>
+    </div>
+    <div class="ui-body">
+      <div class="ui-title">Custos</div>
+      <div class="row-g">
+        <span class="btn btn-coral">+ Novo custo</span>
+        <span class="btn btn-ghost">Importar planilha</span>
+        <span class="btn btn-ghost">Importar NF-e (.zip)</span>
+        <span class="btn btn-ghost">Importar NFS-e (PDF)</span>
+      </div>
+      <div class="row-g" style="margin-top:8px;">
+        <span class="inp"><span class="ph">Mês/Ano</span></span>
+        <span class="inp"><span class="ph">Categoria</span></span>
+        <span class="inp"><span class="ph">Fornecedor</span></span>
+        <span class="inp"><span class="ph">Nº nota</span></span>
+        <span class="inp"><span class="ph">Item</span></span>
+      </div>
+      <div class="card2" style="margin-top:10px;">
+        <table class="ui-tb">
+          <tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th>Item</th><th>Categoria</th><th>Total</th></tr>
+          <tr><td>02/07/2026</td><td>1187</td><td>Peixaria Sul</td><td>Salmão</td><td>CMV</td><td>R$ 1.240,00</td></tr>
+          <tr><td>01/07/2026</td><td>0994</td><td>Hortifruti Boa</td><td>Alface</td><td>CMV</td><td>R$ 86,50</td></tr>
+          <tr><td>01/07/2026</td><td>Sem Nota</td><td>Copel</td><td>Luz POA</td><td>DESP. ADM.</td><td>R$ 2.310,00</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="shot-cap">Visão geral: menu lateral à esquerda (item ativo em coral) e conteúdo à direita.</div>
+</div>
+
+<table class="data">
+  <tr><th>Seção do menu</th><th>Para que serve</th></tr>
+  <tr><td><span class="pill pill-teal">Painéis</span></td><td>Só para <strong>ver</strong> os números: gráficos, totais e comparações. Não altera nada.</td></tr>
+  <tr><td><span class="pill pill-coral">Lançamentos</span></td><td>Onde você <strong>registra e corrige</strong> as informações: custos, folha, itens, fornecedores e tags.</td></tr>
+  <tr><td><span class="pill pill-sand">Saída</span></td><td>Para <strong>baixar</strong> uma cópia (backup) dos custos de um mês.</td></tr>
+</table>
+
+<div class="box tip">
+  <span class="box-title">Tela pequena?</span>
+  Em telas estreitas o menu lateral vira um botão <strong>☰</strong> no topo. Clique nele para abrir o menu; ele fecha sozinho quando você escolhe uma opção.
+</div>
+
+<!-- ============ 3. LANÇAMENTOS ============ -->
+<h2 id="s3"><span class="num">03.</span> Lançamentos — o coração da ferramenta</h2>
+<p class="lead">Aqui você registra tudo. É a parte que mais vai usar — então vamos com calma.</p>
+
+<div class="section-intro">
+  <p style="margin:0;">Esta é a seção mais importante do guia. Ela cobre desde os <strong>conceitos básicos</strong> (o que é um "item", uma "categoria", uma "tag") até <strong>como lançar, importar, corrigir, filtrar, tagear, classificar e excluir</strong>. Leia com calma uma vez; depois vira automático.</p>
+</div>
+
+<h3>3.1 Primeiro, os conceitos-chave</h3>
+<p>Antes dos botões, entenda seis palavrinhas que aparecem o tempo todo. Elas são a "linguagem" da ferramenta:</p>
+
+<table class="data">
+  <tr><th>Palavra</th><th>O que significa (em miúdos)</th><th>Exemplo</th></tr>
+  <tr><td><strong>Custo</strong></td><td>Um gasto registrado — normalmente uma nota ou uma linha de nota. É o registro principal.</td><td>"Comprei 10 kg de salmão por R$ 1.240"</td></tr>
+  <tr><td><strong>Item</strong></td><td>O <em>que</em> foi comprado. Cada produto/serviço é um item cadastrado.</td><td>Salmão, Alface, Luz POA, Uniforme</td></tr>
+  <tr><td><strong>Subcategoria</strong></td><td>A "gaveta" mais específica onde o item mora. Você escolhe a subcategoria; ela define o item.</td><td>SALMÃO, HORTIFRUTI, LUZ POA</td></tr>
+  <tr><td><strong>Categoria</strong><br>(ou "classe")</td><td>O grupo grande, calculado <strong>automaticamente</strong> a partir da subcategoria. Você não digita — o sistema preenche.</td><td>CMV, DESPESA ADMINISTRATIVA, FOLHA CANOAS</td></tr>
+  <tr><td><strong>Fornecedor</strong></td><td>De <em>quem</em> você comprou.</td><td>Peixaria Sul, Copel, Hortifruti Boa</td></tr>
+  <tr><td><strong>Tag</strong></td><td>Uma etiqueta usada nos gastos de <strong>folha de pagamento</strong> para separar por equipe/loja.</td><td>Cozinha, Salão, Delivery</td></tr>
+</table>
+
+<div class="box note">
+  <span class="box-title">A regra de ouro da categoria</span>
+  Você <strong>nunca digita a categoria à mão</strong>. Você escolhe a <strong>subcategoria</strong> e o sistema descobre a categoria sozinho (ex.: escolheu "SALMÃO" → ele marca "CMV"). Isso mantém tudo padronizado. As categorias possíveis são fixas: <strong>CMV</strong>, <strong>DESPESA ADMINISTRATIVA</strong>, <strong>FOLHA CANOAS / POA / TELE</strong>, <strong>DISTRIBUIÇÃO DE LUCRO</strong> e <strong>IMPOSTOS</strong>.
+</div>
+
+<div class="box tip">
+  <span class="box-title">E a folha de pagamento?</span>
+  No Kampeki Finance <strong>a folha é lançada como um custo</strong> de categoria FOLHA (CANOAS, POA ou TELE), com uma <strong>tag</strong> para dizer de qual equipe é. Ou seja: você não tem um lugar separado só de folha — você lança como custo e o Dash Folha mostra esses valores automaticamente.
+</div>
+
+<h3 id="s32">3.2 Fornecedores</h3>
+<p>É a lista de quem você compra. Antes de lançar um custo, o fornecedor precisa existir aqui — mas não se preocupe: se você digitar um nome novo ao lançar/importar, o sistema <strong>cria o fornecedor sozinho</strong>.</p>
+<ol class="steps">
+  <li>No menu, clique em <strong>Fornecedores</strong>.</li>
+  <li>Para adicionar, clique em <strong>"+ Novo fornecedor"</strong>, digite o nome e salve.</li>
+  <li>Use o <strong>campo de busca</strong> no topo para achar um fornecedor rápido enquanto digita.</li>
+  <li>Cada linha tem os botões <strong>Editar</strong> (corrigir o nome) e <strong>Excluir</strong>.</li>
+</ol>
+<div class="box warn">
+  <span class="box-title">Nomes não se repetem</span>
+  O sistema não deixa cadastrar dois fornecedores com o mesmo nome (não importa maiúscula/minúscula). Isso evita "Copel" e "copel" duplicados.
+</div>
+
+<h3 id="s33">3.3 Tags</h3>
+<p>Tags são etiquetas para a <strong>folha de pagamento</strong> — servem para separar os gastos de pessoal por equipe, setor ou unidade. Exemplos: <em>Cozinha</em>, <em>Salão</em>, <em>Delivery</em>, <em>Gerência</em>.</p>
+<ol class="steps">
+  <li>No menu, clique em <strong>Tags</strong>.</li>
+  <li>Clique em <strong>"+ Nova tag"</strong>, digite o nome (ex.: "Cozinha") e salve.</li>
+  <li>Edite ou exclua pelos botões de cada linha.</li>
+</ol>
+<p>Depois de criadas, as tags aparecem para escolher quando você lança um custo de folha, ou quando etiqueta vários custos de uma vez (ver <strong>3.9</strong>).</p>
+
+<h3 id="s34">3.4 Itens (com subcategoria e categoria)</h3>
+<p>Os <strong>Itens</strong> são o catálogo do que você compra. Cada item guarda a <strong>subcategoria</strong> (que você escolhe) e a <strong>categoria</strong> (que o sistema calcula).</p>
+<ol class="steps">
+  <li>No menu, clique em <strong>Itens</strong>.</li>
+  <li>Clique em <strong>"+ Novo item"</strong>. Digite a <strong>descrição</strong> (ex.: "Salmão fresco").</li>
+  <li>Escolha a <strong>subcategoria</strong> na lista (pode digitar para filtrar). A <strong>categoria aparece sozinha</strong> ao lado — é só conferir.</li>
+  <li>Salve. Pronto: o item já pode ser usado nos lançamentos.</li>
+</ol>
+
+<h4>Filtrar a lista de itens</h4>
+<p>Como a lista de itens pode ser grande, acima da tabela há três filtros que funcionam juntos: <strong>nome do item</strong>, <strong>categoria</strong> e <strong>subcategoria</strong> (a subcategoria se limita à categoria escolhida). Há um botão <strong>"Limpar filtros"</strong> e um contador "X de Y" mostrando quantos itens estão aparecendo.</p>
+
+<h4>Tag no item de folha</h4>
+<p>Se o item for de <strong>folha</strong> (categoria FOLHA CANOAS/POA/TELE), aparece um campo extra de <strong>Tag</strong> no cadastro do item. Ao definir a tag do item e salvar, o sistema <strong>aplica essa tag automaticamente a todos os custos daquele item</strong> — e avisa quantos foram atualizados. Assim você não precisa etiquetar um por um.</p>
+
+<div class="box note">
+  <span class="box-title">Botões extras na página Itens</span>
+  <ul>
+    <li><strong>"⚠ N item(ns) a classificar"</strong> — aparece quando existem itens sem categoria (ver <strong>3.10</strong>). Clique para arrumar.</li>
+    <li><strong>"Subcategorias"</strong> — abre a central para <strong>criar</strong> uma subcategoria nova (apontando para uma categoria fixa) ou <strong>excluir</strong> uma personalizada que não esteja em uso.</li>
+    <li><strong>"↻ Reprocessar tags (geral)"</strong> — sincroniza de uma vez as tags de todos os itens de folha nos custos. Uso pontual (ex.: depois de uma carga grande); no dia a dia não precisa.</li>
+  </ul>
+</div>
+
+<h3 id="s35">3.5 Lançar um custo (passo a passo)</h3>
+<p class="lead" style="border:0;color:var(--teal);font-weight:600;margin:0 0 8px;">A tarefa mais comum do dia a dia.</p>
+<p>Vá em <strong>Custos</strong> no menu e clique em <strong>"+ Novo custo"</strong>. Um formulário abre. Preencha assim:</p>
+
+<ol class="steps">
+  <li><strong>Data da nota</strong> — clique e escolha no calendário. O sistema descobre o mês/ano sozinho.</li>
+  <li><strong>Nº da nota</strong> — o número da nota fiscal (se não tiver, pode deixar; entra como "Sem Nota").</li>
+  <li><strong>Fornecedor</strong> — comece a digitar e escolha na lista. Se for um fornecedor novo, digite o nome — ele será criado.</li>
+  <li><strong>Categoria → Subcategoria → Item</strong> — escolha em cascata. Ao selecionar a subcategoria, a categoria se confirma; ao escolher o item, ele já vem com tudo preenchido. <em>Dica: você pode digitar direto o nome do item para buscar.</em></li>
+  <li><strong>Quantidade</strong> e <strong>Valor unitário</strong> — o <strong>Valor total</strong> é calculado sozinho (Qtd × Valor unit.) e aparece na hora.</li>
+  <li><strong>Tag</strong> — só aparece (e é obrigatória) se a categoria for de <strong>folha</strong>. Escolha a equipe.</li>
+  <li>Confira o resumo e clique em <strong>Salvar</strong>.</li>
+</ol>
+
+<div class="shot">
+  <div class="modal-ui" style="max-width:520px;">
+    <div style="color:#fff;font-weight:700;text-transform:uppercase;font-size:11pt;margin-bottom:12px;">Novo custo</div>
+    <div class="row-g">
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">DATA</div><div class="inp" style="display:block;">02/07/2026</div></div>
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">Nº NOTA</div><div class="inp" style="display:block;">1187</div></div>
+    </div>
+    <div style="margin-top:8px;"><div style="color:#93a39b;font-size:7.5pt;">FORNECEDOR</div><div class="inp" style="display:block;">Peixaria Sul</div></div>
+    <div class="row-g" style="margin-top:8px;">
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">CATEGORIA</div><div class="inp" style="display:block;">CMV</div></div>
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">SUBCATEGORIA</div><div class="inp" style="display:block;">SALMÃO</div></div>
+    </div>
+    <div style="margin-top:8px;"><div style="color:#93a39b;font-size:7.5pt;">ITEM</div><div class="inp" style="display:block;">Salmão fresco</div></div>
+    <div class="row-g" style="margin-top:8px;">
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">QTD</div><div class="inp" style="display:block;">10</div></div>
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">VALOR UNIT.</div><div class="inp" style="display:block;">R$ 124,00</div></div>
+      <div style="flex:1;"><div style="color:#93a39b;font-size:7.5pt;">VALOR TOTAL <span style="color:#FF8B7C;">✏</span></div><div class="inp" style="display:block;background:#25453e;color:#fff;font-weight:700;">R$ 1.240,00</div></div>
+    </div>
+    <div class="row-g" style="margin-top:14px;justify-content:flex-end;">
+      <span class="btn btn-ghost">Cancelar</span>
+      <span class="btn btn-coral">Salvar</span>
+    </div>
+  </div>
+  <div class="shot-cap">Formulário de novo custo. O Valor total é automático; o lápis "✏" permite ajustá-lo à mão.</div>
+</div>
+
+<div class="box tip">
+  <span class="box-title">Ajustar o Valor total à mão</span>
+  O total é calculado sozinho, mas às vezes você precisa colocar um valor combinado (arredondamento, acordo com o fornecedor). Clique em <strong>"✏ editar total"</strong> para digitar o valor manualmente; se quiser voltar ao automático, clique em <strong>"↺ recalcular"</strong>.
+</div>
+
+<div class="box tip">
+  <span class="box-title">Item não existe ainda?</span>
+  Se você digitar um item que ainda não está cadastrado, aparece <strong>"➕ Criar item 'XYZ' em [SUBCATEGORIA]"</strong>. Clique e ele é criado na hora, sem sair do formulário.
+</div>
+
+<h3 id="s36">3.6 Importar em massa (planilha, .zip e PDF)</h3>
+<p>Quando você tem <strong>muitas notas de uma vez</strong>, não precisa digitar uma a uma. Há três formas de importar, todas pelos botões no topo da página <strong>Custos</strong>. Escolha conforme o arquivo que você tem:</p>
+
+<table class="data">
+  <tr><th>Botão</th><th>Use quando você tem…</th><th>Vira…</th></tr>
+  <tr><td><span class="pill pill-teal">Importar planilha</span></td><td>uma planilha <code>.xlsx</code> (Excel) com a lista de compras</td><td>um custo por linha da planilha</td></tr>
+  <tr><td><span class="pill pill-teal">Importar NF-e (.zip)</span></td><td>um arquivo <code>.zip</code> com vários XML de nota fiscal (modelo 55)</td><td>um custo por item de cada nota</td></tr>
+  <tr><td><span class="pill pill-teal">Importar NFS-e (PDF)</span></td><td>um <code>PDF</code> de nota de serviço (uma por vez)</td><td>um custo (a nota inteira)</td></tr>
+</table>
+
+<h4>a) Importar planilha (.xlsx)</h4>
+<ol class="steps">
+  <li>Clique em <strong>"Importar planilha"</strong>.</li>
+  <li>Se não tiver a planilha pronta, clique em <strong>"⬇ Baixar modelo"</strong> — baixa um Excel já com as colunas certas (DATA, Nº NOTA, FORNECEDOR, ITENS, SUB CATEGORIA, CATEGORIA, UN, VALOR e TOTAL opcional). Preencha e salve.</li>
+  <li>Selecione o arquivo. Uma <strong>prévia</strong> mostra o que será importado.</li>
+  <li>Confirme. No fim aparece um <strong>resumo</strong>: quantos custos entraram, quantos fornecedores e itens foram criados, e a lista dos que não entraram (para você corrigir e reimportar).</li>
+</ol>
+<p>O sistema é esperto e cuida de vários detalhes por você:</p>
+<ul>
+  <li><strong>Fornecedor ou item novo</strong> → é cadastrado automaticamente.</li>
+  <li><strong>Linha sem data</strong> → se a planilha tem um único mês, ele aplica o último dia daquele mês; se tem vários, ele <em>pergunta</em> qual usar; se não tem nenhuma data, você digita o mês/ano.</li>
+  <li><strong>Sem nota</strong> → grava "Sem Nota". <strong>Sem fornecedor</strong> → grava "Sem Fornecedor" (para você reclassificar depois).</li>
+  <li><strong>Valor total</strong> → se a coluna TOTAL vier preenchida, ele respeita; se vier vazia, calcula (UN × VALOR).</li>
+</ul>
+<div class="box warn">
+  <span class="box-title">Não rode a mesma planilha duas vezes</span>
+  A importação de planilha <strong>não</strong> verifica duplicatas: se você importar o mesmo arquivo de novo, os lançamentos aparecem <strong>em dobro</strong>. Use-a para carga única de dados antigos.
+</div>
+
+<div class="shot">
+  <div class="modal-ui">
+    <div style="color:#fff;font-weight:700;text-transform:uppercase;font-size:11pt;margin-bottom:4px;">Importar planilha de custos</div>
+    <div style="color:#93a39b;font-size:8pt;margin-bottom:12px;">Selecione um arquivo .xlsx ou baixe o modelo com as colunas certas.</div>
+    <div class="row-g"><span class="btn btn-ghost">📁 Escolher arquivo</span><span class="btn btn-teal">⬇ Baixar modelo</span></div>
+    <div class="card2" style="margin-top:12px;">
+      <div style="color:#93a39b;font-size:7.5pt;margin-bottom:6px;">PRÉVIA — 3 linhas</div>
+      <table class="ui-tb">
+        <tr><th>Data</th><th>Fornecedor</th><th>Item</th><th>Un</th><th>Valor</th></tr>
+        <tr><td>01/07/2026</td><td>Hortifruti Boa</td><td>Alface</td><td>5</td><td>17,30</td></tr>
+        <tr><td>01/07/2026</td><td>Peixaria Sul</td><td>Atum</td><td>3</td><td>210,00</td></tr>
+        <tr><td class="up">— (sem data)</td><td>Copel</td><td>Luz POA</td><td>1</td><td>2.310,00</td></tr>
+      </table>
+    </div>
+    <div class="row-g" style="margin-top:12px;justify-content:flex-end;"><span class="btn btn-ghost">Cancelar</span><span class="btn btn-coral">Importar 3 linhas</span></div>
+  </div>
+  <div class="shot-cap">Janela de importação com prévia e o botão "Baixar modelo". Linhas com problema ficam sinalizadas.</div>
+</div>
+
+<h4>b) Importar NF-e (.zip)</h4>
+<p>Quando você baixa do portal um <code>.zip</code> com várias notas fiscais eletrônicas (os arquivos XML), use este botão. O sistema abre o .zip, lê cada nota e cria <strong>um custo para cada item</strong> da nota.</p>
+<ol class="steps">
+  <li>Clique em <strong>"Importar NF-e (.zip)"</strong> e selecione o arquivo <code>.zip</code>.</li>
+  <li>Confira a prévia e confirme.</li>
+</ol>
+<div class="box tip">
+  <span class="box-title">Aqui pode repetir sem medo</span>
+  Diferente da planilha, a importação de NF-e <strong>não duplica</strong>: cada nota tem uma "chave" única, e se ela já foi importada, a nota é pulada. Pode rodar o mesmo .zip de novo tranquilamente.
+</div>
+<p>Itens que ainda não têm categoria entram assim mesmo, marcados como <strong>"a classificar"</strong> — você arruma depois (ver <strong>3.10</strong>).</p>
+
+<h4>c) Importar NFS-e (PDF)</h4>
+<p>Para <strong>notas de serviço</strong> (aquele PDF da prefeitura, uma por vez). O sistema lê o PDF e abre uma <strong>tela de conferência</strong> já preenchida (data, número, fornecedor, item e valor) para você revisar antes de salvar.</p>
+<ol class="steps">
+  <li>Clique em <strong>"Importar NFS-e (PDF)"</strong> e escolha o PDF.</li>
+  <li>Confira os campos (a tela indica se o fornecedor/item são novos ou já existem).</li>
+  <li>Clique em salvar. Se aquela nota já tiver sido importada antes, o sistema avisa e bloqueia (para não duplicar).</li>
+</ol>
+
+<h3 id="s37">3.7 Encontrar e filtrar lançamentos</h3>
+<p>Na página <strong>Custos</strong>, acima da lista, há uma barra de filtros que funcionam <strong>combinados</strong> — quanto mais você preenche, mais afunila:</p>
+<table class="data">
+  <tr><th>Filtro</th><th>O que faz</th></tr>
+  <tr><td><strong>Mês/Ano</strong></td><td>Mostra só os custos daquele mês.</td></tr>
+  <tr><td><strong>Categoria</strong></td><td>Ex.: só CMV, ou só DESPESA ADMINISTRATIVA.</td></tr>
+  <tr><td><strong>Fornecedor</strong></td><td>Só os de um fornecedor.</td></tr>
+  <tr><td><strong>Nº nota</strong></td><td>Busca por parte do número da nota.</td></tr>
+  <tr><td><strong>Item</strong></td><td>Busca por parte do nome do item.</td></tr>
+</table>
+<p>Os botões <strong>Editar</strong> e <strong>Excluir</strong> de cada linha ficam <strong>fixos à direita</strong> — mesmo rolando a tabela para o lado, eles nunca somem.</p>
+
+<h3 id="s38">3.8 Corrigir um lançamento</h3>
+<ol class="steps">
+  <li>Use os filtros (3.7) para achar o custo errado.</li>
+  <li>Clique em <strong>Editar</strong> na linha dele.</li>
+  <li>O mesmo formulário do lançamento abre, já preenchido. Ajuste o que precisar (valor, fornecedor, data…).</li>
+  <li>Clique em <strong>Salvar</strong>. A correção é gravada na hora.</li>
+</ol>
+<div class="box note">
+  <span class="box-title">Linhas de folha vindas de "Custo"</span>
+  Na página <strong>Folha</strong>, alguns lançamentos aparecem com a etiqueta <span class="pill pill-coral">Custo</span> e ficam <strong>somente leitura</strong> ("editar em Custos"). Isso é normal: eles vieram da página Custos, então a correção é feita lá, não na Folha.
+</div>
+
+<h3 id="s39">3.9 Colocar tag (uma ou várias de uma vez)</h3>
+<p>A tag serve para dizer de qual equipe é um gasto de <strong>folha</strong>. Há três formas de colocar:</p>
+<ul>
+  <li><strong>Ao lançar</strong> — se a categoria é de folha, o campo Tag aparece no formulário.</li>
+  <li><strong>Pelo item</strong> — defina a tag no cadastro do item de folha (3.4); ela é aplicada a todos os custos daquele item.</li>
+  <li><strong>Em massa</strong> — para etiquetar muitos custos de uma vez (o jeito mais rápido):</li>
+</ul>
+<ol class="steps">
+  <li>Na lista de Custos, filtre pela <strong>categoria de folha</strong> que quer etiquetar.</li>
+  <li>Marque o <strong>quadradinho (checkbox)</strong> de cada linha — ou clique no checkbox do <strong>cabeçalho</strong> para selecionar todos os filtrados de uma vez.</li>
+  <li>Aparece a barra <strong>"Editar em massa"</strong>. Clique nela.</li>
+  <li>Escolha o campo <strong>Tag</strong>, selecione a equipe e confirme. A tag é aplicada a todos os selecionados de uma vez.</li>
+</ol>
+<div class="shot">
+  <div class="card2" style="max-width:560px;margin:0 auto;">
+    <div style="background:#25453e;border:1px solid #FF8B7C;border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:#fff;font-weight:700;font-size:9pt;">✔ 42 lançamentos selecionados</span>
+      <span><span class="btn btn-coral">Editar em massa</span> <span class="btn btn-danger">Excluir selecionados</span></span>
+    </div>
+    <div class="row-g" style="margin-top:10px;">
+      <span style="color:#93a39b;font-size:8.5pt;">Campo:</span><span class="inp">Tag</span>
+      <span style="color:#93a39b;font-size:8.5pt;">Valor:</span><span class="inp">Cozinha</span>
+      <span class="btn btn-teal">Aplicar a todos</span>
+    </div>
+  </div>
+  <div class="shot-cap">Barra de edição em massa: selecione as linhas, escolha "Tag" e aplique de uma vez.</div>
+</div>
+<p>O mesmo recurso de edição em massa também troca o <strong>Fornecedor</strong> de vários custos de uma vez.</p>
+
+<h3 id="s310">3.10 Classificar itens / colocar categoria</h3>
+<p>Alguns itens (principalmente os que vêm das importações de nota) entram <strong>sem categoria</strong> — ficam "a classificar". Enquanto isso, aparece um aviso <strong>"⚠ N item(ns) a classificar"</strong> na barra de Custos e também na página Itens. Classificar é dar a eles uma subcategoria (e assim a categoria).</p>
+<ol class="steps">
+  <li>Clique no aviso <strong>"⚠ N item(ns) a classificar"</strong>.</li>
+  <li>Abre uma janela com a lista dos itens pendentes. Use a <strong>busca</strong> no topo para achar rápido; a coluna <strong>"Custos"</strong> mostra quantos lançamentos dependem de cada item.</li>
+  <li>Para cada item, escolha a <strong>subcategoria</strong> (pode digitar para filtrar). A categoria aparece ao lado. Clique em classificar.</li>
+  <li>Para agilizar, marque <strong>vários itens</strong> da mesma subcategoria e aplique a todos de uma vez.</li>
+</ol>
+<div class="box tip">
+  <span class="box-title">Arruma tudo de uma vez</span>
+  Quando você classifica um item, o sistema <strong>preenche a categoria em todos os custos daquele item</strong> automaticamente (o chamado "back-fill"). Você resolve o item uma vez e todos os gastos dele ficam certos.
+</div>
+<div class="shot">
+  <div class="modal-ui">
+    <div style="color:#fff;font-weight:700;text-transform:uppercase;font-size:11pt;margin-bottom:8px;">Classificar itens</div>
+    <div class="inp" style="display:block;margin-bottom:10px;"><span class="ph">🔎 Buscar item…</span> &nbsp; <span style="color:#93a39b;font-size:8pt;">3 de 3</span></div>
+    <table class="ui-tb">
+      <tr><th></th><th>Item</th><th>Custos</th><th>Subcategoria</th><th></th></tr>
+      <tr><td>☐</td><td>Detergente 5L</td><td>4</td><td><span class="inp">PRODUTO DE LIMPEZA</span></td><td><span class="btn btn-coral">Classificar</span></td></tr>
+      <tr><td>☐</td><td>Guardanapo</td><td>2</td><td><span class="inp">UTENSILIOS</span></td><td><span class="btn btn-coral">Classificar</span></td></tr>
+      <tr><td>☐</td><td>Óleo de soja</td><td>7</td><td><span class="inp">ALIMENTOS EM GERAL</span></td><td><span class="btn btn-coral">Classificar</span></td></tr>
+    </table>
+  </div>
+  <div class="shot-cap">Janela "Classificar itens": escolha a subcategoria; a categoria é preenchida sozinha.</div>
+</div>
+<p>Precisa de uma subcategoria que não existe? Na mesma janela há a opção <strong>"➕ Nova subcategoria"</strong> (nome + a categoria fixa à qual ela pertence). Você também gerencia todas as subcategorias pelo botão <strong>"Subcategorias"</strong> na página Itens.</p>
+<div class="box note">
+  <span class="box-title">Só dá para criar subcategorias</span>
+  As <strong>categorias</strong> são fixas e não podem ser criadas. Você só cria <strong>subcategorias</strong> novas, sempre apontando para uma das categorias existentes.
+</div>
+
+<h3 id="s311">3.11 Excluir lançamentos</h3>
+<ul>
+  <li><strong>Um por vez:</strong> clique em <strong>Excluir</strong> na linha do custo e confirme.</li>
+  <li><strong>Vários de uma vez:</strong> marque os quadradinhos das linhas e, na barra que aparece, clique em <strong>"Excluir selecionados"</strong> (botão vinho). O sistema pergunta a confirmação e avisa a quantidade.</li>
+</ul>
+<div class="box warn">
+  <span class="box-title">A exclusão é definitiva</span>
+  Não dá para desfazer. Confira bem antes de confirmar. Se tiver dúvida, faça primeiro um <strong>backup do mês</strong> (item 6) para ter uma cópia.
+</div>
+
+<h4>A barrinha de uso da planilha</h4>
+<p>Na página Custos, logo abaixo do título, há uma <strong>barra informativa</strong> que mostra o quão cheia a planilha está (o Google tem um limite de 10 milhões de células). Ela é <strong>só um aviso</strong> — não bloqueia nada: fica <span class="pill pill-olive">verde</span> até 60%, <span class="pill pill-sand">laranja</span> de 60% a 90% e vermelha acima de 90%. Se um dia chegar no laranja, é sinal de conversar sobre arquivar dados antigos.</p>
+
+<!-- ============ 4. PAINÉIS ============ -->
+<h2 id="s4"><span class="num">04.</span> Painéis (Dashboards)</h2>
+<p class="lead">Onde os números viram gráficos. Só para ver — nada aqui altera seus dados.</p>
+
+<p>Os painéis leem os custos que você lançou e mostram totais, gráficos e comparações. Existem três: <strong>Dash Custos</strong>, <strong>Dash Folha</strong> e <strong>Análise por Período</strong>. Todos têm um filtro de <strong>período</strong> no topo e um botão <strong>"⬇ Exportar PDF"</strong> (ver item 5).</p>
+
+<h3>4.1 Dash Custos</h3>
+<p>A visão geral dos gastos. De cima para baixo você encontra:</p>
+<ul>
+  <li><strong>Filtro de período</strong> — escolha um mês, um ano ou um intervalo livre de datas.</li>
+  <li><strong>Total no período</strong> e <strong>número de lançamentos</strong> (os KPIs, os números grandes).</li>
+  <li><strong>Pizza "Total por categoria"</strong> — a fatia de cada categoria (CMV, Despesa Administrativa…).</li>
+  <li><strong>Total por subcategoria</strong> — o detalhe dentro das categorias.</li>
+  <li><strong>Comparativo mês a mês</strong> — barras mostrando a evolução.</li>
+  <li><strong>Top N itens</strong> — os itens que mais pesam, com valor, % do total e a <strong>variação</strong> em relação ao período anterior. Itens que cresceram muito ganham um <strong>alerta visual</strong>.</li>
+</ul>
+
+<div class="shot">
+  <div class="ui ui-pad">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span class="ui-title" style="margin:0;">Dash Custos</span>
+      <span class="btn btn-coral">⬇ Exportar PDF</span>
+    </div>
+    <div class="row-g" style="margin:10px 0;">
+      <span class="inp"><span class="ph">De 01/06/2026</span></span>
+      <span class="inp"><span class="ph">Até 30/06/2026</span></span>
+      <span class="chip">Categoria: CMV ✕</span>
+      <span style="color:#93a39b;font-size:8pt;">Drill-down ativo</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Total no período</div><div class="val coral">R$ 184.320</div></div>
+      <div class="kpi"><div class="lab">Lançamentos</div><div class="val">412</div></div>
+      <div class="kpi"><div class="lab">Maior item</div><div class="val teal">Salmão</div></div>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <div class="card2" style="flex:1;">
+        <h5>Total por categoria</h5>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div class="pie"></div>
+          <div class="legend">
+            <div><i style="background:#FF8B7C;"></i>CMV — 46%</div>
+            <div><i style="background:#4F868F;"></i>Desp. Adm. — 24%</div>
+            <div><i style="background:#BFCB7F;"></i>Folha — 16%</div>
+            <div><i style="background:#D7C4B6;"></i>Outros — 14%</div>
+          </div>
+        </div>
+      </div>
+      <div class="card2" style="flex:1;">
+        <h5>Comparativo mês a mês</h5>
+        <div class="bars">
+          <div class="bar dim" style="height:55%;"><span>Abr</span></div>
+          <div class="bar dim" style="height:70%;"><span>Mai</span></div>
+          <div class="bar" style="height:92%;"><span>Jun</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card2">
+      <h5>Top itens</h5>
+      <table class="ui-tb">
+        <tr><th>Item</th><th>Valor</th><th>% total</th><th>vs. anterior</th></tr>
+        <tr><td>Salmão</td><td>R$ 22.400</td><td>12%</td><td class="up">▲ +18%</td></tr>
+        <tr><td>Atum</td><td>R$ 14.100</td><td>7,6%</td><td class="down">▼ −4%</td></tr>
+        <tr><td>Camarão</td><td>R$ 9.800</td><td>5,3%</td><td class="up">▲ +2%</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="shot-cap">Dash Custos: KPIs, pizza por categoria, comparativo mensal e top itens. O chip mostra o drill-down ativo.</div>
+</div>
+
+<h4>Filtrar e "mergulhar" (drill-down)</h4>
+<p>O grande truque do Dash Custos é que ele é <strong>clicável</strong>:</p>
+<ul>
+  <li><strong>Clique numa fatia da pizza</strong> (ex.: CMV) → o painel inteiro passa a mostrar só aquela categoria. A fatia escolhida ganha destaque; clicar de novo desfaz.</li>
+  <li><strong>Clique numa subcategoria</strong> → afunila mais ainda, só naquela subcategoria.</li>
+  <li><strong>Clique numa barra de mês</strong> (no comparativo) → o painel inteiro passa a mostrar só aquele mês.</li>
+</ul>
+<p>Tudo o que você selecionou aparece como <strong>chips</strong> ("Categoria: CMV ✕", "Mês: 06/2026 ✕") — clique no ✕ para remover, ou em <strong>"Limpar drill-down"</strong> para zerar. Os totais e o Top N recalculam sozinhos conforme você navega.</p>
+<div class="box tip">
+  <span class="box-title">Em resumo</span>
+  <strong>Filtro de período</strong> = a janela de tempo. <strong>Drill-down</strong> (clicar em fatias/barras) = focar numa categoria, subcategoria ou mês. Os dois se somam. É como ir de "a foto toda" para "esse detalhe aqui".
+</div>
+
+<h3>4.2 Dash Folha</h3>
+<p>Igual em espírito ao Dash Custos, mas focado na <strong>folha de pagamento</strong> (os custos de categoria FOLHA, organizados pelas <strong>tags</strong>). Você vê:</p>
+<ul>
+  <li><strong>Total da folha</strong> no período e nº de lançamentos.</li>
+  <li><strong>Participação por Tag</strong> (pizza) — quanto cada equipe representa. É clicável: escolha uma tag para focar nela.</li>
+  <li><strong>Subtotal por Tag</strong> e <strong>por Item</strong>.</li>
+  <li><strong>Cruzamento Tag × Categoria</strong> — uma tabela com todas as tags (mesmo as sem valor, com R$ 0,00) e uma linha de <strong>Subtotal/Total geral</strong> no rodapé.</li>
+  <li><strong>Evolução mensal</strong> da folha (barras clicáveis, como no Dash Custos).</li>
+</ul>
+<div class="box note">
+  <span class="box-title">"Tag sem efeito"?</span>
+  Se um custo de folha ainda não tem tag, ele entra no <strong>total</strong>, mas só aparece separado "por tag" depois de etiquetado. Por isso vale a pena tagear (item 3.9).
+</div>
+
+<h3>4.3 Análise por Período</h3>
+<p>Serve para <strong>comparar dois períodos lado a lado</strong> — por exemplo, o primeiro trimestre de 2025 contra o de 2026. Tem duas abas: <strong>Custos</strong> e <strong>Folha</strong>.</p>
+<ol class="steps">
+  <li>Escolha as datas do <strong>Período A</strong> (De / Até).</li>
+  <li>Escolha as datas do <strong>Período B</strong> (De / Até).</li>
+  <li>O painel mostra, para cada categoria/subcategoria/item (ou tag, na aba Folha): um <strong>gráfico de barras A × B</strong> e uma <strong>tabela</strong> com a variação (quanto subiu ou caiu, em R$ e em %).</li>
+</ol>
+<div class="shot">
+  <div class="ui ui-pad">
+    <span class="ui-title">Análise por Período — Custos</span>
+    <div class="row-g" style="margin:8px 0;">
+      <span class="chip" style="border-color:#4F868F;">Período A: Jan–Mar 2025</span>
+      <span class="chip" style="border-color:#FF8B7C;color:#ffd7cf;">Período B: Jan–Mar 2026</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Total A</div><div class="val teal">R$ 420 mil</div></div>
+      <div class="kpi"><div class="lab">Total B</div><div class="val coral">R$ 486 mil</div></div>
+      <div class="kpi"><div class="lab">Variação</div><div class="val up">▲ +15,7%</div></div>
+    </div>
+    <div class="card2">
+      <h5>Por categoria — A × B</h5>
+      <div class="bars" style="height:80px;">
+        <div class="bar teal" style="height:60%;"></div><div class="bar" style="height:72%;"></div>
+        <div class="bar teal" style="height:40%;"></div><div class="bar" style="height:52%;"></div>
+        <div class="bar teal" style="height:30%;"></div><div class="bar" style="height:28%;"></div>
+      </div>
+      <div class="legend" style="margin-top:18px;"><i style="background:#4F868F;"></i>Período A &nbsp;&nbsp; <i style="background:#FF8B7C;"></i>Período B</div>
+    </div>
+  </div>
+  <div class="shot-cap">Análise por Período: barras azul-petróleo (A) x coral (B) e a variação percentual entre os dois.</div>
+</div>
+
+<!-- ============ 5. RELATÓRIOS PDF ============ -->
+<h2 id="s5"><span class="num">05.</span> Relatórios em PDF (Exportar)</h2>
+<p class="lead">Transforme o que está na tela num PDF bonito para enviar a alguém.</p>
+
+<p>Todos os três painéis têm o botão <strong>"⬇ Exportar PDF"</strong>, ao lado do título. Ele gera um relatório em PDF <strong>exatamente com os filtros que estão ativos na tela naquele momento</strong> — o mesmo período, o mesmo mês e o mesmo drill-down que você selecionou.</p>
+
+<ol class="steps">
+  <li>Ajuste primeiro o painel do jeito que quer o relatório: escolha o período, o mês, clique nas fatias/categorias que interessam.</li>
+  <li>Clique em <strong>"⬇ Exportar PDF"</strong>.</li>
+  <li>O PDF é gerado e baixado. Pronto para anexar num e-mail ou WhatsApp.</li>
+</ol>
+
+<p>O que sai no PDF (conforme o painel):</p>
+<table class="data">
+  <tr><th>Do painel…</th><th>O relatório traz…</th></tr>
+  <tr><td><strong>Dash Custos</strong></td><td>Cabeçalho com a marca e a data, o período/filtros aplicados, os totais, gráficos (custos por mês e por categoria) e as tabelas de categoria, subcategoria e Top itens. Arquivo <code>relatorio-custos-…​.pdf</code>.</td></tr>
+  <tr><td><strong>Dash Folha</strong></td><td>Totais, folha por mês, participação por tag, subtotal por item e o cruzamento Tag × Categoria. Arquivo <code>relatorio-folha-…​.pdf</code>.</td></tr>
+  <tr><td><strong>Análise por Período</strong></td><td>Os totais A/B com variação e, por seção, o gráfico A × B e a tabela detalhada. Arquivo <code>analise-periodo-…​.pdf</code>.</td></tr>
+</table>
+<div class="box tip">
+  <span class="box-title">Feito para o papel</span>
+  Os gráficos do PDF são desenhados com <strong>fundo claro e as cores da marca</strong> (não é uma "foto" da tela escura), então ficam nítidos ao imprimir ou enviar.
+</div>
+
+<!-- ============ 6. BACKUP ============ -->
+<h2 id="s6"><span class="num">06.</span> Backup mensal (Saída)</h2>
+<p class="lead">Uma cópia de segurança dos custos do mês, em Excel, com um clique.</p>
+
+<p>Na seção <strong>Saída</strong> do menu existe a página <strong>Backup mensal</strong>. Ela baixa uma planilha <code>.xlsx</code> com <strong>todos os custos de um mês</strong> — uma cópia fiel para você guardar (como a folha é lançada como custo, o backup do mês já inclui a folha também).</p>
+<ol class="steps">
+  <li>No menu, em <strong>Saída</strong>, clique em <strong>Backup mensal</strong>.</li>
+  <li>Escolha o <strong>Mês/Ano</strong> desejado. Uma <strong>prévia</strong> mostra os lançamentos e o total daquele mês.</li>
+  <li>Clique em <strong>baixar</strong>. O arquivo <code>backup-custos-MM-AAAA.xlsx</code> é salvo no seu computador, com todas as colunas e uma linha de TOTAL no fim.</li>
+</ol>
+<div class="box tip">
+  <span class="box-title">Boa prática</span>
+  Baixe o backup <strong>uma vez por mês</strong> (ou antes de uma exclusão grande) e guarde numa pasta segura ou no seu Google Drive. É a sua rede de proteção.
+</div>
+
+<!-- ============ 7. FAQ ============ -->
+<h2 id="s7"><span class="num">07.</span> Dúvidas rápidas e boas práticas</h2>
+<p class="lead">Respostas curtas para as situações do dia a dia.</p>
+
+<table class="data">
+  <tr><th>Situação</th><th>O que fazer</th></tr>
+  <tr><td>Esqueci onde lanço uma compra.</td><td>Menu → <strong>Custos</strong> → "+ Novo custo".</td></tr>
+  <tr><td>Digitei um valor errado.</td><td>Ache o custo (filtros), clique em <strong>Editar</strong>, corrija e salve (item 3.8).</td></tr>
+  <tr><td>Apareceu "⚠ N a classificar".</td><td>Clique no aviso e dê uma subcategoria aos itens pendentes (item 3.10).</td></tr>
+  <tr><td>Preciso etiquetar a folha toda.</td><td>Filtre pela categoria de folha, selecione todos, "Editar em massa" → Tag (item 3.9).</td></tr>
+  <tr><td>Importei a planilha duas vezes.</td><td>Os lançamentos ficaram em dobro; selecione os duplicados e exclua em massa (item 3.11).</td></tr>
+  <tr><td>Quero enviar os números para alguém.</td><td>Abra o painel, ajuste os filtros e clique em "⬇ Exportar PDF" (item 5).</td></tr>
+  <tr><td>O login não entra.</td><td>Confira usuário/senha (item 1), sem espaços nem maiúsculas.</td></tr>
+  <tr><td>A barrinha de uso ficou laranja/vermelha.</td><td>É só um aviso de que a planilha está enchendo. Avise o responsável técnico.</td></tr>
+</table>
+
+<h3>Cinco hábitos que facilitam sua vida</h3>
+<ol>
+  <li><strong>Lance no dia.</strong> É mais fácil registrar as notas aos poucos do que acumular.</li>
+  <li><strong>Classifique os pendentes toda semana.</strong> Não deixe o "⚠ a classificar" crescer.</li>
+  <li><strong>Tage a folha assim que lançar.</strong> Assim o Dash Folha fica sempre certo.</li>
+  <li><strong>Confira o Valor total</strong> antes de salvar, principalmente se ajustou à mão.</li>
+  <li><strong>Baixe o backup do mês.</strong> Um clique que evita dor de cabeça.</li>
+</ol>
+
+<div class="box key">
+  <span class="box-title">Seus dados de acesso (de novo, à mão)</span>
+  <p><strong>Usuário:</strong> <code>admin@financesheet.local</code> &nbsp;·&nbsp; <strong>Senha:</strong> <code>admin@2026</code></p>
+</div>
+
+<div class="footer-note">
+  <strong style="color:var(--verde);">Kampeki Finance</strong> — Manual do Usuário · versão de teste (Beta), julho/2026.<br>
+  Este material foi preparado para acompanhar o teste da ferramenta. Em caso de dúvida ou comportamento inesperado, anote o que aconteceu (e, se possível, tire um print) e envie ao responsável técnico. <span style="color:var(--coral);font-weight:700;">Seu momento único.</span>
+  <div style="margin-top:12px;color:var(--verde);font-weight:600;">Criado e desenvolvido por <span style="color:var(--coral);">Renan Milech Pereira</span>.</div>
+</div>
+
+</div><!-- /.content -->
+
+</body>
+</html>

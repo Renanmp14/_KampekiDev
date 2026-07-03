@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#18322E">
+<title>Kampeki Finance — Guia Interativo</title>
+<style>
+:root{
+  --bg:#0e1b18; --surface:#16302b; --surface2:#1f3d37; --surface3:#25453e;
+  --border:#2c4a43; --coral:#FF8B7C; --coral-d:#f2796a; --teal:#4F868F;
+  --sand:#D7C4B6; --olive:#BFCB7F; --vinho:#623232; --verde:#18322E;
+  --text:#e9ebe6; --muted:#93a39b; --on-primary:#16302b;
+  --radius:12px; --shadow:0 10px 30px rgba(0,0,0,.35);
+  --font:'Segoe UI','Inter','Helvetica Neue',Helvetica,Arial,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; font-family:var(--font); background:var(--bg); color:var(--text);
+  font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--teal);text-decoration:none}
+h1,h2,h3,h4{line-height:1.2;margin:0}
+h2{font-size:1.7rem;text-transform:uppercase;letter-spacing:.5px;color:#fff}
+h3{font-size:1.15rem;color:#fff;margin-top:4px}
+h4{font-size:1rem;color:var(--sand)}
+p{margin:.6em 0}
+strong{color:#fff}
+code{background:#0c1512;border:1px solid var(--border);padding:1px 7px;border-radius:6px;
+  font-family:'Consolas','Courier New',monospace;font-size:.85em;color:#ffd7cf}
+::selection{background:rgba(255,139,124,.3)}
+
+/* ---------- Layout shell ---------- */
+.shell{display:flex;min-height:100vh}
+.sidebar{
+  width:250px;flex:0 0 250px;background:var(--surface);border-right:1px solid var(--border);
+  position:sticky;top:0;height:100vh;overflow-y:auto;padding:20px 14px;z-index:40;
+  display:flex;flex-direction:column;gap:2px;
+}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px;color:var(--coral)}
+.brand svg{height:26px;width:auto;fill:currentColor}
+.brand .sub{font-size:.62rem;letter-spacing:2px;color:var(--muted);text-transform:uppercase;font-weight:600}
+.nav-sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  padding:14px 10px 4px;font-weight:700}
+.nav-link{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;
+  color:var(--muted);font-weight:500;cursor:pointer;font-size:.92rem;border:1px solid transparent}
+.nav-link:hover{background:var(--surface2);color:var(--text)}
+.nav-link.active{background:var(--coral);color:var(--on-primary);font-weight:700}
+.nav-link .ico{width:20px;text-align:center;font-size:1rem}
+
+.main{flex:1;min-width:0;padding:0 0 60px}
+.topbar{display:none;position:sticky;top:0;z-index:50;background:var(--surface);
+  border-bottom:1px solid var(--border);padding:10px 16px;align-items:center;gap:12px}
+.topbar .brand{padding:0}
+.burger{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  width:42px;height:42px;border-radius:10px;font-size:1.2rem;cursor:pointer;flex:0 0 auto}
+.scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:39}
+
+.wrap{max-width:920px;margin:0 auto;padding:36px 28px}
+
+/* ---------- Sections (router) ---------- */
+.section{display:none;animation:fade .35s ease}
+.section.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.kicker{color:var(--coral);font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  font-size:.72rem;margin-bottom:8px}
+.lead{color:var(--sand);font-size:1.05rem;margin:2px 0 20px}
+.sec-head{border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:24px}
+
+/* ---------- Cards / boxes ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:20px;margin:16px 0;box-shadow:var(--shadow)}
+.grid{display:grid;gap:14px}
+.grid.g2{grid-template-columns:repeat(2,1fr)}
+.grid.g3{grid-template-columns:repeat(3,1fr)}
+.callout{border-radius:12px;padding:14px 18px;margin:16px 0;border-left:4px solid}
+.callout .t{font-weight:700;display:block;margin-bottom:2px}
+.callout.tip{background:rgba(191,203,127,.1);border-color:var(--olive)}
+.callout.tip .t{color:var(--olive)}
+.callout.warn{background:rgba(255,139,124,.1);border-color:var(--coral)}
+.callout.warn .t{color:var(--coral)}
+.callout.note{background:rgba(79,134,143,.12);border-color:var(--teal)}
+.callout.note .t{color:#8fc0c8}
+.callout.key{background:var(--verde);border-color:var(--coral)}
+.callout.key .t{color:var(--coral)}
+
+.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:700}
+.p-coral{background:var(--coral);color:var(--on-primary)}
+.p-teal{background:var(--teal);color:#fff}
+.p-sand{background:var(--sand);color:#4a3b30}
+.p-olive{background:var(--olive);color:#40460f}
+
+/* steps */
+ol.steps{list-style:none;counter-reset:s;padding:0;margin:14px 0}
+ol.steps li{position:relative;padding:0 0 14px 44px;margin:0}
+ol.steps li:not(:last-child)::after{content:"";position:absolute;left:14px;top:30px;bottom:2px;width:2px;background:var(--border)}
+ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:0;
+  width:29px;height:29px;border-radius:50%;background:var(--coral);color:var(--on-primary);
+  font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.9rem}
+
+/* tables */
+table.t{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem;overflow:hidden;border-radius:10px}
+table.t th{background:var(--surface2);text-align:left;padding:10px 12px;color:var(--sand);font-weight:600}
+table.t td{padding:9px 12px;border-top:1px solid var(--border);vertical-align:top}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;
+  font-weight:700;font-size:.9rem;cursor:pointer;border:1px solid transparent;font-family:inherit}
+.btn-coral{background:var(--coral);color:var(--on-primary)}
+.btn-coral:hover{background:var(--coral-d)}
+.btn-teal{background:var(--teal);color:#fff}
+.btn-ghost{background:var(--surface2);color:var(--text);border-color:var(--border)}
+.btn-ghost:hover{border-color:var(--teal)}
+.btn-danger{background:var(--vinho);color:var(--coral)}
+.btn:disabled{opacity:.4;cursor:default}
+.insight{background:linear-gradient(180deg,var(--surface),var(--surface2));border:1px solid var(--border);
+  border-left:4px solid var(--coral);border-radius:12px;padding:14px 18px;margin:14px 0;line-height:1.55}
+.tagbar{cursor:pointer;margin-bottom:10px;padding:4px;border-radius:8px}
+.tagbar:hover{background:var(--surface2)}
+.tagbar.dim{opacity:.45}
+.tagbar .tb-track{height:14px;background:var(--surface2);border-radius:7px;overflow:hidden;margin-top:4px}
+.tagbar .tb-fill{height:100%;transition:.25s}
+.scenario{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--teal);
+  border-radius:12px;padding:16px 18px;margin:16px 0}
+
+/* ---------- Tabs ---------- */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 0;border-bottom:1px solid var(--border)}
+.tab{padding:10px 16px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:3px solid transparent;
+  border-radius:8px 8px 0 0;font-size:.9rem}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--coral);border-bottom-color:var(--coral);background:var(--surface)}
+.tabpane{display:none;padding-top:12px}
+.tabpane.active{display:block;animation:fade .3s ease}
+
+/* ---------- Accordion ---------- */
+.acc{border:1px solid var(--border);border-radius:10px;margin:10px 0;overflow:hidden;background:var(--surface)}
+.acc-h{padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+  font-weight:600;color:#fff;gap:10px}
+.acc-h:hover{background:var(--surface2)}
+.acc-h .chev{transition:transform .25s;color:var(--coral);flex:0 0 auto}
+.acc.open .chev{transform:rotate(90deg)}
+.acc-b{max-height:0;overflow:hidden;transition:max-height .3s ease;padding:0 16px}
+.acc.open .acc-b{max-height:640px;padding-bottom:14px}
+
+/* ---------- Mock UI (app look) ---------- */
+.ui{background:var(--bg);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.ui-top{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 14px;
+  display:flex;align-items:center;gap:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.5px;font-size:.85rem}
+.ui-body{padding:16px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.kpi .lab{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.6px}
+.kpi .val{font-size:1.5rem;font-weight:800;color:#fff;margin-top:4px}
+.kpi .val.coral{color:var(--coral)}
+.kpi .val.teal{color:var(--teal)}
+.kpi .val.olive{color:var(--olive)}
+.subcard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:14px}
+.subcard h5{margin:0 0 12px;color:#fff;font-size:.8rem;text-transform:uppercase;letter-spacing:.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--teal);
+  color:#cfe3e6;border-radius:18px;padding:4px 12px;font-size:.78rem;margin:3px 4px 3px 0}
+.chip button{background:none;border:none;color:var(--coral);cursor:pointer;font-size:.9rem;padding:0;line-height:1}
+.inp{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 11px;
+  color:var(--text);font-family:inherit;font-size:.85rem}
+.inp .ph,.ph{color:var(--muted)}
+.field-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px}
+.field label{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+select.inp,input.inp{width:100%}
+
+/* donut + bars */
+.dash-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.donut-wrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.legend{font-size:.85rem;display:flex;flex-direction:column;gap:6px}
+.legend .li{display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 6px;border-radius:6px}
+.legend .li:hover{background:var(--surface2)}
+.legend .li.sel{background:var(--surface2)}
+.legend .sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+.legend .li.dim{opacity:.45}
+.bars{display:flex;align-items:stretch;gap:10px;height:130px;padding-top:8px}
+.barcol{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;cursor:pointer}
+.bar{width:100%;max-width:46px;background:var(--coral);border-radius:5px 5px 0 0;transition:.2s;min-height:4px;flex-shrink:0}
+.barcol.dim .bar{opacity:.4}
+.barcol.sel .bar{outline:2px solid #fff;outline-offset:1px}
+.barcol .bl{font-size:.72rem;color:var(--muted)}
+.barcol .bv{font-size:.7rem;color:var(--text);font-weight:600}
+.up{color:var(--coral)} .down{color:var(--olive)}
+.hint{color:var(--muted);font-size:.82rem;margin-top:8px}
+
+/* hotspots */
+.hotstage{position:relative}
+.hot{position:absolute;width:26px;height:26px;border-radius:50%;background:var(--coral);color:var(--on-primary);
+  font-weight:800;font-size:.8rem;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  border:2px solid #fff;box-shadow:0 0 0 0 rgba(255,139,124,.6);animation:pulse 2s infinite}
+.hot.active{background:#fff;color:var(--verde)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,139,124,.5)}70%{box-shadow:0 0 0 10px rgba(255,139,124,0)}100%{box-shadow:0 0 0 0 rgba(255,139,124,0)}}
+.hotinfo{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--coral);
+  border-radius:10px;padding:14px 16px;margin-top:14px;min-height:60px}
+.hotinfo .n{color:var(--coral);font-weight:800;margin-right:8px}
+
+/* password reveal */
+.cred{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.credline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.credline .lab{color:var(--muted);min-width:70px}
+.credval{background:#0c1512;border:1px solid var(--border);padding:6px 12px;border-radius:8px;
+  font-family:'Consolas',monospace;color:#ffd7cf;letter-spacing:1px}
+.toggle{background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;
+  padding:5px 10px;border-radius:8px;font-size:.8rem}
+
+.footer{border-top:1px solid var(--border);margin-top:40px;padding-top:20px;color:var(--muted);font-size:.85rem}
+.footer strong{color:var(--coral)}
+.progress-note{background:var(--surface2);border-radius:10px;padding:10px 14px;font-size:.82rem;color:var(--muted);margin-top:20px}
+
+/* ---------- Responsivo ---------- */
+@media(max-width:960px){
+  .wrap{padding:26px 20px}
+  .dash-row{grid-template-columns:1fr}
+}
+@media(max-width:820px){
+  .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .3s ease;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .topbar{display:flex}
+  .scrim.show{display:block}
+  .grid.g3,.grid.g2{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  body{font-size:14px}
+  .wrap{padding:20px 14px}
+  h2{font-size:1.35rem}
+  .kpis{grid-template-columns:1fr 1fr}
+  .bars{height:110px}
+  .field{min-width:100%}
+  .btn{width:100%;justify-content:center}
+  .field-row .btn{width:auto}
+}
+@media(max-width:380px){
+  .kpis{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="shell">
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 683 159.6"><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1302.4978 612.1678 1252.5878 489.06178 1199.7068 612.1678H1192.6638L1192.7349 470.46583H1198.0838V572.6378L1241.2588 472.12678C1242.0999 470.16883 1244.0258 468.89979 1246.1569 468.89979 1248.2798 468.89979 1250.1908 470.1878 1250.9878 472.1548L1294.0308 578.3208V470.46583H1308.8988V612.1678H1302.4978Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1499.961 606.7399V612.16799H1429.0161V470.46595H1499.961V475.89393H1443.885V567.3999H1493.034V572.8269H1443.885V606.7399H1499.961Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1631.132 470.466H1646V612.16799H1631.132Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1020.9548 564.3413C1040.4508 575.1333 1056.1837 591.9063 1065.3848 612.1673L1049.4998 612.1533C1041.7548 593.5633 1029.2218 578.1443 1013.81277 567.8963 1006.2828 571.0933 998.2538 572.8273 989.91677 572.8273 989.90078 572.8273 989.88479 572.8263 989.8678 572.8263V612.1673H974.99978V470.4663H989.8678V567.0763C989.88479 567.0763 989.90078 567.07736 989.91677 567.07736 1024.0838 567.07736 1051.7827 523.82736 1051.7998 470.4663H1067.7008C1067.6868 512.4773 1048.4548 548.5663 1020.9548 564.3413Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1564.9911 564.3413C1584.487 575.1333 1600.2201 591.9063 1609.4212 612.1673L1593.5361 612.1533C1585.7911 593.5633 1573.258 578.1443 1557.8491 567.8963 1550.3191 571.0933 1542.2911 572.8273 1533.9531 572.8273 1533.9371 572.8273 1533.9212 572.8263 1533.904 572.8263V612.1673H1519.0361V470.4663H1533.904V567.0763C1533.9212 567.0763 1533.9371 567.07736 1533.9531 567.07736 1568.1201 567.07736 1595.8191 523.82736 1595.836 470.4663H1611.737C1611.7232 512.4773 1592.4921 548.5663 1564.9911 564.3413Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1411.9022 575.2936C1411.7033 580.0536 1410.6813 584.9856 1408.6472 589.6106 1406.6253 594.23757 1403.4802 598.4376 1399.7172 601.6376 1395.9642 604.8716 1391.6973 607.13858 1387.4053 608.69259 1383.1093 610.2716 1378.7562 611.1556 1374.4662 611.6986 1371.4442 612.07656 1368.4602 612.14956 1365.4633 612.1626V612.16958L1344.7122 612.1636V612.1676H1329.8442V470.46656H1344.7122V489.6516C1344.7162 493.4436 1345.8152 497.18556 1347.5842 500.5276 1348.4533 502.2066 1349.4943 503.8036 1350.6572 505.3216 1351.8392 506.8286 1353.1453 508.2506 1354.5272 509.6106 1360.1303 515.0116 1366.8392 519.3666 1373.7453 523.63558 1380.6232 527.9606 1387.8342 532.1996 1394.5272 537.9416 1397.8662 540.80758 1401.0802 544.07058 1403.8173 547.9046 1406.5842 551.70559 1408.8052 556.1286 1410.2142 560.8426 1411.6272 565.5486 1412.1293 570.5626 1411.9022 575.2936M1394.8383 565.03158C1394.1133 561.9286 1392.9352 558.8926 1391.3123 555.8876 1389.6773 552.8966 1387.6642 549.9106 1385.3173 547.0096 1380.6062 541.2096 1374.7963 535.6946 1368.7443 530.2826 1362.7472 524.79159 1356.3212 519.48959 1350.8392 513.0246 1349.4702 511.41157 1347.0012 509.00959 1344.7122 504.6986V606.9206C1346.2853 606.9496 1347.8583 606.9596 1349.4313 606.9446 1351.4573 606.9436 1353.4822 606.85757 1355.5072 606.8096L1358.5463 606.6616C1359.5422 606.6036 1360.6152 606.5826 1361.5232 606.48757 1369.1742 605.7776 1376.8273 603.27957 1382.7963 599.2806 1385.7692 597.27359 1388.3123 594.92959 1390.2142 592.3476 1392.1282 589.7646 1393.4432 587.0046 1394.3333 584.0686 1395.2152 581.1266 1395.6382 577.97659 1395.7522 574.6476 1395.8292 571.2906 1395.6043 568.13858 1394.8383 565.03158Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1177.1475 470.46607 1130.8734 612.1681H1114.9475L1119.3104 598.8091C1122.5165 587.86209 1121.7274 575.86508 1117.6394 565.2621 1113.0494 553.5231 1105.6644 543.3661 1098.0695 533.1731 1092.7455 525.87606 1086.8455 519.07009 1082.9015 510.49409 1076.8884 498.04206 1077.7265 481.51106 1089.6505 472.31709 1099.4505 464.61708 1112.6425 467.74909 1121.6885 474.76808 1127.2075 478.79109 1131.4575 484.44306 1135.9664 489.0431 1140.3374 493.45509 1145.9905 497.58009 1152.1325 498.29908L1161.2214 470.46607H1177.1475M1131.7565 494.14509C1123.7245 489.02607 1115.7935 481.63905 1106.1334 482.2621 1095.0625 483.63105 1092.5344 496.69508 1095.1444 506.07106 1096.9915 513.75607 1101.5564 520.94009 1105.9075 527.80709 1110.4865 535.1241 1115.1045 542.6211 1118.9525 550.6271 1123.0645 558.67709 1125.7785 567.43209 1126.6535 576.32308L1150.7395 502.56605C1143.8325 501.70307 1137.4275 498.08406 1131.7565 494.14509Z"/></svg>
+    </div>
+    <div class="sub" style="padding:0 8px 6px;color:var(--muted);font-size:.62rem;letter-spacing:2px">FINANCE · GUIA INTERATIVO</div>
+
+    <div class="nav-sec">Começando</div>
+    <div class="nav-link" data-go="home"><span class="ico">🏠</span> Início</div>
+    <div class="nav-link" data-go="login"><span class="ico">🔑</span> Acessar (login)</div>
+    <div class="nav-link" data-go="tela"><span class="ico">🧭</span> Conhecendo a tela</div>
+
+    <div class="nav-sec">Lançamentos</div>
+    <div class="nav-link" data-go="conceitos"><span class="ico">📚</span> Conceitos</div>
+    <div class="nav-link" data-go="cadastros"><span class="ico">🗂️</span> Fornecedor · Tag · Itens</div>
+    <div class="nav-link" data-go="lancar"><span class="ico">➕</span> Lançar um custo</div>
+    <div class="nav-link" data-go="importar"><span class="ico">📥</span> Importar em massa</div>
+    <div class="nav-link" data-go="gerir"><span class="ico">🛠️</span> Filtrar · corrigir · tag</div>
+    <div class="nav-link" data-go="classificar"><span class="ico">🏷️</span> Classificar itens</div>
+
+    <div class="nav-sec">Painéis</div>
+    <div class="nav-link" data-go="dashcustos"><span class="ico">📊</span> Dash Custos</div>
+    <div class="nav-link" data-go="dashfolha"><span class="ico">👥</span> Dash Folha</div>
+    <div class="nav-link" data-go="periodo"><span class="ico">📈</span> Análise por Período</div>
+
+    <div class="nav-sec">Saídas</div>
+    <div class="nav-link" data-go="pdf"><span class="ico">📄</span> Relatórios PDF</div>
+    <div class="nav-link" data-go="backup"><span class="ico">💾</span> Backup mensal</div>
+    <div class="nav-link" data-go="faq"><span class="ico">❓</span> Dúvidas rápidas</div>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <div class="main">
+    <div class="topbar">
+      <button class="burger" id="burger" aria-label="Menu">☰</button>
+      <div class="brand" style="color:var(--coral)"><svg viewBox="0 0 683 159.6" style="height:22px"><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1302.4978 612.1678 1252.5878 489.06178 1199.7068 612.1678H1192.6638L1192.7349 470.46583H1198.0838V572.6378L1241.2588 472.12678C1242.0999 470.16883 1244.0258 468.89979 1246.1569 468.89979 1248.2798 468.89979 1250.1908 470.1878 1250.9878 472.1548L1294.0308 578.3208V470.46583H1308.8988V612.1678H1302.4978Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1499.961 606.7399V612.16799H1429.0161V470.46595H1499.961V475.89393H1443.885V567.3999H1493.034V572.8269H1443.885V606.7399H1499.961Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1631.132 470.466H1646V612.16799H1631.132Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1020.9548 564.3413C1040.4508 575.1333 1056.1837 591.9063 1065.3848 612.1673L1049.4998 612.1533C1041.7548 593.5633 1029.2218 578.1443 1013.81277 567.8963 1006.2828 571.0933 998.2538 572.8273 989.91677 572.8273 989.90078 572.8273 989.88479 572.8263 989.8678 572.8263V612.1673H974.99978V470.4663H989.8678V567.0763C989.88479 567.0763 989.90078 567.07736 989.91677 567.07736 1024.0838 567.07736 1051.7827 523.82736 1051.7998 470.4663H1067.7008C1067.6868 512.4773 1048.4548 548.5663 1020.9548 564.3413Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1564.9911 564.3413C1584.487 575.1333 1600.2201 591.9063 1609.4212 612.1673L1593.5361 612.1533C1585.7911 593.5633 1573.258 578.1443 1557.8491 567.8963 1550.3191 571.0933 1542.2911 572.8273 1533.9531 572.8273 1533.9371 572.8273 1533.9212 572.8263 1533.904 572.8263V612.1673H1519.0361V470.4663H1533.904V567.0763C1533.9212 567.0763 1533.9371 567.07736 1533.9531 567.07736 1568.1201 567.07736 1595.8191 523.82736 1595.836 470.4663H1611.737C1611.7232 512.4773 1592.4921 548.5663 1564.9911 564.3413Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1411.9022 575.2936C1411.7033 580.0536 1410.6813 584.9856 1408.6472 589.6106 1406.6253 594.23757 1403.4802 598.4376 1399.7172 601.6376 1395.9642 604.8716 1391.6973 607.13858 1387.4053 608.69259 1383.1093 610.2716 1378.7562 611.1556 1374.4662 611.6986 1371.4442 612.07656 1368.4602 612.14956 1365.4633 612.1626V612.16958L1344.7122 612.1636V612.1676H1329.8442V470.46656H1344.7122V489.6516C1344.7162 493.4436 1345.8152 497.18556 1347.5842 500.5276 1348.4533 502.2066 1349.4943 503.8036 1350.6572 505.3216 1351.8392 506.8286 1353.1453 508.2506 1354.5272 509.6106 1360.1303 515.0116 1366.8392 519.3666 1373.7453 523.63558 1380.6232 527.9606 1387.8342 532.1996 1394.5272 537.9416 1397.8662 540.80758 1401.0802 544.07058 1403.8173 547.9046 1406.5842 551.70559 1408.8052 556.1286 1410.2142 560.8426 1411.6272 565.5486 1412.1293 570.5626 1411.9022 575.2936M1394.8383 565.03158C1394.1133 561.9286 1392.9352 558.8926 1391.3123 555.8876 1389.6773 552.8966 1387.6642 549.9106 1385.3173 547.0096 1380.6062 541.2096 1374.7963 535.6946 1368.7443 530.2826 1362.7472 524.79159 1356.3212 519.48959 1350.8392 513.0246 1349.4702 511.41157 1347.0012 509.00959 1344.7122 504.6986V606.9206C1346.2853 606.9496 1347.8583 606.9596 1349.4313 606.9446 1351.4573 606.9436 1353.4822 606.85757 1355.5072 606.8096L1358.5463 606.6616C1359.5422 606.6036 1360.6152 606.5826 1361.5232 606.48757 1369.1742 605.7776 1376.8273 603.27957 1382.7963 599.2806 1385.7692 597.27359 1388.3123 594.92959 1390.2142 592.3476 1392.1282 589.7646 1393.4432 587.0046 1394.3333 584.0686 1395.2152 581.1266 1395.6382 577.97659 1395.7522 574.6476 1395.8292 571.2906 1395.6043 568.13858 1394.8383 565.03158Z"/><path transform="matrix(1,0,0,-1,-969,618.2)" d="M1177.1475 470.46607 1130.8734 612.1681H1114.9475L1119.3104 598.8091C1122.5165 587.86209 1121.7274 575.86508 1117.6394 565.2621 1113.0494 553.5231 1105.6644 543.3661 1098.0695 533.1731 1092.7455 525.87606 1086.8455 519.07009 1082.9015 510.49409 1076.8884 498.04206 1077.7265 481.51106 1089.6505 472.31709 1099.4505 464.61708 1112.6425 467.74909 1121.6885 474.76808 1127.2075 478.79109 1131.4575 484.44306 1135.9664 489.0431 1140.3374 493.45509 1145.9905 497.58009 1152.1325 498.29908L1161.2214 470.46607H1177.1475M1131.7565 494.14509C1123.7245 489.02607 1115.7935 481.63905 1106.1334 482.2621 1095.0625 483.63105 1092.5344 496.69508 1095.1444 506.07106 1096.9915 513.75607 1101.5564 520.94009 1105.9075 527.80709 1110.4865 535.1241 1115.1045 542.6211 1118.9525 550.6271 1123.0645 558.67709 1125.7785 567.43209 1126.6535 576.32308L1150.7395 502.56605C1143.8325 501.70307 1137.4275 498.08406 1131.7565 494.14509Z"/></svg></div>
+    </div>
+
+    <div class="wrap">
+
+      <!-- ========== HOME ========== -->
+      <section class="section" id="home">
+        <div class="kicker">Guia Interativo · Beta</div>
+        <h2>Bem-vinda ao Kampeki&nbsp;Finance</h2>
+        <p class="lead">Aprenda a ferramenta clicando e experimentando — não é só leitura.</p>
+        <p>Este guia é <strong>interativo</strong>: você navega módulo a módulo pelo menu ao lado, testa uma <strong>simulação de dashboard</strong> (que filtra os números de verdade quando você clica), monta um <strong>lançamento de custo</strong> passo a passo e descobre o que faz <strong>cada botão da tela</strong> passando o mouse nos pontos coral.</p>
+
+        <div class="callout tip"><span class="t">Como usar</span> Use o menu à esquerda (no celular, o botão <strong>☰</strong> no topo). Comece por <strong>Acessar</strong> e <strong>Lançar um custo</strong> — é o seu dia a dia. Os painéis são para <em>ver os resultados</em>.</div>
+
+        <div class="card" style="border-left:4px solid var(--coral)">
+          <h3>👩‍🍳 Vamos aprender com a Marina</h3>
+          <p>A <strong>Marina</strong> gerencia o Kampeki. Ao longo do guia ela faz perguntas de verdade — <em>“para onde foi meu dinheiro esse mês?”, “qual ingrediente disparou?”, “a folha do salão cresceu?”</em> — e você vê <strong>como cada tela responde</strong>. Sempre que aparecer o selo <span class="pill p-coral">HISTÓRIA</span>, é a Marina usando a ferramenta para tomar uma decisão real.</p>
+        </div>
+
+        <h3 style="margin-top:24px">Escolha por onde começar</h3>
+        <div class="grid g3" style="margin-top:12px">
+          <div class="card" style="cursor:pointer;margin:0" data-go="login"><h4>🔑 Acessar</h4><p style="margin:.4em 0 0;color:var(--muted);font-size:.9rem">Login, senha e a versão do app.</p></div>
+          <div class="card" style="cursor:pointer;margin:0" data-go="lancar"><h4>➕ Lançar um custo</h4><p style="margin:.4em 0 0;color:var(--muted);font-size:.9rem">Simulador em cascata do formulário.</p></div>
+          <div class="card" style="cursor:pointer;margin:0" data-go="dashcustos"><h4>📊 Dash Custos</h4><p style="margin:.4em 0 0;color:var(--muted);font-size:.9rem">Painel com drill-down de verdade.</p></div>
+          <div class="card" style="cursor:pointer;margin:0" data-go="importar"><h4>📥 Importar notas</h4><p style="margin:.4em 0 0;color:var(--muted);font-size:.9rem">Planilha, .zip de NF-e e PDF.</p></div>
+          <div class="card" style="cursor:pointer;margin:0" data-go="classificar"><h4>🏷️ Classificar itens</h4><p style="margin:.4em 0 0;color:var(--muted);font-size:.9rem">Dar categoria aos pendentes.</p></div>
+          <div class="card" style="cursor:pointer;margin:0" data-go="faq"><h4>❓ Dúvidas rápidas</h4><p style="margin:.4em 0 0;color:var(--muted);font-size:.9rem">Respostas curtas do dia a dia.</p></div>
+        </div>
+      </section>
+
+      <!-- ========== LOGIN ========== -->
+      <section class="section" id="login">
+        <div class="sec-head"><div class="kicker">Começando · 01</div><h2>Acessar (login)</h2><p class="lead">Abrir o programa e entrar com seu usuário e senha.</p></div>
+        <p>Procure o ícone <strong>Kampeki Finance</strong> (o selinho coral “KMPK”) na área de trabalho e dê dois cliques. Na tela de login, preencha:</p>
+
+        <div class="card">
+          <div class="cred">
+            <div class="credline"><span class="lab">Usuário</span><span class="credval">admin@financesheet.local</span></div>
+            <div class="credline"><span class="lab">Senha</span><span class="credval" id="pwval">••••••••</span><button class="toggle" id="pwtoggle">👁 Mostrar</button></div>
+          </div>
+          <p class="hint">Digite exatamente como está (tudo minúsculo, sem espaços). Guarde em local seguro.</p>
+        </div>
+
+        <ol class="steps">
+          <li>Abra o programa <strong>Kampeki Finance</strong>.</li>
+          <li>Digite o <strong>e-mail</strong> e a <strong>senha</strong> acima.</li>
+          <li>Clique em <strong>Entrar</strong>. Pronto!</li>
+        </ol>
+
+        <div class="callout note"><span class="t">Ficou fora?</span> O app mantém você conectada por vários dias. Se pedir login de novo, repita os dados. Se aparecer “Credenciais inválidas”, confira espaços e maiúsculas.</div>
+        <div class="callout warn"><span class="t">Segurança</span> Estes são dados de teste (Beta). Não compartilhe a senha além do necessário — a chave de acesso será trocada ao fim dos testes.</div>
+      </section>
+
+      <!-- ========== TELA (hotspots) ========== -->
+      <section class="section" id="tela">
+        <div class="sec-head"><div class="kicker">Começando · 02</div><h2>Conhecendo a tela</h2><p class="lead">Passe o mouse (ou toque) nos pontos <span style="color:var(--coral)">coral</span> para descobrir o que cada área faz.</p></div>
+
+        <div class="ui hotstage" id="telastage">
+          <div class="ui-top">Custos <span style="margin-left:auto;font-weight:400;color:var(--muted);text-transform:none;font-size:.8rem">Kampeki Finance</span></div>
+          <div style="display:flex">
+            <div style="width:130px;background:var(--surface);border-right:1px solid var(--border);padding:12px 8px;font-size:.8rem">
+              <div style="color:var(--muted);font-size:.6rem;text-transform:uppercase;padding:6px 8px">Painéis</div>
+              <div style="padding:7px 9px;border-radius:7px;color:var(--muted)">Dash Custos</div>
+              <div style="color:var(--muted);font-size:.6rem;text-transform:uppercase;padding:8px 8px 4px">Lançamentos</div>
+              <div style="padding:7px 9px;border-radius:7px;background:var(--coral);color:var(--on-primary);font-weight:700">Custos</div>
+              <div style="padding:7px 9px;border-radius:7px;color:var(--muted)">Itens</div>
+              <div style="padding:7px 9px;border-radius:7px;color:var(--muted)">Fornecedores</div>
+            </div>
+            <div class="ui-body" style="flex:1;min-width:0">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <span class="btn btn-coral" style="pointer-events:none">+ Novo custo</span>
+                <span class="btn btn-ghost" style="pointer-events:none">Importar planilha</span>
+                <span class="btn btn-ghost" style="pointer-events:none">Importar NF-e</span>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                <span class="inp"><span class="ph">Mês/Ano</span></span><span class="inp"><span class="ph">Categoria</span></span><span class="inp"><span class="ph">Fornecedor</span></span><span class="inp"><span class="ph">Item</span></span>
+              </div>
+              <div class="subcard" style="margin-top:12px">
+                <div class="table-scroll"><table class="t" style="font-size:.8rem"><tr><th>Data</th><th>Fornecedor</th><th>Item</th><th>Categoria</th><th>Total</th></tr>
+                <tr><td>02/07</td><td>Peixaria Sul</td><td>Salmão</td><td>CMV</td><td>R$ 1.240</td></tr>
+                <tr><td>01/07</td><td>Copel</td><td>Luz POA</td><td>Desp. Adm.</td><td>R$ 2.310</td></tr></table></div>
+              </div>
+            </div>
+          </div>
+          <div class="hot" data-tip="menu" style="left:6%;top:38%">1</div>
+          <div class="hot" data-tip="novo" style="left:22%;top:22%">2</div>
+          <div class="hot" data-tip="importar" style="left:52%;top:22%">3</div>
+          <div class="hot" data-tip="filtros" style="left:40%;top:40%">4</div>
+          <div class="hot" data-tip="tabela" style="left:60%;top:74%">5</div>
+        </div>
+        <div class="hotinfo" id="telainfo"><span class="n">👆</span> Toque num ponto numerado acima para ver a explicação.</div>
+
+        <div class="callout tip"><span class="t">No celular</span> O menu lateral vira o botão <strong>☰</strong> no topo; ele fecha sozinho ao escolher uma opção.</div>
+      </section>
+
+      <!-- ========== CONCEITOS ========== -->
+      <section class="section" id="conceitos">
+        <div class="sec-head"><div class="kicker">Lançamentos · 03</div><h2>Os conceitos-chave</h2><p class="lead">Seis palavrinhas que aparecem o tempo todo. Entenda uma vez.</p></div>
+        <div class="table-scroll"><table class="t">
+          <tr><th>Palavra</th><th>O que é</th><th>Exemplo</th></tr>
+          <tr><td><strong>Custo</strong></td><td>Um gasto registrado (uma nota ou linha de nota).</td><td>10 kg de salmão por R$ 1.240</td></tr>
+          <tr><td><strong>Item</strong></td><td>O <em>que</em> foi comprado.</td><td>Salmão, Alface, Luz POA</td></tr>
+          <tr><td><strong>Subcategoria</strong></td><td>A “gaveta” específica do item. Você escolhe.</td><td>SALMÃO, HORTIFRUTI</td></tr>
+          <tr><td><strong>Categoria</strong> (classe)</td><td>O grupo grande, calculado <strong>sozinho</strong> pela subcategoria.</td><td>CMV, DESP. ADMINISTRATIVA</td></tr>
+          <tr><td><strong>Fornecedor</strong></td><td>De <em>quem</em> você comprou.</td><td>Peixaria Sul, Copel</td></tr>
+          <tr><td><strong>Tag</strong></td><td>Etiqueta usada na <strong>folha</strong> para separar por equipe.</td><td>Cozinha, Salão, Delivery</td></tr>
+        </table></div>
+        <div class="callout note"><span class="t">Regra de ouro</span> Você <strong>nunca digita a categoria</strong>. Escolhe a subcategoria e o sistema descobre a categoria. As categorias são fixas: CMV, DESPESA ADMINISTRATIVA, FOLHA CANOAS/POA/TELE, DISTRIBUIÇÃO DE LUCRO e IMPOSTOS.</div>
+        <div class="callout tip"><span class="t">E a folha?</span> A folha é lançada <strong>como um custo</strong> de categoria FOLHA, com uma <strong>tag</strong> de equipe. Não existe tela separada de folha — o Dash Folha lê esses custos automaticamente.</div>
+      </section>
+
+      <!-- ========== CADASTROS ========== -->
+      <section class="section" id="cadastros">
+        <div class="sec-head"><div class="kicker">Lançamentos · 03</div><h2>Fornecedor · Tag · Itens</h2><p class="lead">Os cadastros base. Escolha uma aba.</p></div>
+        <div class="tabs" data-tabs="cad">
+          <div class="tab active" data-pane="forn">Fornecedores</div>
+          <div class="tab" data-pane="tag">Tags</div>
+          <div class="tab" data-pane="itens">Itens</div>
+        </div>
+        <div class="tabpane active" data-pane="forn">
+          <p>A lista de quem você compra. Se digitar um nome novo ao lançar/importar, o sistema <strong>cria o fornecedor sozinho</strong>.</p>
+          <ol class="steps"><li>Menu → <strong>Fornecedores</strong>.</li><li><strong>“+ Novo fornecedor”</strong>, digite o nome e salve.</li><li>Use a <strong>busca</strong> no topo para achar rápido.</li><li>Cada linha tem <strong>Editar</strong> e <strong>Excluir</strong>.</li></ol>
+          <div class="callout warn"><span class="t">Nomes não repetem</span> Não dá para cadastrar dois fornecedores com o mesmo nome — evita “Copel” e “copel” duplicados.</div>
+        </div>
+        <div class="tabpane" data-pane="tag">
+          <p>Etiquetas para a <strong>folha</strong>: separam gastos de pessoal por equipe/unidade (Cozinha, Salão, Delivery…).</p>
+          <ol class="steps"><li>Menu → <strong>Tags</strong>.</li><li><strong>“+ Nova tag”</strong>, digite (ex.: “Cozinha”) e salve.</li><li>Depois elas aparecem para escolher ao lançar folha ou na edição em massa.</li></ol>
+        </div>
+        <div class="tabpane" data-pane="itens">
+          <p>O catálogo do que você compra. Cada item guarda a <strong>subcategoria</strong> (você escolhe) e a <strong>categoria</strong> (o sistema calcula).</p>
+          <ol class="steps"><li>Menu → <strong>Itens</strong> → <strong>“+ Novo item”</strong>.</li><li>Digite a descrição e escolha a <strong>subcategoria</strong> (pode digitar para filtrar). A categoria aparece sozinha.</li><li>Salve. O item já pode ser usado.</li></ol>
+          <div class="callout note"><span class="t">Botões extras em Itens</span> <strong>“⚠ N a classificar”</strong> (arruma itens sem categoria), <strong>“Subcategorias”</strong> (criar/excluir) e <strong>“↻ Reprocessar tags”</strong>. Itens de folha ganham um campo <strong>Tag</strong> que, ao salvar, é aplicada a todos os custos daquele item.</div>
+        </div>
+      </section>
+
+      <!-- ========== LANÇAR (simulador) ========== -->
+      <section class="section" id="lancar">
+        <div class="sec-head"><div class="kicker">Lançamentos · 03</div><h2>Lançar um custo</h2><p class="lead">Monte um lançamento aqui embaixo — o formulário reage às suas escolhas.</p></div>
+        <p>Em <strong>Custos → “+ Novo custo”</strong>. Escolha em cascata <strong>Categoria → Subcategoria → Item</strong>; o total é calculado sozinho; se for folha, aparece o campo <strong>Tag</strong>. Experimente:</p>
+
+        <div class="callout note"><span class="t"><span class="pill p-coral" style="margin-right:6px">HISTÓRIA</span>Chegou a nota da peixaria</span> A Marina recebeu 10 kg de salmão a R$ 124/kg. Ela faz: Categoria <strong>CMV</strong> → Subcategoria <strong>SALMÃO</strong> → Item <strong>Salmão fresco</strong> → Qtd <strong>10</strong>, Valor unit. <strong>124</strong>. O total <strong>R$ 1.240,00</strong> aparece sozinho. Salvar. 30 segundos e a nota virou dado no painel. Reproduza isso no simulador abaixo:</div>
+
+        <div class="card">
+          <div class="field-row">
+            <div class="field"><label>Categoria</label>
+              <select class="inp" id="f-cat"><option value="">— escolher —</option><option>CMV</option><option>DESPESA ADMINISTRATIVA</option><option>FOLHA CANOAS</option></select></div>
+            <div class="field"><label>Subcategoria</label>
+              <select class="inp" id="f-sub" disabled><option value="">—</option></select></div>
+            <div class="field"><label>Item</label>
+              <select class="inp" id="f-item" disabled><option value="">—</option></select></div>
+          </div>
+          <div class="field-row" style="margin-top:12px">
+            <div class="field" style="max-width:110px"><label>Qtd</label><input class="inp" id="f-qtd" type="number" value="10" min="0"></div>
+            <div class="field" style="max-width:140px"><label>Valor unit. (R$)</label><input class="inp" id="f-vu" type="number" value="124" min="0" step="0.01"></div>
+            <div class="field" style="max-width:170px"><label>Valor total <span id="f-lock" style="color:var(--coral)">✏</span></label><div class="inp" id="f-total" style="font-weight:700;color:#fff">R$ 1.240,00</div></div>
+            <div class="field" id="f-tagwrap" style="max-width:170px;display:none"><label>Tag (obrigatória) 🏷️</label>
+              <select class="inp" id="f-tag"><option value="">— escolher —</option><option>Cozinha</option><option>Salão</option><option>Delivery</option></select></div>
+          </div>
+          <div class="hint" id="f-hint">Comece escolhendo uma <strong>categoria</strong> acima.</div>
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost">Cancelar</button>
+            <button class="btn btn-coral" id="f-save">Salvar custo</button>
+          </div>
+          <div id="f-result" style="margin-top:14px"></div>
+        </div>
+
+        <div class="callout tip"><span class="t">Ajustar o total à mão</span> Clique em <strong>“✏ editar total”</strong> para digitar um valor combinado (arredondamento/acordo). “↺ recalcular” volta ao automático.</div>
+        <div class="callout tip"><span class="t">Item não existe?</span> Ao digitar um item novo aparece <strong>“➕ Criar item ‘XYZ’ em [SUBCATEGORIA]”</strong> — cria na hora, sem sair do formulário.</div>
+      </section>
+
+      <!-- ========== IMPORTAR ========== -->
+      <section class="section" id="importar">
+        <div class="sec-head"><div class="kicker">Lançamentos · 03</div><h2>Importar em massa</h2><p class="lead">Muitas notas de uma vez, sem digitar uma a uma. Escolha o formato.</p></div>
+        <div class="tabs" data-tabs="imp">
+          <div class="tab active" data-pane="xlsx">📊 Planilha .xlsx</div>
+          <div class="tab" data-pane="zip">🗜️ NF-e (.zip)</div>
+          <div class="tab" data-pane="pdf">📄 NFS-e (PDF)</div>
+        </div>
+        <div class="tabpane active" data-pane="xlsx">
+          <p>Uma planilha Excel com a lista de compras → <strong>um custo por linha</strong>.</p>
+          <ol class="steps"><li><strong>“Importar planilha”</strong>. Sem modelo? Clique em <strong>“⬇ Baixar modelo”</strong> (Excel já com as colunas certas).</li><li>Selecione o arquivo e veja a <strong>prévia</strong>.</li><li>Confirme e leia o <strong>resumo</strong> (importados, criados e os que não entraram).</li></ol>
+          <p>O sistema resolve sozinho: fornecedor/item novo é <strong>cadastrado</strong>; linha <strong>sem data</strong> ganha o último dia do mês (ou ele pergunta qual mês); <strong>sem nota/sem fornecedor</strong> viram “Sem Nota”/“Sem Fornecedor”.</p>
+          <div class="callout warn"><span class="t">Não rode duas vezes</span> A planilha <strong>não</strong> checa duplicatas — reimportar o mesmo arquivo duplica os lançamentos. É para carga única de dados antigos.</div>
+        </div>
+        <div class="tabpane" data-pane="zip">
+          <p>Um <code>.zip</code> com vários XML de nota fiscal (modelo 55) → <strong>um custo por item</strong> de cada nota.</p>
+          <ol class="steps"><li><strong>“Importar NF-e (.zip)”</strong> e selecione o arquivo.</li><li>Confira a prévia e confirme.</li></ol>
+          <div class="callout tip"><span class="t">Pode repetir sem medo</span> Cada nota tem uma chave única: se já foi importada, é <strong>pulada</strong>. Reprocessar o mesmo .zip não duplica.</div>
+          <p>Itens sem categoria entram marcados como <strong>“a classificar”</strong> (você arruma na aba Classificar).</p>
+        </div>
+        <div class="tabpane" data-pane="pdf">
+          <p>Nota de <strong>serviço</strong> (PDF da prefeitura), uma por vez. O sistema lê e abre uma <strong>tela de conferência</strong> preenchida.</p>
+          <ol class="steps"><li><strong>“Importar NFS-e (PDF)”</strong> e escolha o PDF.</li><li>Confira os campos (indica se fornecedor/item são novos).</li><li>Salve. Se a nota já foi importada, ele avisa e bloqueia.</li></ol>
+        </div>
+      </section>
+
+      <!-- ========== GERIR ========== -->
+      <section class="section" id="gerir">
+        <div class="sec-head"><div class="kicker">Lançamentos · 03</div><h2>Filtrar · corrigir · colocar tag</h2><p class="lead">O que fazer depois que os custos já estão na lista.</p></div>
+
+        <h3>🔎 Encontrar e filtrar</h3>
+        <p>Acima da lista de <strong>Custos</strong>, os filtros funcionam <strong>combinados</strong>: Mês/Ano, Categoria, Fornecedor, Nº nota e Item. Os botões <strong>Editar/Excluir</strong> ficam fixos à direita e nunca somem ao rolar.</p>
+
+        <h3 style="margin-top:22px">✏️ Corrigir um lançamento</h3>
+        <ol class="steps"><li>Ache o custo pelos filtros.</li><li>Clique em <strong>Editar</strong> na linha.</li><li>Ajuste (valor, fornecedor, data…) e <strong>Salve</strong>.</li></ol>
+        <div class="callout note"><span class="t">Linha “Custo” na Folha</span> Na página Folha, lançamentos com a etiqueta <span class="pill p-coral">Custo</span> são somente leitura — corrija em <strong>Custos</strong>.</div>
+
+        <h3 style="margin-top:22px">🏷️ Colocar tag em massa (o jeito rápido)</h3>
+        <ol class="steps">
+          <li>Filtre pela <strong>categoria de folha</strong>.</li>
+          <li>Marque os quadradinhos das linhas — ou o do <strong>cabeçalho</strong> (seleciona todos os filtrados).</li>
+          <li>Na barra <strong>“Editar em massa”</strong>, escolha <strong>Tag</strong>, a equipe e aplique.</li>
+        </ol>
+        <div class="ui" style="padding:0"><div class="ui-body">
+          <div style="background:var(--surface3);border:1px solid var(--coral);border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <strong>✔ 42 lançamentos selecionados</strong>
+            <span style="display:flex;gap:8px"><span class="btn btn-coral" style="pointer-events:none">Editar em massa</span><span class="btn btn-danger" style="pointer-events:none">Excluir selecionados</span></span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+            <span style="color:var(--muted);font-size:.85rem">Campo:</span><span class="inp">Tag</span>
+            <span style="color:var(--muted);font-size:.85rem">Valor:</span><span class="inp">Cozinha</span>
+            <span class="btn btn-teal" style="pointer-events:none">Aplicar a todos</span>
+          </div>
+        </div></div>
+        <p class="hint">A edição em massa também troca o <strong>Fornecedor</strong> de vários custos de uma vez.</p>
+
+        <h3 style="margin-top:22px">🗑️ Excluir</h3>
+        <p><strong>Um por vez:</strong> botão Excluir na linha. <strong>Vários:</strong> selecione e “Excluir selecionados”.</p>
+        <div class="callout warn"><span class="t">É definitivo</span> Não dá para desfazer. Na dúvida, faça antes um <strong>backup do mês</strong>.</div>
+      </section>
+
+      <!-- ========== CLASSIFICAR ========== -->
+      <section class="section" id="classificar">
+        <div class="sec-head"><div class="kicker">Lançamentos · 03</div><h2>Classificar itens</h2><p class="lead">Dar categoria aos itens que entraram “a classificar”.</p></div>
+        <p>Itens vindos de importação podem entrar <strong>sem categoria</strong>. Aparece o aviso <strong>“⚠ N item(ns) a classificar”</strong> em Custos e em Itens. Classificar = dar uma subcategoria (e assim a categoria).</p>
+        <ol class="steps">
+          <li>Clique em <strong>“⚠ N a classificar”</strong>.</li>
+          <li>Use a <strong>busca</strong>; a coluna <strong>“Custos”</strong> mostra quantos lançamentos dependem de cada item.</li>
+          <li>Escolha a <strong>subcategoria</strong> (a categoria aparece ao lado) e classifique.</li>
+          <li>Para agilizar, marque <strong>vários</strong> da mesma subcategoria e aplique de uma vez.</li>
+        </ol>
+        <div class="callout tip"><span class="t">Arruma tudo de uma vez</span> Ao classificar um item, o sistema preenche a categoria em <strong>todos os custos daquele item</strong> automaticamente.</div>
+        <div class="callout note"><span class="t">Só subcategorias são criáveis</span> As categorias são fixas. Você cria <strong>subcategorias</strong> novas apontando para uma categoria existente (botão “Subcategorias” em Itens).</div>
+      </section>
+
+      <!-- ========== DASH CUSTOS (simulador interativo) ========== -->
+      <section class="section" id="dashcustos">
+        <div class="sec-head"><div class="kicker">Painéis · 04</div><h2>Dash Custos <span class="pill p-coral" style="vertical-align:middle;font-size:.6rem">INTERATIVO</span></h2><p class="lead">Clique nas fatias e nas barras — os números filtram de verdade.</p></div>
+
+        <div class="callout key"><span class="t">🎯 Objetivo desta tela</span> Responder, em segundos: <strong>“para onde meu dinheiro foi?”</strong> — quanto saiu, em quê, e o que mudou desde o mês passado. É o raio-X dos gastos, e o ponto de partida de quase toda decisão.</div>
+
+        <p>Mini-Dash com dados de exemplo (trimestre Abr–Jun). <strong>Clique numa categoria</strong> ou <strong>num mês</strong> para focar; clique de novo (ou no ✕ do chip) para desfazer. Ou deixe a Marina te guiar:</p>
+
+        <div class="scenario">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="pill p-coral">HISTÓRIA</span><strong style="color:#fff">A investigação da Marina</strong></div>
+          <p id="dc-tour" style="min-height:46px;margin:6px 0 12px"></p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost" id="dc-prev">‹ Voltar</button>
+            <button class="btn btn-coral" id="dc-next">Próximo passo ›</button>
+            <button class="btn btn-ghost" id="dc-reset">↺ Recomeçar</button>
+          </div>
+        </div>
+
+        <div class="ui">
+          <div class="ui-top">Dash Custos <span style="margin-left:auto"><span class="btn btn-coral" style="pointer-events:none;padding:6px 12px">⬇ Exportar PDF</span></span></div>
+          <div class="ui-body">
+            <div id="dc-chips" style="margin-bottom:12px"></div>
+            <div class="kpis">
+              <div class="kpi"><div class="lab">Total no período</div><div class="val coral" id="dc-total">R$ 0</div></div>
+              <div class="kpi"><div class="lab" id="dc-clab">Lançamentos</div><div class="val" id="dc-count">0</div></div>
+              <div class="kpi"><div class="lab">Maior item</div><div class="val teal" id="dc-top" style="font-size:1.1rem">—</div></div>
+            </div>
+            <div class="dash-row" style="margin-top:14px">
+              <div class="subcard">
+                <h5>Total por categoria — clique para filtrar</h5>
+                <div class="donut-wrap">
+                  <svg id="dc-donut" width="150" height="150" viewBox="0 0 150 150" style="flex:0 0 auto"></svg>
+                  <div class="legend" id="dc-legend"></div>
+                </div>
+              </div>
+              <div class="subcard">
+                <h5>Comparativo mês a mês — clique num mês</h5>
+                <div class="bars" id="dc-bars"></div>
+              </div>
+            </div>
+            <div class="subcard">
+              <h5>Top itens <span id="dc-scope" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></h5>
+              <div class="table-scroll"><table class="t" style="margin:0"><thead><tr><th>Item</th><th>Categoria</th><th style="text-align:right">Valor</th><th style="text-align:right">% do total</th></tr></thead><tbody id="dc-items"></tbody></table></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="insight" id="dc-insight"></div>
+
+        <h3 style="margin-top:26px">Entenda cada visão do painel</h3>
+        <p style="color:var(--muted)">Cada bloco existe para responder uma pergunta. Toque para abrir.</p>
+        <div class="acc"><div class="acc-h">Os KPIs (os números grandes) <span class="chev">›</span></div><div class="acc-b">
+          <p><strong>O que é:</strong> Total no período, nº de lançamentos e o maior item.<br>
+          <strong>Objetivo:</strong> dar o “tamanho” do gasto num piscar de olhos.<br>
+          <strong>Exemplo:</strong> “R$ 113.200 em 21 lançamentos” — se mês que vem forem R$ 150 mil, algo mudou e vale investigar.</p>
+        </div></div>
+        <div class="acc"><div class="acc-h">Pizza — Total por categoria <span class="chev">›</span></div><div class="acc-b">
+          <p><strong>O que é:</strong> a fatia de cada categoria (CMV, Despesa Adm., Folha, Impostos).<br>
+          <strong>Objetivo:</strong> ver o equilíbrio dos gastos e escolher <em>onde mergulhar</em>. Clicar numa fatia filtra o painel inteiro (drill-down).<br>
+          <strong>Exemplo:</strong> o CMV ocupa metade da pizza — normal num restaurante; se passar de 60%, a comida está saindo cara demais.</p>
+        </div></div>
+        <div class="acc"><div class="acc-h">Comparativo mês a mês <span class="chev">›</span></div><div class="acc-b">
+          <p><strong>O que é:</strong> uma barra por mês.<br>
+          <strong>Objetivo:</strong> enxergar tendência — está subindo, caindo ou estável? Clicar numa barra foca aquele mês.<br>
+          <strong>Exemplo:</strong> as barras crescem de abril a junho → os gastos vêm subindo; hora de descobrir qual categoria puxa.</p>
+        </div></div>
+        <div class="acc"><div class="acc-h">Top itens (com % e variação) <span class="chev">›</span></div><div class="acc-b">
+          <p><strong>O que é:</strong> os itens que mais pesam, com valor e % do total.<br>
+          <strong>Objetivo:</strong> achar os “vilões” do custo — os poucos itens que respondem por muito do gasto.<br>
+          <strong>Exemplo:</strong> se o Salmão é 29% do CMV e subiu 18%, é o primeiro item a renegociar ou repassar no preço do prato.</p>
+        </div></div>
+
+        <div class="callout tip"><span class="t">Resumindo</span> <strong>Filtro de período</strong> = a janela de tempo. <strong>Drill-down</strong> (clicar) = focar numa categoria ou mês. Os dois se somam, e o painel inteiro recalcula na hora — como você viu acima.</div>
+      </section>
+
+      <!-- ========== DASH FOLHA ========== -->
+      <section class="section" id="dashfolha">
+        <div class="sec-head"><div class="kicker">Painéis · 04</div><h2>Dash Folha <span class="pill p-coral" style="vertical-align:middle;font-size:.6rem">INTERATIVO</span></h2><p class="lead">A folha de pagamento organizada pelas tags de equipe.</p></div>
+
+        <div class="callout key"><span class="t">🎯 Objetivo desta tela</span> Responder <strong>“quanto custa cada equipe?”</strong>. A folha é lançada como custo de categoria FOLHA e as <strong>tags</strong> (Cozinha, Salão, Delivery) separam por time — assim dá para ver onde o custo de pessoal cresce.</div>
+
+        <p><span class="pill p-coral">HISTÓRIA</span> A Marina desconfia que o <em>Delivery</em> anda pesado. Ela abre o Dash Folha e <strong>clica na equipe</strong> para conferir. Faça o mesmo abaixo:</p>
+
+        <div class="ui"><div class="ui-body">
+          <div id="df-chips" style="margin-bottom:12px"></div>
+          <div class="kpis">
+            <div class="kpi"><div class="lab" id="df-tlab">Total folha</div><div class="val olive" id="df-total">R$ 0</div></div>
+            <div class="kpi"><div class="lab">Itens de folha</div><div class="val" id="df-count">0</div></div>
+            <div class="kpi"><div class="lab">Maior equipe</div><div class="val teal" id="df-top" style="font-size:1.1rem">—</div></div>
+          </div>
+          <div class="subcard"><h5>Participação por Tag — clique numa equipe</h5><div id="df-bars"></div></div>
+          <div class="subcard"><h5>Subtotal por item <span id="df-scope" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></h5>
+            <div class="table-scroll"><table class="t" style="margin:0"><thead><tr><th>Item</th><th>Equipe</th><th style="text-align:right">Valor</th></tr></thead><tbody id="df-items"></tbody></table></div>
+          </div>
+        </div></div>
+
+        <div class="insight" id="df-insight" style="border-left-color:var(--olive)"></div>
+
+        <div class="callout note"><span class="t">“Tag sem efeito”?</span> Um custo de folha <strong>sem tag</strong> entra no total, mas só aparece separado “por equipe” depois de etiquetado. Por isso vale tagear (veja <a data-go="gerir">tag em massa</a>).</div>
+        <div class="callout tip"><span class="t">No app tem mais</span> Além do que você vê aqui, o painel real traz o <strong>Cruzamento Tag × Categoria</strong> (todas as tags, mesmo as zeradas, com Subtotal/Total geral) e a <strong>evolução mensal</strong> com barras clicáveis — mesma lógica do Dash Custos.</div>
+      </section>
+
+      <!-- ========== PERÍODO ========== -->
+      <section class="section" id="periodo">
+        <div class="sec-head"><div class="kicker">Painéis · 04</div><h2>Análise por Período</h2><p class="lead">Comparar dois períodos lado a lado (A × B).</p></div>
+
+        <div class="callout key"><span class="t">🎯 Objetivo desta tela</span> Responder <strong>“estou gastando mais ou menos que antes?”</strong>. Enquanto o Dash Custos mostra <em>o presente</em>, aqui você coloca dois períodos frente a frente e vê a <strong>variação</strong> — o que cresceu, o que caiu.</div>
+
+        <p>Duas abas — <strong>Custos</strong> e <strong>Folha</strong>. Escolha as datas do <strong>Período A</strong> e do <strong>Período B</strong>; o painel mostra, por categoria/subcategoria/item (ou tag), um gráfico A × B e a variação (R$ e %).</p>
+
+        <p><span class="pill p-coral">HISTÓRIA</span> A Marina compara o <strong>1º trimestre de 2025</strong> (A) com o <strong>de 2026</strong> (B) para saber se o restaurante ficou mais caro de operar:</p>
+        <div class="ui"><div class="ui-body">
+          <div style="margin-bottom:10px"><span class="chip" style="border-color:var(--teal)">Período A: Jan–Mar 2025</span><span class="chip" style="border-color:var(--coral);color:#ffd7cf">Período B: Jan–Mar 2026</span></div>
+          <div class="kpis"><div class="kpi"><div class="lab">Total A</div><div class="val teal">R$ 420 mil</div></div><div class="kpi"><div class="lab">Total B</div><div class="val coral">R$ 486 mil</div></div><div class="kpi"><div class="lab">Variação</div><div class="val up">▲ +15,7%</div></div></div>
+          <div class="subcard"><h5>Por categoria — A × B</h5>
+            <div class="bars" style="height:110px">
+              <div class="barcol"><div class="bar teal" style="height:70%;background:var(--teal)"></div><div class="bl">CMV·A</div></div>
+              <div class="barcol"><div class="bar" style="height:84%"></div><div class="bl">CMV·B</div></div>
+              <div class="barcol"><div class="bar teal" style="height:44%;background:var(--teal)"></div><div class="bl">Adm·A</div></div>
+              <div class="barcol"><div class="bar" style="height:52%"></div><div class="bl">Adm·B</div></div>
+              <div class="barcol"><div class="bar teal" style="height:30%;background:var(--teal)"></div><div class="bl">Folha·A</div></div>
+              <div class="barcol"><div class="bar" style="height:40%"></div><div class="bl">Folha·B</div></div>
+            </div>
+            <div class="hint"><span style="color:var(--teal)">■</span> Período A &nbsp; <span style="color:var(--coral)">■</span> Período B</div>
+          </div>
+          <button class="btn btn-ghost" id="pv-toggle" style="margin-top:4px">Ver variação por item ▾</button>
+          <div id="pv-detail" style="display:none;margin-top:12px">
+            <div class="table-scroll"><table class="t" style="margin:0"><thead><tr><th>Item</th><th style="text-align:right">2025 (A)</th><th style="text-align:right">2026 (B)</th><th style="text-align:right">Variação</th></tr></thead><tbody>
+              <tr><td>Salmão</td><td style="text-align:right">R$ 78.000</td><td style="text-align:right">R$ 96.000</td><td style="text-align:right" class="up">▲ +23%</td></tr>
+              <tr><td>Aluguel POA</td><td style="text-align:right">R$ 54.000</td><td style="text-align:right">R$ 54.000</td><td style="text-align:right">— 0%</td></tr>
+              <tr><td>Folha Cozinha</td><td style="text-align:right">R$ 60.000</td><td style="text-align:right">R$ 66.000</td><td style="text-align:right" class="up">▲ +10%</td></tr>
+              <tr><td>Cerveja</td><td style="text-align:right">R$ 22.000</td><td style="text-align:right">R$ 19.000</td><td style="text-align:right" class="down">▼ −14%</td></tr>
+            </tbody></table></div>
+          </div>
+        </div></div>
+
+        <div class="insight" style="border-left-color:var(--teal)">
+          <span style="color:#8fc0c8;font-weight:800">📖 A conclusão da Marina</span><br>
+          O total subiu <strong>+15,7%</strong>, mas não foi tudo igual: o <strong>Salmão saltou +23%</strong> (o grande responsável), a folha acompanhou a inflação (+10%) e a <strong>cerveja caiu −14%</strong> (bom trabalho de compras). Decisão: focar a renegociação no salmão — é ali que está o estouro.
+        </div>
+
+        <div class="callout tip"><span class="t">Quando usar</span> Fechamento de mês/trimestre, reunião com sócios, ou antes de reajustar o cardápio. É a visão que transforma “achismo” em número: “o salmão subiu 23%”, não “acho que a comida está mais cara”.</div>
+      </section>
+
+      <!-- ========== PDF ========== -->
+      <section class="section" id="pdf">
+        <div class="sec-head"><div class="kicker">Saídas · 05</div><h2>Relatórios em PDF</h2><p class="lead">Transforme o painel da tela num PDF pronto para enviar.</p></div>
+        <p>Todos os painéis têm o botão <strong>“⬇ Exportar PDF”</strong>. Ele gera o relatório <strong>com os filtros ativos na tela</strong> (período, mês e drill-down).</p>
+        <ol class="steps"><li>Ajuste o painel do jeito que quer (período, mês, categorias).</li><li>Clique em <strong>“⬇ Exportar PDF”</strong>.</li><li>O PDF é baixado, pronto para anexar.</li></ol>
+        <div class="table-scroll"><table class="t"><tr><th>Do painel</th><th>O relatório traz</th></tr>
+          <tr><td>Dash Custos</td><td>Totais, gráficos (por mês e por categoria) e tabelas de categoria, subcategoria e Top itens.</td></tr>
+          <tr><td>Dash Folha</td><td>Folha por mês, participação por tag, subtotal por item e cruzamento Tag × Categoria.</td></tr>
+          <tr><td>Análise por Período</td><td>Totais A/B com variação, gráfico A × B e tabela detalhada por seção.</td></tr>
+        </table></div>
+        <div class="callout tip"><span class="t">Feito para o papel</span> Os gráficos do PDF são desenhados com fundo claro e as cores da marca (não é “foto” da tela escura), então ficam nítidos ao imprimir/enviar.</div>
+      </section>
+
+      <!-- ========== BACKUP ========== -->
+      <section class="section" id="backup">
+        <div class="sec-head"><div class="kicker">Saídas · 06</div><h2>Backup mensal</h2><p class="lead">Uma cópia de segurança dos custos do mês, em Excel.</p></div>
+        <p>Em <strong>Saída → Backup mensal</strong>, baixe uma planilha <code>.xlsx</code> com todos os custos de um mês (inclui a folha, que é custo).</p>
+        <ol class="steps"><li>Menu → <strong>Backup mensal</strong>.</li><li>Escolha o <strong>Mês/Ano</strong> — veja a prévia (lançamentos + total).</li><li>Clique em <strong>baixar</strong> → <code>backup-custos-MM-AAAA.xlsx</code>.</li></ol>
+        <div class="callout tip"><span class="t">Boa prática</span> Baixe o backup <strong>uma vez por mês</strong> (ou antes de uma exclusão grande) e guarde numa pasta segura ou no Drive.</div>
+      </section>
+
+      <!-- ========== FAQ ========== -->
+      <section class="section" id="faq">
+        <div class="sec-head"><div class="kicker">Ajuda · 07</div><h2>Dúvidas rápidas</h2><p class="lead">Toque numa pergunta para abrir a resposta.</p></div>
+        <div id="accbox">
+          <div class="acc"><div class="acc-h">Onde lanço uma compra? <span class="chev">›</span></div><div class="acc-b"><p>Menu → <strong>Custos</strong> → “+ Novo custo”. Veja o simulador em <a data-go="lancar">Lançar um custo</a>.</p></div></div>
+          <div class="acc"><div class="acc-h">Digitei um valor errado. <span class="chev">›</span></div><div class="acc-b"><p>Ache o custo pelos filtros, clique em <strong>Editar</strong>, corrija e salve.</p></div></div>
+          <div class="acc"><div class="acc-h">Apareceu “⚠ N a classificar”. <span class="chev">›</span></div><div class="acc-b"><p>Clique no aviso e dê uma subcategoria aos itens pendentes. Detalhes em <a data-go="classificar">Classificar itens</a>.</p></div></div>
+          <div class="acc"><div class="acc-h">Preciso etiquetar a folha toda. <span class="chev">›</span></div><div class="acc-b"><p>Filtre pela categoria de folha, selecione todos e use <strong>Editar em massa → Tag</strong>.</p></div></div>
+          <div class="acc"><div class="acc-h">Importei a planilha duas vezes. <span class="chev">›</span></div><div class="acc-b"><p>Os lançamentos ficaram em dobro. Selecione os duplicados e exclua em massa.</p></div></div>
+          <div class="acc"><div class="acc-h">O login não entra. <span class="chev">›</span></div><div class="acc-b"><p>Confira usuário/senha em <a data-go="login">Acessar</a>, sem espaços nem maiúsculas.</p></div></div>
+        </div>
+
+        <div class="callout key" style="margin-top:20px"><span class="t">🔑 Seus dados de acesso</span> Usuário <code>admin@financesheet.local</code> · Senha <code>admin@2026</code></div>
+
+        <div class="footer">
+          <strong>Kampeki Finance</strong> — Guia Interativo · versão de teste (Beta), julho/2026.<br>
+          Criado e desenvolvido por <strong>Renan Milech Pereira</strong>. <span style="color:var(--sand)">Seu momento único.</span>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=(s,c=document)=>c.querySelector(s), $$=(s,c=document)=>[...c.querySelectorAll(s)];
+const brl=n=>'R$ '+Math.round(n).toLocaleString('pt-BR');
+
+/* ---------- Router ---------- */
+const sidebar=$('#sidebar'), scrim=$('#scrim');
+function closeNav(){sidebar.classList.remove('open');scrim.classList.remove('show')}
+function go(id){
+  $$('.section').forEach(s=>s.classList.toggle('active',s.id===id));
+  $$('.nav-link').forEach(n=>n.classList.toggle('active',n.dataset.go===id));
+  window.scrollTo({top:0,behavior:'instant'in window?'instant':'auto'});
+  if(history.replaceState)history.replaceState(null,'','#'+id);
+  closeNav();
+}
+document.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]'); if(g){go(g.dataset.go);e.preventDefault();}
+});
+$('#burger').onclick=()=>{sidebar.classList.toggle('open');scrim.classList.toggle('show')};
+scrim.onclick=closeNav;
+const start=(location.hash||'#home').slice(1);
+go($('#'+start)?start:'home');
+
+/* ---------- Password reveal ---------- */
+const pw='admin@2026';
+$('#pwtoggle').onclick=function(){
+  const v=$('#pwval'); const shown=v.textContent===pw;
+  v.textContent=shown?'••••••••':pw; this.textContent=shown?'👁 Mostrar':'🙈 Ocultar';
+};
+
+/* ---------- Tabs ---------- */
+$$('.tabs').forEach(tabs=>{
+  tabs.addEventListener('click',e=>{
+    const t=e.target.closest('.tab'); if(!t)return;
+    const scope=tabs.parentElement;
+    $$('.tab',tabs).forEach(x=>x.classList.toggle('active',x===t));
+    $$(':scope > .tabpane',scope).forEach(p=>p.classList.toggle('active',p.dataset.pane===t.dataset.pane));
+  });
+});
+
+/* ---------- Accordion (todos da página) ---------- */
+$$('.acc').forEach(a=>{
+  $('.acc-h',a).onclick=()=>a.classList.toggle('open');
+});
+
+/* ---------- Hotspots (tela) ---------- */
+const tips={
+  menu:['1 · Menu lateral','Sua bússola. Clica num item e vai até ele; o item atual fica em coral. No celular vira o botão ☰.'],
+  novo:['2 · + Novo custo','Abre o formulário para lançar uma compra manualmente (data, fornecedor, item, qtd, valor).'],
+  importar:['3 · Botões de importar','Sobem muitas notas de uma vez: planilha .xlsx, .zip de NF-e ou PDF de NFS-e.'],
+  filtros:['4 · Filtros','Afunilam a lista combinando Mês/Ano, Categoria, Fornecedor, Nº nota e Item.'],
+  tabela:['5 · Lista de custos','Cada linha é um lançamento. Editar/Excluir ficam fixos à direita e nunca somem ao rolar.']
+};
+const telainfo=$('#telainfo');
+function showTip(k,el){
+  $$('#telastage .hot').forEach(h=>h.classList.toggle('active',h===el));
+  telainfo.innerHTML='<span class="n">'+tips[k][0]+'</span>'+tips[k][1];
+}
+$$('#telastage .hot').forEach(h=>{
+  h.addEventListener('click',()=>showTip(h.dataset.tip,h));
+  h.addEventListener('mouseenter',()=>showTip(h.dataset.tip,h));
+});
+
+/* ---------- Simulador de lançamento ---------- */
+const SUBS={
+  'CMV':{'SALMÃO':['Salmão fresco','Salmão porção'],'ATUM':['Atum','Atum bluefin'],'HORTIFRUTI':['Alface','Cebolinha']},
+  'DESPESA ADMINISTRATIVA':{'LUZ POA':['Conta de luz'],'INTERNET':['Link dedicado'],'MATERIAL LIMPEZA':['Detergente 5L']},
+  'FOLHA CANOAS':{'FOLHA CANOAS':['Salário cozinha'],'UNIFORME':['Uniforme dólmã']}
+};
+const fCat=$('#f-cat'),fSub=$('#f-sub'),fItem=$('#f-item'),fQtd=$('#f-qtd'),fVu=$('#f-vu'),fTotal=$('#f-total'),fTagWrap=$('#f-tagwrap'),fHint=$('#f-hint');
+function fill(sel,arr,ph){sel.innerHTML='<option value="">'+ph+'</option>'+arr.map(x=>'<option>'+x+'</option>').join('');}
+function recalc(){const t=(parseFloat(fQtd.value)||0)*(parseFloat(fVu.value)||0);fTotal.textContent=brl(t).replace('R$ ','R$ ');fTotal.textContent='R$ '+t.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+fCat.onchange=()=>{
+  const c=fCat.value; fSub.disabled=!c; fItem.disabled=true; fItem.innerHTML='<option value="">—</option>';
+  const isFolha=c.startsWith('FOLHA'); fTagWrap.style.display=isFolha?'flex':'none';
+  if(c){fill(fSub,Object.keys(SUBS[c]),'— escolher —');fHint.innerHTML='Agora escolha a <strong>subcategoria</strong>.';}
+  else{fSub.innerHTML='<option value="">—</option>';fSub.disabled=true;fHint.innerHTML='Comece escolhendo uma <strong>categoria</strong>.';}
+};
+fSub.onchange=()=>{
+  const c=fCat.value,s=fSub.value; fItem.disabled=!s;
+  if(s){fill(fItem,SUBS[c][s],'— escolher item —');fHint.innerHTML='Escolha o <strong>item</strong> (ou digitaria um novo no app).';}
+  else{fItem.innerHTML='<option value="">—</option>';fItem.disabled=true;}
+};
+fItem.onchange=()=>{
+  if(fItem.value){const folha=fCat.value.startsWith('FOLHA');fHint.innerHTML=folha?'Item pronto! Como é <strong>folha</strong>, escolha a <strong>Tag</strong> da equipe. 🏷️':'Item pronto! Confira Qtd e Valor e clique em <strong>Salvar custo</strong>.';}
+};
+fQtd.oninput=recalc; fVu.oninput=recalc; recalc();
+$('#f-save').onclick=()=>{
+  const r=$('#f-result');
+  if(!fCat.value||!fSub.value||!fItem.value){r.innerHTML='<div class="callout warn" style="margin:0"><span class="t">Faltou preencher</span> Escolha categoria, subcategoria e item.</div>';return;}
+  if(fCat.value.startsWith('FOLHA')&&!$('#f-tag').value){r.innerHTML='<div class="callout warn" style="margin:0"><span class="t">Tag obrigatória</span> Custos de folha precisam de uma tag de equipe.</div>';return;}
+  const tag=fCat.value.startsWith('FOLHA')?' · Tag: '+$('#f-tag').value:'';
+  r.innerHTML='<div class="callout tip" style="margin:0"><span class="t">✔ Custo salvo (simulação)</span>'+fItem.value+' — '+fCat.value+' / '+fSub.value+' · '+fTotal.textContent+tag+'</div>';
+};
+
+/* ---------- Simulador Dash Custos ---------- */
+const CATS=[{k:'CMV',c:'#FF8B7C'},{k:'DESPESA ADMINISTRATIVA',c:'#4F868F',s:'Desp. Adm.'},{k:'FOLHA CANOAS',c:'#BFCB7F',s:'Folha'},{k:'IMPOSTOS',c:'#D7C4B6'}];
+const MESES=['Abr','Mai','Jun'];
+const ROWS=[
+  // mesIdx, cat, item, valor
+  [0,'CMV','Salmão',9200],[0,'CMV','Atum',5100],[0,'CMV','Camarão',3800],[0,'DESPESA ADMINISTRATIVA','Aluguel POA',6000],[0,'DESPESA ADMINISTRATIVA','Luz POA',2100],[0,'FOLHA CANOAS','Salário cozinha',7000],[0,'IMPOSTOS','Impostos',3000],
+  [1,'CMV','Salmão',10400],[1,'CMV','Atum',4600],[1,'CMV','Camarão',4200],[1,'DESPESA ADMINISTRATIVA','Aluguel POA',6000],[1,'DESPESA ADMINISTRATIVA','Internet',900],[1,'FOLHA CANOAS','Salário cozinha',7200],[1,'IMPOSTOS','Impostos',3200],
+  [2,'CMV','Salmão',12800],[2,'CMV','Atum',5400],[2,'CMV','Camarão',3100],[2,'DESPESA ADMINISTRATIVA','Aluguel POA',6000],[2,'DESPESA ADMINISTRATIVA','Luz POA',2400],[2,'FOLHA CANOAS','Salário cozinha',7400],[2,'IMPOSTOS','Impostos',3400]
+];
+let selCat=null, selMes=null;
+const catColor=k=>(CATS.find(c=>c.k===k)||{}).c||'#888';
+const catShort=k=>{const c=CATS.find(c=>c.k===k);return c?(c.s||c.k):k;};
+
+function arc(cx,cy,r,a0,a1){
+  const p=(a)=>[cx+r*Math.cos(a),cy+r*Math.sin(a)];
+  const [x0,y0]=p(a0),[x1,y1]=p(a1); const big=a1-a0>Math.PI?1:0;
+  return `M${cx} ${cy} L${x0} ${y0} A${r} ${r} 0 ${big} 1 ${x1} ${y1} Z`;
+}
+function renderDC(){
+  const rows=ROWS.filter(r=>(selCat===null||r[1]===selCat)&&(selMes===null||r[0]===selMes));
+  const total=rows.reduce((s,r)=>s+r[3],0);
+  $('#dc-total').textContent=brl(total);
+  $('#dc-count').textContent=rows.length;
+  $('#dc-clab').textContent=selMes===null?'Lançamentos':'Lançamentos no mês';
+  // top item
+  const byItem={}; rows.forEach(r=>byItem[r[2]]=(byItem[r[2]]||0)+r[3]);
+  const items=Object.entries(byItem).sort((a,b)=>b[1]-a[1]);
+  $('#dc-top').textContent=items.length?items[0][0]:'—';
+  // items table (need category per item)
+  const itemCat={}; rows.forEach(r=>itemCat[r[2]]=r[1]);
+  $('#dc-items').innerHTML=items.slice(0,5).map(([n,v])=>`<tr><td>${n}</td><td>${catShort(itemCat[n])}</td><td style="text-align:right">${brl(v)}</td><td style="text-align:right">${total?Math.round(v/total*100):0}%</td></tr>`).join('')||'<tr><td colspan="4" style="color:var(--muted)">Sem dados</td></tr>';
+  $('#dc-scope').textContent=(selCat?'· '+catShort(selCat):'')+(selMes!==null?' · '+MESES[selMes]:'');
+  // donut (always over full period, by category — allows switching)
+  const period=ROWS.filter(r=>(selMes===null||r[0]===selMes));
+  const byCat=CATS.map(c=>({...c,v:period.filter(r=>r[1]===c.k).reduce((s,r)=>s+r[3],0)}));
+  const tot=byCat.reduce((s,c)=>s+c.v,0)||1;
+  let a=-Math.PI/2; const svg=$('#dc-donut'); svg.innerHTML='';
+  byCat.forEach(c=>{
+    const a1=a+c.v/tot*Math.PI*2;
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',arc(75,75,70,a,a1));
+    path.setAttribute('fill',c.c);
+    path.setAttribute('stroke',selCat===c.k?'#fff':'#0e1b18');
+    path.setAttribute('stroke-width',selCat===c.k?3:2);
+    path.style.opacity=(selCat&&selCat!==c.k)?.4:1;
+    path.style.cursor='pointer';
+    path.onclick=()=>{selCat=selCat===c.k?null:c.k;renderDC();};
+    svg.appendChild(path);
+    a=a1;
+  });
+  const hole=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  hole.setAttribute('cx',75);hole.setAttribute('cy',75);hole.setAttribute('r',38);hole.setAttribute('fill','#16302b');svg.appendChild(hole);
+  // legend
+  $('#dc-legend').innerHTML=byCat.map(c=>`<div class="li ${selCat&&selCat!==c.k?'dim':''} ${selCat===c.k?'sel':''}" data-cat="${c.k}"><span class="sw" style="background:${c.c}"></span>${catShort(c.k)} — ${Math.round(c.v/tot*100)}%</div>`).join('');
+  $$('#dc-legend .li').forEach(li=>li.onclick=()=>{const k=li.dataset.cat;selCat=selCat===k?null:k;renderDC();});
+  // bars by month (always all months, respect selCat)
+  const base=ROWS.filter(r=>(selCat===null||r[1]===selCat));
+  const byMonth=MESES.map((m,i)=>base.filter(r=>r[0]===i).reduce((s,r)=>s+r[3],0));
+  const max=Math.max(...byMonth,1);
+  $('#dc-bars').innerHTML=MESES.map((m,i)=>`<div class="barcol ${selMes!==null&&selMes!==i?'dim':''} ${selMes===i?'sel':''}" data-m="${i}"><div class="bv">${'R$ '+(byMonth[i]/1000).toFixed(0)+'k'}</div><div class="bar" style="height:${Math.max(byMonth[i]/max*76,4)}%"></div><div class="bl">${m}</div></div>`).join('');
+  $$('#dc-bars .barcol').forEach(b=>b.onclick=()=>{const i=+b.dataset.m;selMes=selMes===i?null:i;renderDC();});
+  // chips
+  const chips=[];
+  if(selCat)chips.push(`<span class="chip">Categoria: ${catShort(selCat)} <button data-clr="cat">✕</button></span>`);
+  if(selMes!==null)chips.push(`<span class="chip">Mês: ${MESES[selMes]} <button data-clr="mes">✕</button></span>`);
+  if(chips.length)chips.push(`<span class="chip" style="border-color:var(--coral);color:var(--coral)"><button data-clr="all" style="color:var(--coral)">Limpar drill-down ✕</button></span>`);
+  $('#dc-chips').innerHTML=chips.length?('<span style="color:var(--muted);font-size:.8rem;margin-right:6px">Drill-down ativo:</span>'+chips.join('')):'<span style="color:var(--muted);font-size:.82rem">Nenhum filtro — clique numa fatia ou num mês abaixo.</span>';
+  $$('#dc-chips [data-clr]').forEach(b=>b.onclick=()=>{const w=b.dataset.clr;if(w==='cat')selCat=null;else if(w==='mes')selMes=null;else{selCat=null;selMes=null;}renderDC();});
+  dcInsight();
+}
+
+/* Insight narrado do Dash Custos — conta a história de cada recorte */
+function dcInsight(){
+  const period=ROWS.filter(r=>selMes===null||r[0]===selMes);
+  const scoped=period.filter(r=>selCat===null||r[1]===selCat);
+  const total=scoped.reduce((s,r)=>s+r[3],0);
+  const tot=period.reduce((s,r)=>s+r[3],0)||1;
+  const byItem={}; scoped.forEach(r=>byItem[r[2]]=(byItem[r[2]]||0)+r[3]);
+  const top=Object.entries(byItem).sort((a,b)=>b[1]-a[1])[0]||['—',0];
+  const byCat=CATS.map(c=>({...c,v:period.filter(r=>r[1]===c.k).reduce((s,r)=>s+r[3],0)}));
+  const big=[...byCat].sort((a,b)=>b.v-a.v)[0];
+  const base=ROWS.filter(r=>selCat===null||r[1]===selCat);
+  const mtot=i=>base.filter(r=>r[0]===i).reduce((s,r)=>s+r[3],0);
+  let s;
+  if(!selCat&&selMes===null){
+    s=`<b>Visão geral do trimestre.</b> ${brl(tot)} em ${ROWS.length} lançamentos. O maior bloco é <b style="color:${big.c}">${catShort(big.k)}</b> (${Math.round(big.v/tot*100)}% de tudo). 👉 Clique numa fatia para investigar quem puxa o custo.`;
+  }else if(selCat&&selMes===null){
+    s=`Você abriu <b>${catShort(selCat)}</b>: ${brl(total)} no período (${Math.round(total/tot*100)}% dos gastos). Campeão de gasto: <b>${top[0]}</b> — ${brl(top[1])}. 🎯 Vigie esse item: quando ele sobe, a margem cai.`;
+  }else if(!selCat&&selMes!==null){
+    const cur=mtot(selMes),prev=selMes>0?mtot(selMes-1):0;
+    const tr=prev?(cur>=prev?`subiu ${Math.round((cur-prev)/prev*100)}% vs. ${MESES[selMes-1]} 🔺`:`caiu ${Math.round((prev-cur)/prev*100)}% vs. ${MESES[selMes-1]} 🔻`):'é o 1º mês do período';
+    s=`Recorte de <b>${MESES[selMes]}</b>: ${brl(total)} em ${scoped.length} lançamentos — ${tr}. 👉 Abra uma categoria para achar a causa.`;
+  }else{
+    s=`<b>${catShort(selCat)}</b> em <b>${MESES[selMes]}</b>: ${brl(total)}. Maior item: <b>${top[0]}</b> (${brl(top[1])}). 💡 É neste cruzamento que a decisão nasce — renegociar o fornecedor do item campeão ou ajustar o preço no cardápio.`;
+  }
+  $('#dc-insight').innerHTML='<span style="color:var(--coral);font-weight:800">📖 O que este recorte revela</span><br>'+s;
+}
+
+/* Investigação guiada da Marina (stepper que dirige o painel) */
+const TOUR=[
+  {t:'A Marina abre o painel do <b>trimestre</b> (Abr–Jun). Primeira pergunta: <i>“para onde meu dinheiro foi?”</i> Repare que o CMV (ingredientes) já domina a pizza.',cat:null,mes:null},
+  {t:'Os gastos vêm <b>subindo</b> mês a mês. <b>Junho</b> foi o mais pesado — ela clica em Junho para isolar o mês.',cat:null,mes:2},
+  {t:'Em junho, o <b>CMV</b> é a maior fatia. Ela abre o CMV para ver <b>quais itens</b> puxam o custo.',cat:'CMV',mes:2},
+  {t:'O <b>Salmão</b> aparece no topo — e vem subindo. Decisão: renegociar com a Peixaria Sul e revisar o preço do prato. 🎯 O painel virou ação.',cat:'CMV',mes:2}
+];
+let ti=0;
+function applyTour(){
+  const s=TOUR[ti]; selCat=s.cat; selMes=s.mes; renderDC();
+  $('#dc-tour').innerHTML='<span class="pill p-coral" style="margin-right:8px">PASSO '+(ti+1)+'/'+TOUR.length+'</span>'+s.t;
+  $('#dc-prev').disabled=ti===0;
+  $('#dc-next').style.display=ti===TOUR.length-1?'none':'';
+  $('#dc-reset').style.display=ti===TOUR.length-1?'':'none';
+}
+$('#dc-next').onclick=()=>{if(ti<TOUR.length-1){ti++;applyTour();}};
+$('#dc-prev').onclick=()=>{if(ti>0){ti--;applyTour();}};
+$('#dc-reset').onclick=()=>{ti=0;applyTour();};
+applyTour();
+
+/* ---------- Simulador Dash Folha ---------- */
+const FTAGS=[{k:'Cozinha',c:'#BFCB7F'},{k:'Salão',c:'#4F868F'},{k:'Delivery',c:'#FF8B7C'}];
+const FROWS=[
+  ['Cozinha','Salário cozinha',22000],['Cozinha','Vale refeição',5000],['Cozinha','Uniforme',3000],
+  ['Salão','Salário salão',15000],['Salão','Rateio de gorjeta',6000],
+  ['Delivery','Motoboy',7000],['Delivery','Comissão app',4400]
+];
+let selTag=null;
+function renderDF(){
+  const rows=FROWS.filter(r=>!selTag||r[0]===selTag);
+  const total=rows.reduce((s,r)=>s+r[2],0);
+  const allTotal=FROWS.reduce((s,r)=>s+r[2],0)||1;
+  $('#df-total').textContent=brl(total);
+  $('#df-count').textContent=rows.length;
+  $('#df-tlab').textContent=selTag?'Total da equipe':'Total folha';
+  const byTag=FTAGS.map(t=>({...t,v:FROWS.filter(r=>r[0]===t.k).reduce((s,r)=>s+r[2],0)}));
+  const bigTag=[...byTag].sort((a,b)=>b.v-a.v)[0];
+  $('#df-top').textContent=selTag||bigTag.k;
+  const max=Math.max(...byTag.map(t=>t.v),1);
+  $('#df-bars').innerHTML=byTag.map(t=>{
+    const pct=Math.round(t.v/allTotal*100);
+    return '<div class="tagbar '+(selTag&&selTag!==t.k?'dim':'')+'" data-tag="'+t.k+'">'
+      +'<div style="display:flex;justify-content:space-between;font-size:.88rem"><span>'+t.k+(selTag===t.k?' ◀ selecionada':'')+'</span><span>'+brl(t.v)+' · '+pct+'%</span></div>'
+      +'<div class="tb-track"><div class="tb-fill" style="width:'+(t.v/max*100)+'%;background:'+t.c+';'+(selTag===t.k?'box-shadow:0 0 0 2px #fff inset':'')+'"></div></div></div>';
+  }).join('');
+  $$('#df-bars .tagbar').forEach(b=>b.onclick=()=>{const k=b.dataset.tag;selTag=selTag===k?null:k;renderDF();});
+  const byItem=rows.slice().sort((a,b)=>b[2]-a[2]);
+  $('#df-items').innerHTML=byItem.map(r=>'<tr><td>'+r[1]+'</td><td>'+r[0]+'</td><td style="text-align:right">'+brl(r[2])+'</td></tr>').join('');
+  $('#df-scope').textContent=selTag?('· '+selTag):'';
+  $('#df-chips').innerHTML=selTag
+    ?'<span style="color:var(--muted);font-size:.8rem;margin-right:6px">Filtro ativo:</span><span class="chip">Equipe: '+selTag+' <button data-clr="tag">✕</button></span>'
+    :'<span style="color:var(--muted);font-size:.82rem">Nenhum filtro — clique numa equipe abaixo.</span>';
+  const clr=$('#df-chips [data-clr]'); if(clr)clr.onclick=()=>{selTag=null;renderDF();};
+  let s;
+  if(!selTag){
+    s='A folha soma <b>'+brl(allTotal)+'</b> no trimestre. A maior equipe é <b>'+bigTag.k+'</b> ('+Math.round(bigTag.v/allTotal*100)+'% do total). 🎯 Objetivo: acompanhar o custo de pessoal por time e agir onde cresce. 👉 Clique numa equipe.';
+  }else{
+    const tv=byTag.find(t=>t.k===selTag).v, top=byItem[0];
+    s='Equipe <b>'+selTag+'</b>: <b>'+brl(tv)+'</b> ('+Math.round(tv/allTotal*100)+'% da folha). Maior item: <b>'+top[1]+'</b> ('+brl(top[2])+'). 💡 Se essa fatia cresce mês a mês, revise escala, horas extras ou comissões.';
+  }
+  $('#df-insight').innerHTML='<span style="color:var(--olive);font-weight:800">📖 O que este recorte revela</span><br>'+s;
+}
+renderDF();
+
+/* ---------- Análise por Período — detalhe ---------- */
+const pv=$('#pv-toggle');
+if(pv)pv.onclick=()=>{const d=$('#pv-detail');const open=d.style.display!=='none';d.style.display=open?'none':'block';pv.textContent=open?'Ver variação por item ▾':'Ocultar variação por item ▴';};
+</script>
+</body>
+</html>
