@@ -63,8 +63,14 @@ function createWindow(url) {
   // o ícone do próprio .exe (build/ fica fora do asar).
   const iconPath = path.join(__dirname, 'build', 'icon.ico');
   if (fs.existsSync(iconPath)) opts.icon = iconPath;
+  // Abre maximizado (show: false evita o "flash" do tamanho restaurado antes de
+  // maximizar): sob escala 125% do Windows, dá o máximo de largura útil à tela,
+  // mantendo a sidebar visível. O tamanho de opts vale ao restaurar a janela.
+  opts.show = false;
   mainWindow = new BrowserWindow(opts);
   mainWindow.setMenuBarVisibility(false);
+  mainWindow.maximize();
+  mainWindow.show();
   mainWindow.loadURL(url);
   // Links externos abrem no navegador padrão, não dentro do app.
   mainWindow.webContents.setWindowOpenHandler(({ url: u }) => {

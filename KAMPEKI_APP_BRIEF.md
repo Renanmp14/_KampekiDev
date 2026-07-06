@@ -1049,3 +1049,147 @@ Para o erro não se repetir, um **pré-build** valida o `.env` e **falha o build
 ### Validação
 - `check-env` roda OK contra o `build/.env` atual (credenciais reais; login `admin@financesheet.local`).
 - Build **1.0.1** gerado com sucesso (`KampekiFinance-Setup-1.0.1.exe`). Pendente: reinstalar no PC do cliente e confirmar o login real + o `v1.0.1` no rodapé.
+
+---
+
+## Atualizações — 06/07/2026 — versão 1.1.0
+
+> Sessão de ajustes pedidos pelo gestor para a **v1.1.0**: buscas na tela de Custos, correção de bug no reprocessamento de tags (com **mudança de regra**), remoção da categoria IMPOSTOS, responsividade em Full HD @125%, controle de zoom embutido e um novo gráfico de composição por grupo no Dash Custos. Versão do `desktop/package.json` subida para **1.1.0**.
+
+### Custos — coluna e busca de Subcategoria + busca por Tag
+Na **listagem de Custos**:
+- Nova **coluna "Subcategoria"** (entre Categoria e Tag).
+- Novo filtro **Subcategoria** (combo `input` + `datalist`, **busca por trecho** case-insensitive; as opções se restringem à categoria escolhida).
+- Novo filtro **Tag** (select das tags presentes nos custos).
+- Ambos combinam com os filtros já existentes (Mês/Ano, Categoria, Fornecedor, Nº Nota, Item). Ao trocar a Categoria, a Subcategoria selecionada é resetada.
+
+### Categoria IMPOSTOS removida
+Removido o mapeamento `'IMPOSTOS': 'IMPOSTOS'` de `switch-categoria.js`. A categoria deixa de ser oferecida em qualquer classificação (não entra mais em `categoriasFixas`, nem nos selects de subcategoria/gestão). Dados históricos que já tenham `CATEGORIA = IMPOSTOS` **continuam sendo exibidos** (a leitura não altera o gravado) e caem no grupo **"Outros"** do novo gráfico do dashboard. As frases que listavam as categorias nos manuais HTML foram atualizadas.
+
+### Reprocessamento de tags — bug corrigido + regra revista (o item manda)
+**Antes:** `reprocessarTagsNosCustos` (e o salvar do item) **só aplicavam** tag; **nunca removiam**. Ao tirar a tag de um item, os custos ficavam com a tag antiga — foi o bug reportado.
+
+**Agora (decisão alinhada com o gestor — "a tag é do item e o custo segue o item"):** o **item é a fonte da verdade** e o custo **sempre** espelha a tag do item, incluindo a **remoção**:
+- **Salvar item** (`itens.criar`/`atualizar`): `aplicarTagAosCustosDoItem` sincroniza os custos daquele item para a tag atual — aplica quando há tag e **limpa** quando a tag foi removida. Retorna `tagRemovida` para a UI (mensagem "Tag removida de N custo(s)…" vs. "Tag X aplicada…").
+- **"↻ Reprocessar tags (geral)"** (`reprocessarTagsNosCustos`): para cada custo cujo ITEM existe no cadastro, a tag alvo é a TAG do item (folha com tag) **ou vazia** (folha sem tag / item não-folha); custos que divergem são atualizados (aplicando **ou** limpando). Custos de itens **desconhecidos** (sem correspondência em ITENS) não são tocados. Retorna `custosAplicados`/`custosLimpos`.
+- **Consequência (registrada de propósito):** tags gravadas **direto no custo** por *edição em massa*, quando o item **não tem tag própria**, são **limpas** no reprocesso global — comportamento desejado sob a nova regra. A edição em massa de Tag continua existindo como atalho, mas o item prevalece no reprocesso.
+
+### Itens — filtro por Tag
+A página **Itens** ganhou o filtro **Tag** (select), combinável com Nome/Categoria/Subcategoria; "Limpar filtros" também zera a tag.
+
+### Responsividade — Full HD (1920×1080) com escala 125%
+Em ~1536px de viewport a tela de Custos ficava espremida (muitos filtros). Novo breakpoint `@media (max-width: 1400px)`: a toolbar deixa de empurrar os campos para a direita (`.spacer` some) e distribui os filtros em grade uniforme (`flex: 1 1 160px`, `max-width: 220px`), com padding do `.main` levemente reduzido.
+
+### Zoom embutido na ferramenta
+Novo controle de **zoom** na sidebar (−/%/+, clique no % restaura 100%), aplicado via **CSS `zoom` no elemento raiz** (Chromium/Electron) e **persistido em `localStorage`** (`kampeki_zoom`, faixa 60–150%). Disponível em todas as telas; aplicado cedo no `main.jsx` (`aplicarZoomSalvo`) para não dar "flash" no login. Permite compensar a escala do sistema sem depender do zoom do SO.
+
+### Dash Custos — gráfico "Composição por grupo" (abaixo do Comparativo mês a mês)
+Novo card com **barras empilhadas por mês** em 3 grupos de gestão + **resumo lateral** (valor por grupo e **Total**):
+- **CMV** = CMV
+- **Despesas** = DESPESA ADMINISTRATIVA + DISTRIBUIÇÃO DE LUCRO
+- **Folha** = FOLHA CANOAS + FOLHA POA + FOLHA TELE
+- **Outros** (só aparece se houver valor fora dos 3 grupos, ex.: dados antigos de IMPOSTOS) — mantém o Total honesto.
+- **Respeita o drill-down**: usa a mesma base `baseDrill` do comparativo (período + categoria + subcategoria); o **resumo lateral** respeita também o **mês selecionado** (como os KPIs). 100% frontend, sem mudança de backend.
+
+### Changelog técnico — 06/07/2026 (por arquivo)
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/switch-categoria.js` | Removido `'IMPOSTOS': 'IMPOSTOS'` do `categoriaMap`. |
+| `src/services/itens.js` | `aplicarTagAosCustosDoItem` agora **sincroniza** (aplica **e limpa**) e retorna `{ atualizados, limpou }`; `criar`/`atualizar` propagam `tagRemovida`. `reprocessarTagsNosCustos` reescrito: item = fonte da verdade (aplica/limpa por item, ignora itens desconhecidos), retorna `custosAplicados`/`custosLimpos`. |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/pages/Custos.jsx` | Filtros Subcategoria (datalist, busca por trecho, restrita à categoria) e Tag (select); reset de subcategoria ao trocar categoria; nova coluna Subcategoria na tabela (colSpan 11→12). |
+| `src/pages/Itens.jsx` | Filtro por Tag (`fTag`); mensagens de reprocessar/salvar diferenciam "tag aplicada" × "tag removida". |
+| `src/pages/dash/DashCustos.jsx` | `GRUPOS`/`grupoDe`; memos `porGrupoMes` (empilhado por mês) e `resumoGrupos` (respeita `selMes`); novo card "Composição por grupo" com barras empilhadas + resumo lateral. |
+| `src/components/ZoomControl.jsx` | **Novo** — controle de zoom (CSS `zoom` no root, persistido em `localStorage`); exporta `aplicarZoomSalvo`. |
+| `src/components/Layout.jsx` | Renderiza `<ZoomControl />` na sidebar (acima de "Sair"). |
+| `src/main.jsx` | Chama `aplicarZoomSalvo()` antes de renderizar. |
+| `src/styles.css` | Estilos `.grupo-*` (composição por grupo), `.zoom-*` (controle de zoom) e breakpoint `@media (max-width:1400px)` para a toolbar de filtros em Full HD @125%. |
+| `desktop/package.json` | `version` 1.0.1 → **1.1.0**. |
+| `Guia_Interativo_*.html`, `Manual_do_Usuario_*.html` | Frase das categorias sem IMPOSTOS. |
+
+### Validação
+- Backend: `node --check` OK (`switch-categoria.js`, `itens.js`, `custos.js`).
+- Frontend: `vite build` OK (1255 módulos; único aviso é o de tamanho de chunk, pré-existente).
+- **Não** foi feita execução com escrita contra a planilha real nesta sessão (evitar tocar dados de produção). **Pendente de teste manual**, com atenção especial:
+  - **Reprocessar tags** agora **remove** tag de custos quando o item não tem tag — validar num item de teste antes de rodar o "geral" na base real (pode limpar tags aplicadas por edição em massa de itens sem tag própria).
+  - Conferir escrita: tirar a tag de um item de folha → salvar → os custos daquele item devem ficar sem tag na planilha; e o inverso (aplicar) deve gravar a tag.
+  - Ver o novo gráfico e o resumo batendo com os KPIs sob drill-down/mês.
+
+### Pendências em aberto
+- Gerar o instalador **1.1.0** (`npm run dist` em `desktop/`) e validar no PC do cliente (login + `v1.1.0` no rodapé) — herda a pendência da v1.0.1.
+- Migração de dados históricos de `IMPOSTOS` (se o gestor quiser reclassificá-los) — hoje aparecem em "Outros".
+
+### Refinamentos do Dash Custos (mesma sessão, após feedback)
+Ajustes no card "Composição por grupo" e no "Comparativo mês a mês":
+- **"Outros" transparente:** o resumo lateral agora **lista as categorias** que compõem o "Outros" ("Inclui: …"), para o gestor validar na tela. "Outros" = custos **sem categoria** (itens **"a classificar"**, categoria em branco) + categorias fora dos 3 grupos (ex.: `IMPOSTOS` histórico). Confirmado: **não** é um item específico, é a soma do não-classificado/fora-dos-grupos.
+- **Composição por grupo segue o mês:** ao filtrar um mês no Comparativo (`selMes`), o gráfico de grupo **recorta naquele mês** (mostra só a barra do mês) além do drill de categoria/subcategoria — base única `baseGrupo` (= `baseDrill` + mês). O resumo lateral usa a mesma base.
+- **Clique no mês em qualquer ponto da coluna:** o "Comparativo mês a mês" passou a usar o `onClick` do `BarChart` (`activePayload`), então clicar em **qualquer ponto da coluna do mês** seleciona/filtra — não precisa acertar a barra (resolvia o aperto em meses com pouco valor). Removido o `onClick` da `<Bar>` para não disparar o toggle duas vezes.
+- Arquivos: `src/pages/dash/DashCustos.jsx` (memos `baseGrupo`/`porGrupoMes`/`resumoGrupos`/`outrosCategorias`; `BarChart onClick`), `src/styles.css` (`.grupo-resumo-nota`). `vite build` OK.
+
+### Composição por grupo — drill-down por mês + PDF adaptável (2ª rodada de feedback)
+
+Segunda leva de ajustes no Dash Custos, pedida logo em seguida:
+
+1. **Gráfico "Composição por grupo" com drill-down igual ao Comparativo mês a mês:** revertido o recorte para um único mês; o gráfico volta a mostrar **todos os meses** do período (empilhado por grupo), com o mês selecionado **destacado** (demais esmaecidos via `fillOpacity` por `<Cell>`) e **clicável em qualquer ponto da coluna** (`BarChart onClick` → `toggleMes`) — filtra todo o dashboard. Passou a haver duas bases: `porGrupoMes` (gráfico, todos os meses, de `baseDrill`) e `baseGrupo`/`resumoGrupos` (resumo lateral, recorte de mês ativo). `temOutrosChart` (qualquer mês) controla a série "Outros" no gráfico; `temOutros` (recorte) controla a linha no resumo.
+
+2. **PDF ganhou a seção "Composição por grupo":** nova `barrasGrupo(doc, …)` em `exportPdf.js` — barras horizontais com **ordem e cores fixas** por grupo (CMV coral, Despesas teal, Folha oliva, Outros areia), valor + % e **linha de Total**. `exportarRelatorioCustos` recebe `porGrupo` e desenha a seção logo após "Custos por mês".
+
+3. **PDF adaptável ao filtro/drill (regra confirmada):** ao exportar, o PDF reflete **exatamente o recorte ativo**; sem filtro, sai o dashboard inteiro como na tela. Implementado em `DashCustos.exportarPdf()`:
+   - **Mês selecionado** → `porMes`/composição saem só daquele mês (`porMesExport = porMes.filter(key === selMes)`);
+   - **Categoria drillada** → "Custos por categoria" sai só dela (`porCategoriaExport = porCategoria.filter(key === selCategoria)`);
+   - `porGrupo` vem de `resumoGrupos` (já respeita mês + drill); subcategoria/itens/KPIs já vinham de `baseCat`/`filtrado` (drillados). O rótulo "Filtros:" no cabeçalho do PDF já lista Mês/Categoria/Subcategoria ativos.
+
+- Arquivos: `src/pages/dash/DashCustos.jsx` (`porGrupoMes` all-months + `Cell` opacity + `BarChart onClick`; `exportarPdf` adaptável + `porGrupo`), `src/utils/exportPdf.js` (`barrasGrupo` + `porGrupo` em `exportarRelatorioCustos`). `vite build` OK.
+
+---
+
+## Registro da conversa — sessão 06/07/2026 (v1.1.0)
+
+> A pedido do gestor, o log da sessão que originou a v1.1.0, para não se perder o raciocínio e as decisões.
+
+**1. Pedido inicial (8 frentes para viabilizar a v1.1.0):**
+1. Custos: coluna de subcategoria + poder pesquisar por ela;
+2. Custos: poder pesquisar por tag;
+3. Remover a categoria "Imposto" do código-fonte;
+4. Corrigir tela de lançamento de custo espremida em monitor Full HD (1920×1080) com escala 125%;
+5. Zoom de aumento/diminuição da tela como padrão da ferramenta;
+6. Pesquisar por tag dentro dos Itens;
+7. Bug: ao reprocessar tags, itens dos quais a tag foi removida continuaram com a tag no custo — validar se a ferramenta funciona;
+8. Dash Custos: abaixo do "Comparativo mês a mês", um gráfico com CMV (sozinho), Despesas (Adm + Distribuição de Lucro) e Folha (POA + Canoas + Tele), funcionando com drill-down e com um resumo no canto (CMV/Despesas/Folha + Total).
+   - Ênfase: "Faça tudo com bastante cuidado e cuide sempre a performance e a garantia que o dado está sendo escrito na planilha."
+
+**2. Pergunta de esclarecimento (risco de perda de dado) e resposta:** sobre o item 7, como existe o fluxo de "editar em massa → tag" que grava a tag direto no custo (item pode ficar sem tag), perguntei o que os custos devem fazer quando um item de folha fica sem tag. **Resposta do gestor: Opção 1 — "o item manda em tudo"** ("a tag tem que ser aplicada sobre o item e o custo deve seguir como a tag está"). Ou seja, o custo **sempre** espelha a tag do item, inclusive limpando quando a tag é removida — aceitando que tags aplicadas por edição em massa a itens sem tag própria sejam limpas no reprocesso global.
+
+**3. Entrega da 1ª leva:** implementados os 8 itens (detalhes na seção "Atualizações — 06/07/2026 — versão 1.1.0"). Reforço da política de dado: **não** foi feita escrita contra a planilha de produção; validação por `node --check` + `vite build` + revisão. Recomendado testar o "Reprocessar tags (geral)" num item de teste antes de rodar na base real (agora ele remove tags).
+
+**4. Dúvidas do gestor sobre o Dash (e respostas):**
+- *O que é "Outros" e qual item é?* → Não é um item específico: é a soma do que não é CMV/Despesas/Folha — principalmente **custos sem categoria (itens "a classificar")** e categorias antigas (ex.: IMPOSTOS). Para validar, o resumo passou a **listar** as categorias que compõem o "Outros" ("Inclui: …").
+- *Os "Outros" são itens não categorizados?* → Sim, majoritariamente (categoria/subcategoria em branco).
+- *Quando eu clicar no drill-down do "Comparativo mês a mês", quero que o "Composição por grupo" também filtre.* → Feito (o gráfico de grupo passou a seguir o mês/drill).
+- *No "Comparativo mês a mês", ter que clicar exatamente no pilar é ruim em meses com pouco dado; o clique deveria ser no espaço do mês.* → Feito: clique em qualquer ponto da coluna do mês (via `BarChart onClick`).
+
+**5. Ajustes finais pedidos (2ª leva):**
+1. "Composição por grupo" com drill-down igual ao "Comparativo mês a mês" (sempre com o mês para filtrar);
+2. Corrigir o relatório exportado para ter a visão de "Composição por grupo";
+3. **PDF adaptável:** com filtro/drill aplicado, gráficos e listas do PDF saem só como filtrado; sem filtro, saem como estão na tela;
+4. Registrar toda a conversa neste `KAMPEKI_APP_BRIEF.md` (esta seção).
+   - Tudo implementado (ver "Composição por grupo — drill-down por mês + PDF adaptável"). `vite build` OK.
+
+**Estado ao fim da sessão:** v1.1.0 no `desktop/package.json`; frontend compila; backend `node --check` OK. Pendente de teste manual no app real (com atenção ao reprocessamento de tags que agora remove) e geração/validação do instalador 1.1.0.
+
+### Correção — sidebar sumindo + rolagem horizontal no app empacotado (escala 125%)
+
+**Sintoma (relatado após a v1.1.0, no app do build):** ao usar o monitor a **125%**, a **sidebar sumia** e a tela ficava **só com barras de rolagem**.
+
+**Causa:** overflow horizontal da página. A área principal (`.main`, um flex item) estava **sem `min-width: 0`**, então um filho largo — a tabela de Custos, que passou a ter mais colunas (Subcategoria) — impedia o flex de encolher e **estourava a largura da janela**. Como a **sidebar é `position: sticky`**, ao rolar horizontalmente ela **escorregava para fora** da tela. A 125% a janela tem menos largura em CSS px (1920/1.25 = 1536, ou menos se não maximizada), então o estouro passou a acontecer com facilidade.
+
+**Correção:**
+- **`.main { min-width: 0 }`** (CSS) — o flex volta a respeitar a largura da janela; a tabela larga rola **dentro do próprio `.table-wrap`** (que já tem `overflow-x: auto`) em vez de estourar a página. A sidebar fica fixa. Vale para dev e build. (Descartada uma trava `overflow-x: hidden` no `.app-shell` porque forçaria `overflow-y: auto` e poderia quebrar o `position: sticky` da sidebar.)
+- **`desktop/main.js`** — a janela abre **maximizada** (`show:false` → `maximize()` → `show()`), dando a largura máxima útil sob a escala 125% (sidebar visível, menos aperto). `opts.width/height` seguem valendo ao restaurar a janela.
+
+Validação: `vite build` OK; `node --check desktop/main.js` OK. **Precisa gerar o instalador novo** (`npm run dist` em `desktop/`) para a correção chegar no app do cliente.

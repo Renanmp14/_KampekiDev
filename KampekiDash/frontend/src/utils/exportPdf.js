@@ -104,13 +104,46 @@ function barrasCategoria(doc, x, y, w, data) {
   return cy;
 }
 
+// Barras horizontais da "Composição por grupo" (CMV/Despesas/Folha/Outros), com
+// ordem e cores fixas por grupo (não ordena, para preservar o significado da cor).
+function barrasGrupo(doc, x, y, w, grupos) {
+  const rows = grupos.filter((g) => g.total > 0.005);
+  if (!rows.length) return y;
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  const total = rows.reduce((s, r) => s + r.total, 0) || 1;
+  const rowH = 18;
+  const labelW = 110;
+  const valW = 130;
+  const barMaxW = Math.max(40, w - labelW - valW);
+  const valX = x + labelW + barMaxW + 8;
+  let cy = y;
+  rows.forEach((r) => {
+    doc.setFontSize(9); doc.setTextColor(40);
+    doc.text(trunc(r.key, 22), x, cy + 9);
+    const bw = Math.max(1, (r.total / max) * barMaxW);
+    doc.setFillColor(...r.color);
+    doc.rect(x + labelW, cy + 1, bw, 11, 'F');
+    doc.setFontSize(8); doc.setTextColor(60);
+    doc.text(`${brl(r.total)}  (${pct((r.total / total) * 100)})`, valX, cy + 9);
+    cy += rowH;
+  });
+  // Linha de total.
+  doc.setDrawColor(210); doc.setLineWidth(0.5);
+  doc.line(x, cy + 2, x + w, cy + 2);
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30);
+  doc.text('Total', x, cy + 14);
+  doc.text(brl(total), valX, cy + 14);
+  doc.setFont('helvetica', 'normal');
+  return cy + 20;
+}
+
 /**
  * Gera e baixa um PDF do Relatório de Custos conforme os filtros ativos do Dash.
  * Desenha gráficos próprios (vetoriais, tema claro) — não captura a tela.
  */
 export function exportarRelatorioCustos({
   periodoLabel, drillLabel, subLabel, totalGeral, nLanc,
-  porMes = [], porCategoria = [], porSubcategoria = [], topItens = [], topN = 10,
+  porMes = [], porGrupo = [], porCategoria = [], porSubcategoria = [], topItens = [], topN = 10,
 }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const M = 40;
@@ -146,6 +179,17 @@ export function exportarRelatorioCustos({
     doc.text('Custos por mês', M, y);
     y += 6;
     y += barrasMes(doc, M, y, W, 120, porMes) + 12;
+  }
+
+  // --- Composição por grupo (CMV / Despesas / Folha / Outros) ---
+  if (porGrupo.some((g) => g.total > 0.005)) {
+    y = ensureSpace(doc, y, 40 + porGrupo.length * 18, M);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text('Composição por grupo', M, y);
+    y += 12;
+    y = barrasGrupo(doc, M, y, W, porGrupo) + 16;
   }
 
   // --- Gráfico: custos por categoria (barras horizontais) ---

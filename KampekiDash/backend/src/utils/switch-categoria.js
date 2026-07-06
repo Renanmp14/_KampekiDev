@@ -75,7 +75,6 @@ export const categoriaMap = {
   'TELE ENTREGA': 'FOLHA TELE',
   // OUTROS
   'DISTRIBUIÇÃO DE LUCRO': 'DISTRIBUIÇÃO DE LUCRO',
-  'IMPOSTOS': 'IMPOSTOS',
 };
 
 // Lista ordenada de subcategorias FIXAS (definidas em código) para popular

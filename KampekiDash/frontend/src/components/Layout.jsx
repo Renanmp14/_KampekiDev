@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import { clearToken } from '../api/client.js';
 import Logo from './Logo.jsx';
+import ZoomControl from './ZoomControl.jsx';
 
 const lancamentos = [
   { to: '/custos', label: 'Custos' },
@@ -69,6 +70,7 @@ export default function Layout() {
         ))}
 
         <div className="logout-btn">
+          <ZoomControl />
           <button className="nav-link" onClick={sair} style={{ width: '100%', textAlign: 'left' }}>
             Sair
           </button>

@@ -30,10 +30,11 @@ export default function Itens() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Filtros combináveis: nome (texto), subcategoria e categoria.
+  // Filtros combináveis: nome (texto), subcategoria, categoria e tag.
   const [fNome, setFNome] = useState('');
   const [fSub, setFSub] = useState('');
   const [fCat, setFCat] = useState('');
+  const [fTag, setFTag] = useState('');
 
   // Mapa subcategoria -> categoria para exibição automática.
   const catMap = useMemo(() => {
@@ -60,11 +61,12 @@ export default function Itens() {
       if (q && !String(it.DESCRICAO_ITEM || '').toLowerCase().includes(q)) return false;
       if (fSub && it.SUB_CATEGORIA !== fSub) return false;
       if (fCat && it.CATEGORIA !== fCat) return false;
+      if (fTag && String(it.TAG || '') !== fTag) return false;
       return true;
     });
-  }, [items, fNome, fSub, fCat]);
+  }, [items, fNome, fSub, fCat, fTag]);
 
-  const filtroAtivo = fNome.trim() || fSub || fCat;
+  const filtroAtivo = fNome.trim() || fSub || fCat || fTag;
 
   async function carregar() {
     setLoading(true);
@@ -104,7 +106,14 @@ export default function Itens() {
     setError('');
     try {
       const r = await itensApi.reprocessarTags();
-      setReprocMsg(`Reprocessado: ${r.custosAtualizados} custo(s) atualizados a partir de ${r.itensComTag} item(ns) com tag.`);
+      const partes = [];
+      if (r.custosAplicados) partes.push(`${r.custosAplicados} com tag aplicada`);
+      if (r.custosLimpos) partes.push(`${r.custosLimpos} com tag removida`);
+      setReprocMsg(
+        `Reprocessado: ${r.custosAtualizados} custo(s) sincronizados`
+        + `${partes.length ? ` (${partes.join(', ')})` : ''}`
+        + ` a partir de ${r.itensComTag} item(ns) com tag.`,
+      );
       await carregar();
     } catch (err) {
       setError(err.message);
@@ -122,7 +131,9 @@ export default function Itens() {
       setEditing(null);
       setReprocMsg(
         res && res.custosAtualizados > 0
-          ? `Tag "${res.TAG}" aplicada a ${res.custosAtualizados} custo(s) deste item.`
+          ? (res.tagRemovida
+            ? `Tag removida de ${res.custosAtualizados} custo(s) deste item.`
+            : `Tag "${res.TAG}" aplicada a ${res.custosAtualizados} custo(s) deste item.`)
           : '',
       );
       await carregar();
@@ -207,11 +218,18 @@ export default function Itens() {
               ))}
             </select>
           </div>
+          <div className="field">
+            <label>Tag</label>
+            <select value={fTag} onChange={(e) => setFTag(e.target.value)}>
+              <option value="">Todas</option>
+              {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
+            </select>
+          </div>
           {filtroAtivo && (
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => { setFNome(''); setFSub(''); setFCat(''); }}
+              onClick={() => { setFNome(''); setFSub(''); setFCat(''); setFTag(''); }}
             >
               Limpar filtros
             </button>

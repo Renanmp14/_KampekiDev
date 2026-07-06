@@ -14,6 +14,22 @@ import {
 // Paleta de gráficos derivada do brand Kampeki.
 const COLORS = ['#ff8b7c', '#4f868f', '#bfcb7f', '#d7c4b6', '#e6e6e6', '#9c6b6b', '#7fb8a4'];
 
+// Agrupamento macro das categorias em 3 grupos de gestão (+ "Outros" para o que
+// sobrar, ex.: dados antigos de categorias descontinuadas). Usado no gráfico de
+// composição por grupo, abaixo do comparativo mês a mês.
+const GRUPOS = [
+  { key: 'CMV', cats: ['CMV'], color: '#ff8b7c' },
+  { key: 'Despesas', cats: ['DESPESA ADMINISTRATIVA', 'DISTRIBUIÇÃO DE LUCRO'], color: '#4f868f' },
+  { key: 'Folha', cats: ['FOLHA CANOAS', 'FOLHA POA', 'FOLHA TELE'], color: '#bfcb7f' },
+];
+const OUTROS_COLOR = '#d7c4b6';
+const normCat = (c) => String(c || '').trim().toUpperCase();
+function grupoDe(categoria) {
+  const c = normCat(categoria);
+  for (const g of GRUPOS) if (g.cats.includes(c)) return g.key;
+  return 'Outros';
+}
+
 export default function DashCustos() {
   const [custos, setCustos] = useState([]);
   const [period, setPeriod] = useState({ de: '', ate: '' });
@@ -91,6 +107,54 @@ export default function DashCustos() {
     return monthsBetween(deKey, ateKey).map((k) => ({ key: k, mes: keyToLabel(k), total: map[k] || 0 }));
   }, [baseDrill, deKey, ateKey]);
 
+  // Composição por grupo (CMV / Despesas / Folha / Outros) — empilhado por mês.
+  // Mostra TODOS os meses do período (respeitando o drill de categoria/subcat),
+  // funcionando como o "Comparativo mês a mês": o mês selecionado fica destacado
+  // e clicar num mês filtra todo o dashboard.
+  const porGrupoMes = useMemo(() => {
+    const linhas = monthsBetween(deKey, ateKey).map((k) => ({
+      key: k, mes: keyToLabel(k), CMV: 0, Despesas: 0, Folha: 0, Outros: 0,
+    }));
+    const idx = Object.fromEntries(linhas.map((l, i) => [l.key, i]));
+    for (const r of baseDrill) {
+      const k = rowMonthKey(r);
+      if (!(k in idx)) continue;
+      linhas[idx[k]][grupoDe(r.CATEGORIA)] += val(r);
+    }
+    return linhas;
+  }, [baseDrill, deKey, ateKey]);
+
+  // Base do resumo lateral: respeita período + drill + o mês selecionado (como os
+  // KPIs) — quando um mês está ativo, o resumo mostra os números só daquele mês.
+  const baseGrupo = useMemo(
+    () => (selMes ? baseDrill.filter((r) => rowMonthKey(r) === selMes) : baseDrill),
+    [baseDrill, selMes],
+  );
+
+  // Resumo lateral: total de cada grupo + total geral.
+  const resumoGrupos = useMemo(() => {
+    const acc = { CMV: 0, Despesas: 0, Folha: 0, Outros: 0 };
+    for (const r of baseGrupo) acc[grupoDe(r.CATEGORIA)] += val(r);
+    acc.total = acc.CMV + acc.Despesas + acc.Folha + acc.Outros;
+    return acc;
+  }, [baseGrupo]);
+
+  // Quais categorias compõem o "Outros" (para o usuário validar na tela): custos
+  // sem categoria (itens "a classificar") e categorias fora dos 3 grupos.
+  const outrosCategorias = useMemo(() => {
+    const set = new Set();
+    for (const r of baseGrupo) {
+      if (grupoDe(r.CATEGORIA) === 'Outros') {
+        set.add(String(r.CATEGORIA || '').trim() || '(sem categoria)');
+      }
+    }
+    return [...set].sort();
+  }, [baseGrupo]);
+
+  // "Outros" no gráfico (qualquer mês) e no resumo (recorte ativo).
+  const temOutrosChart = porGrupoMes.some((m) => m.Outros > 0.005);
+  const temOutros = resumoGrupos.Outros > 0.005;
+
   // Filtro global de mês: ao escolher um mês no comparativo, TODO o restante do
   // dashboard (pizza, subcategorias, total, top itens) passa a refletir só ele.
   const noMes = useMemo(
@@ -156,14 +220,31 @@ export default function DashCustos() {
       if (selMes) drillParts.push(`Mês: ${keyToLabel(selMes)}`);
       if (selCategoria) drillParts.push(`Categoria: ${selCategoria}`);
       if (selSubcategoria) drillParts.push(`Subcategoria: ${selSubcategoria}`);
+
+      // Exportação adaptável aos filtros/drill: mostra no PDF exatamente o recorte
+      // ativo. Mês selecionado → só aquele mês nos gráficos mensais; categoria
+      // drillada → só ela na composição por categoria. (As tabelas de subcategoria
+      // e itens e os KPIs já vêm da base drillada `filtrado`/`baseCat`.)
+      const porMesExport = selMes ? porMes.filter((m) => m.key === selMes) : porMes;
+      const porCategoriaExport = selCategoria
+        ? porCategoria.filter((c) => c.key === selCategoria)
+        : porCategoria;
+      const porGrupo = [
+        { key: 'CMV', total: resumoGrupos.CMV, color: [255, 139, 124] },
+        { key: 'Despesas', total: resumoGrupos.Despesas, color: [79, 134, 143] },
+        { key: 'Folha', total: resumoGrupos.Folha, color: [191, 203, 127] },
+        { key: 'Outros', total: resumoGrupos.Outros, color: [215, 196, 182] },
+      ];
+
       exportarRelatorioCustos({
         periodoLabel,
         drillLabel: drillParts.join(' · ') || null,
         subLabel: selCategoria || null,
         totalGeral,
         nLanc: filtrado.length,
-        porMes,
-        porCategoria,
+        porMes: porMesExport,
+        porGrupo,
+        porCategoria: porCategoriaExport,
         porSubcategoria,
         topItens,
         topN: Number(topN) || 10,
@@ -240,7 +321,7 @@ export default function DashCustos() {
         <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h3 className="card-title" style={{ margin: 0 }}>
             Comparativo mês a mês
-            <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (clique numa barra para filtrar todo o dashboard)</span>
+            <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (clique no mês — em qualquer ponto da coluna — para filtrar todo o dashboard)</span>
           </h3>
           <div className="field" style={{ maxWidth: 200, margin: 0 }}>
             <select value={selMes} onChange={(e) => setSelMes(e.target.value)}>
@@ -251,7 +332,11 @@ export default function DashCustos() {
         </div>
         <div>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={porMes}>
+          <BarChart
+            data={porMes}
+            onClick={(s) => toggleMes(s?.activePayload?.[0]?.payload?.key)}
+            style={{ cursor: 'pointer' }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
             <XAxis dataKey="mes" stroke="#93a39b" fontSize={12} />
             <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
@@ -260,12 +345,11 @@ export default function DashCustos() {
               contentStyle={{ background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6 }}
               itemStyle={{ color: '#f1f3f5' }}
               labelStyle={{ color: '#f1f3f5' }}
-              cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+              cursor={{ fill: 'rgba(255,255,255,0.08)' }}
             />
             <Bar
               dataKey="total"
               radius={[4, 4, 0, 0]}
-              onClick={(d) => toggleMes(d?.key ?? d?.payload?.key)}
               style={{ cursor: 'pointer', outline: 'none' }}
             >
               {porMes.map((m) => (
@@ -280,6 +364,83 @@ export default function DashCustos() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">
+          Composição por grupo
+          <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> — CMV · Despesas (Adm. + Distrib. Lucro) · Folha (POA + Canoas + Tele) · clique no mês para filtrar</span>
+        </h3>
+        <div className="grupo-wrap">
+          <div className="grupo-chart">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart
+                data={porGrupoMes}
+                onClick={(s) => toggleMes(s?.activePayload?.[0]?.payload?.key)}
+                style={{ cursor: 'pointer' }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
+                <XAxis dataKey="mes" stroke="#93a39b" fontSize={12} />
+                <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
+                <Tooltip
+                  formatter={(v, name) => [brl(v), name]}
+                  contentStyle={{ background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6 }}
+                  itemStyle={{ color: '#f1f3f5' }}
+                  labelStyle={{ color: '#f1f3f5' }}
+                  cursor={{ fill: 'rgba(255,255,255,0.08)' }}
+                />
+                <Legend />
+                <Bar dataKey="CMV" stackId="g" fill="#ff8b7c">
+                  {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
+                </Bar>
+                <Bar dataKey="Despesas" stackId="g" fill="#4f868f">
+                  {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
+                </Bar>
+                <Bar dataKey="Folha" stackId="g" fill="#bfcb7f" radius={temOutrosChart ? undefined : [4, 4, 0, 0]}>
+                  {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
+                </Bar>
+                {temOutrosChart && (
+                  <Bar dataKey="Outros" stackId="g" fill={OUTROS_COLOR} radius={[4, 4, 0, 0]}>
+                    {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
+                  </Bar>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="grupo-resumo">
+            <div className="grupo-resumo-head">{selMes ? `No mês ${keyToLabel(selMes)}` : 'No período'}</div>
+            <div className="grupo-resumo-row">
+              <span><i className="grupo-dot" style={{ background: '#ff8b7c' }} />CMV</span>
+              <span>{brl(resumoGrupos.CMV)}</span>
+            </div>
+            <div className="grupo-resumo-row">
+              <span><i className="grupo-dot" style={{ background: '#4f868f' }} />Despesas</span>
+              <span>{brl(resumoGrupos.Despesas)}</span>
+            </div>
+            <div className="grupo-resumo-row">
+              <span><i className="grupo-dot" style={{ background: '#bfcb7f' }} />Folha</span>
+              <span>{brl(resumoGrupos.Folha)}</span>
+            </div>
+            {temOutros && (
+              <>
+                <div className="grupo-resumo-row">
+                  <span><i className="grupo-dot" style={{ background: OUTROS_COLOR }} />Outros</span>
+                  <span>{brl(resumoGrupos.Outros)}</span>
+                </div>
+                {outrosCategorias.length > 0 && (
+                  <div className="grupo-resumo-nota">
+                    Inclui: {outrosCategorias.join(', ')}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="grupo-resumo-row total">
+              <span>Total</span>
+              <span>{brl(resumoGrupos.total)}</span>
+            </div>
+          </div>
         </div>
       </div>
 

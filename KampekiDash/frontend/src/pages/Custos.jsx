@@ -162,7 +162,9 @@ export default function Custos() {
   // Filtros da listagem.
   const [fMesAno, setFMesAno] = useState('');
   const [fCategoria, setFCategoria] = useState('');
+  const [fSubcategoria, setFSubcategoria] = useState('');
   const [fFornecedor, setFFornecedor] = useState('');
+  const [fTag, setFTag] = useState('');
   const [fNota, setFNota] = useState('');
   const [fItem, setFItem] = useState('');
 
@@ -398,13 +400,31 @@ export default function Custos() {
     () => [...new Set(custos.map((c) => c.CATEGORIA).filter(Boolean))].sort(),
     [custos],
   );
+  // Subcategorias presentes nos custos, restritas à categoria escolhida (se houver).
+  const subcategorias = useMemo(
+    () => [...new Set(
+      custos
+        .filter((c) => !fCategoria || c.CATEGORIA === fCategoria)
+        .map((c) => c.SUB_CATEGORIA)
+        .filter(Boolean),
+    )].sort(),
+    [custos, fCategoria],
+  );
+  // Tags presentes nos custos.
+  const tagsPresentes = useMemo(
+    () => [...new Set(custos.map((c) => String(c.TAG || '').trim()).filter(Boolean))].sort(),
+    [custos],
+  );
 
   const filtrados = custos.filter((c) => {
     const nota = fNota.trim().toLowerCase();
     const item = fItem.trim().toLowerCase();
+    const sub = fSubcategoria.trim().toLowerCase();
     return (!fMesAno || c.MES_ANO === fMesAno)
       && (!fCategoria || c.CATEGORIA === fCategoria)
+      && (!sub || String(c.SUB_CATEGORIA || '').toLowerCase().includes(sub))
       && (!fFornecedor || c.FORNECEDOR === fFornecedor)
+      && (!fTag || String(c.TAG || '').trim() === fTag)
       && (!nota || String(c.NUM_NOTA || '').toLowerCase().includes(nota))
       && (!item || String(c.ITEM || '').toLowerCase().includes(item));
   });
@@ -515,16 +535,38 @@ export default function Custos() {
         </div>
         <div className="field" style={{ maxWidth: 180 }}>
           <label>Categoria</label>
-          <select value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}>
+          <select
+            value={fCategoria}
+            onChange={(e) => { setFCategoria(e.target.value); setFSubcategoria(''); }}
+          >
             <option value="">Todas</option>
             {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+        </div>
+        <div className="field" style={{ maxWidth: 190 }}>
+          <label>Subcategoria</label>
+          <input
+            list="custo-fsub-dl"
+            value={fSubcategoria}
+            onChange={(e) => setFSubcategoria(e.target.value)}
+            placeholder="Todas..."
+          />
+          <datalist id="custo-fsub-dl">
+            {subcategorias.map((s) => <option key={s} value={s} />)}
+          </datalist>
         </div>
         <div className="field" style={{ maxWidth: 180 }}>
           <label>Fornecedor</label>
           <select value={fFornecedor} onChange={(e) => setFFornecedor(e.target.value)}>
             <option value="">Todos</option>
             {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR}>{f.NOME_FORNECEDOR}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ maxWidth: 150 }}>
+          <label>Tag</label>
+          <select value={fTag} onChange={(e) => setFTag(e.target.value)}>
+            <option value="">Todas</option>
+            {tagsPresentes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div className="field" style={{ maxWidth: 150 }}>
@@ -569,6 +611,7 @@ export default function Custos() {
                   <th>Fornecedor</th>
                   <th>Item</th>
                   <th>Categoria</th>
+                  <th>Subcategoria</th>
                   <th>Tag</th>
                   <th className="num">Qtd</th>
                   <th className="num">V. Unit</th>
@@ -591,6 +634,7 @@ export default function Custos() {
                     <td>{c.FORNECEDOR}</td>
                     <td>{c.ITEM}</td>
                     <td><span className={categoriaBadgeClass(c.CATEGORIA)}>{c.CATEGORIA}</span></td>
+                    <td>{c.SUB_CATEGORIA || '—'}</td>
                     <td>{c.TAG || '—'}</td>
                     <td className="num">{toNum(c.QTD)}</td>
                     <td className="num">{brl(c.VALOR_UNIT)}</td>
@@ -603,7 +647,7 @@ export default function Custos() {
                     </td>
                   </tr>
                 ))}
-                {filtrados.length === 0 && <tr><td colSpan={11} className="empty">Nenhum lançamento.</td></tr>}
+                {filtrados.length === 0 && <tr><td colSpan={12} className="empty">Nenhum lançamento.</td></tr>}
               </tbody>
             </table>
           </div>

@@ -36,19 +36,20 @@ async function resolverTagItem(categoria, TAG) {
   return tag;
 }
 
-// Aplica a TAG aos custos de UM item (os que estiverem com tag diferente/vazia).
-// Barato: uma leitura de CUSTOS + uma escrita. Usado ao salvar o item — o custo
-// sempre respeita a tag do item. Não faz nada se a tag estiver vazia (não limpa
-// custos ao remover a tag do item, para não deixar folha sem tag).
+// Sincroniza a TAG dos custos de UM item para o valor `tag` do item — o custo
+// SEMPRE segue a tag do item. Barato: uma leitura de CUSTOS + uma escrita.
+// Aplica tanto a definição quanto a REMOÇÃO: se `tag` vier vazia, os custos
+// daquele item que tinham tag são limpos (o item é a fonte da verdade).
+// Retorna { atualizados, limpou } para a UI diferenciar aplicar vs. remover.
 async function aplicarTagAosCustosDoItem(descricao, tag) {
-  if (!tag) return 0;
+  const alvoTag = String(tag || '').trim();
   const custos = await getObjects('CUSTOS');
   const alvo = custos
-    .filter((c) => normalizar(c.ITEM) === normalizar(descricao) && String(c.TAG || '').trim() !== tag)
+    .filter((c) => normalizar(c.ITEM) === normalizar(descricao) && String(c.TAG || '').trim() !== alvoTag)
     .map((c) => c.UUID);
-  if (!alvo.length) return 0;
-  await updateColumnForUuids('CUSTOS', 'TAG', alvo, tag);
-  return alvo.length;
+  if (!alvo.length) return { atualizados: 0, limpou: false };
+  await updateColumnForUuids('CUSTOS', 'TAG', alvo, alvoTag);
+  return { atualizados: alvo.length, limpou: alvoTag === '' };
 }
 
 function normalizar(t) {
@@ -78,10 +79,10 @@ export async function criar(payload) {
   const uuid = newUuid();
   await appendRow(TAB, [uuid, descricao, sub, categoria, tag]);
   invalidate(CACHE_KEY);
-  // Item novo pode já casar com custos existentes (mesma descrição) — aplica a tag.
-  const custosAtualizados = await aplicarTagAosCustosDoItem(descricao, tag);
+  // Item novo pode já casar com custos existentes (mesma descrição) — sincroniza a tag.
+  const { atualizados: custosAtualizados, limpou } = await aplicarTagAosCustosDoItem(descricao, tag);
   return {
-    UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria, TAG: tag, custosAtualizados,
+    UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria, TAG: tag, custosAtualizados, tagRemovida: limpou,
   };
 }
 
@@ -96,46 +97,66 @@ export async function atualizar(uuid, payload) {
   const tag = await resolverTagItem(categoria, payload.TAG);
   await updateRowByUuid(TAB, uuid, [uuid, descricao, sub, categoria, tag]);
   invalidate(CACHE_KEY);
-  // O custo sempre respeita o item: ao salvar a tag, aplica aos custos deste item.
-  const custosAtualizados = await aplicarTagAosCustosDoItem(descricao, tag);
+  // O custo sempre segue o item: ao salvar, sincroniza a tag nos custos deste
+  // item — aplica quando há tag, e LIMPA quando a tag foi removida.
+  const { atualizados: custosAtualizados, limpou } = await aplicarTagAosCustosDoItem(descricao, tag);
   return {
-    UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria, TAG: tag, custosAtualizados,
+    UUID: uuid, DESCRICAO_ITEM: descricao, SUB_CATEGORIA: sub, CATEGORIA: categoria, TAG: tag, custosAtualizados, tagRemovida: limpou,
   };
 }
 
 /**
- * Reprocessa as TAGs nos custos a partir da TAG cadastrada em cada item.
- * Para cada item que tem TAG, aplica essa tag a todos os custos daquele item
- * cuja TAG esteja diferente (ou vazia) — corrige custos lançados antes de o item
- * ganhar tag. Itens sem tag não afetam nada.
+ * Reprocessa as TAGs nos custos a partir da TAG cadastrada em cada item — o custo
+ * SEMPRE segue a tag do item (o item é a fonte da verdade).
+ *
+ * Para cada custo cujo ITEM existe no cadastro, a tag alvo é:
+ *  - a TAG do item, quando o item é de folha e tem tag;
+ *  - vazia (LIMPA), quando o item é de folha sem tag ou é item não-folha.
+ * Custos cuja tag difere do alvo são atualizados (aplicando ou limpando).
+ * Custos de itens desconhecidos (sem correspondência em ITENS) não são tocados.
+ *
+ * Observação: como o item manda, tags aplicadas direto no custo (edição em massa)
+ * de itens que não têm tag própria são limpas aqui — comportamento desejado.
  */
 export async function reprocessarTagsNosCustos() {
   const [itensList, custos] = await Promise.all([getObjects(TAB), getObjects('CUSTOS')]);
 
-  const tagPorItem = new Map();
+  // Alvo de tag por item (descrição normalizada). '' = deve ficar sem tag.
+  const alvoPorItem = new Map();
+  let itensComTag = 0;
   for (const it of itensList) {
-    const tag = String(it.TAG || '').trim();
-    if (tag) tagPorItem.set(normalizar(it.DESCRICAO_ITEM), tag);
+    const tag = exigeTag(it.CATEGORIA) ? String(it.TAG || '').trim() : '';
+    if (tag) itensComTag += 1;
+    alvoPorItem.set(normalizar(it.DESCRICAO_ITEM), tag);
   }
 
-  // Agrupa por tag alvo os UUIDs de custos que precisam mudar.
+  // Agrupa por tag alvo (inclusive '' para limpar) os UUIDs que precisam mudar.
   const porTag = new Map();
   for (const c of custos) {
-    const alvo = tagPorItem.get(normalizar(c.ITEM));
-    if (alvo && String(c.TAG || '').trim() !== alvo) {
+    const chave = normalizar(c.ITEM);
+    if (!alvoPorItem.has(chave)) continue; // item desconhecido: não mexe
+    const alvo = alvoPorItem.get(chave);
+    if (String(c.TAG || '').trim() !== alvo) {
       if (!porTag.has(alvo)) porTag.set(alvo, []);
       porTag.get(alvo).push(c.UUID);
     }
   }
 
-  let custosAtualizados = 0;
+  let custosAplicados = 0;
+  let custosLimpos = 0;
   for (const [tag, uuids] of porTag) {
     // eslint-disable-next-line no-await-in-loop
     await updateColumnForUuids('CUSTOS', 'TAG', uuids, tag);
-    custosAtualizados += uuids.length;
+    if (tag === '') custosLimpos += uuids.length;
+    else custosAplicados += uuids.length;
   }
 
-  return { itensComTag: tagPorItem.size, custosAtualizados };
+  return {
+    itensComTag,
+    custosAtualizados: custosAplicados + custosLimpos,
+    custosAplicados,
+    custosLimpos,
+  };
 }
 
 export async function remover(uuid) {
