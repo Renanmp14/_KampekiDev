@@ -1193,3 +1193,54 @@ Segunda leva de ajustes no Dash Custos, pedida logo em seguida:
 - **`desktop/main.js`** — a janela abre **maximizada** (`show:false` → `maximize()` → `show()`), dando a largura máxima útil sob a escala 125% (sidebar visível, menos aperto). `opts.width/height` seguem valendo ao restaurar a janela.
 
 Validação: `vite build` OK; `node --check desktop/main.js` OK. **Precisa gerar o instalador novo** (`npm run dist` em `desktop/`) para a correção chegar no app do cliente.
+
+---
+
+## Atualizações — 07/07/2026 — combobox de busca (`SearchableSelect`) nos filtros/campos de Custos
+
+> Sessão focada em **usabilidade de busca**: substituir os `<select>`/`<datalist>` nativos por um combobox de busca próprio, consistente visualmente com a marca e que filtra bem mesmo com listas grandes. Sem mudança de backend. Versão do `desktop/package.json` **não** foi alterada (segue **1.1.1**).
+
+### Contexto / problema
+No formulário e nos filtros de Custos, os campos usavam duas coisas: `<select>` nativo (não dá pra digitar/filtrar) e `<input list>` + `<datalist>` nativo (dá pra digitar, mas com **duas limitações**): (1) com **listas grandes** — o caso de **Fornecedor** (centenas/milhares) — o `<datalist>` do Chromium **trunca e para de filtrar de forma útil**; e (2) o **popup do datalist é renderizado pelo SO/Chromium** (fundo azulado, setinha ▼), **ignorando o CSS do projeto** — destoava do tema verde. A Subcategoria "parecia" funcionar só porque tem poucas dezenas de opções.
+
+### Solução — componente `SearchableSelect`
+Novo `frontend/src/components/SearchableSelect.jsx`: um combobox que **renderiza a própria lista filtrada** (não depende do `<datalist>`), então filtra igual com qualquer tamanho de lista e segue o CSS do app.
+
+- **Filtra ao digitar**, ignorando **acento e maiúscula/minúscula** (`normalize('NFD')` + strip de diacríticos).
+- **Abre com a lista inteira** (flag `touched`): enquanto o usuário não digita, mostra todas as opções mantendo o valor atual visível no campo — a abertura fica **igual** esteja o campo vazio (Fornecedor) ou já preenchido (Subcategoria). Antes, campos com valor pré-filtravam a lista pelo próprio valor e abriam mostrando **só o item selecionado** (em coral), o que dava a impressão de "cores/comportamento diferentes".
+- **Mostra todas as opções** que casam com a busca (a lista rola dentro do dropdown — `max-height: 260px` + `overflow-y: auto`). *(Nasceu com cap de 50 itens + aviso "+N resultado(s) — refine a busca"; o cap foi removido a pedido do gestor — ver nota abaixo.)*
+- **Navegação por teclado** (↑ ↓ Enter Esc), clique para selecionar, fecha ao clicar fora. **Aceita texto livre** (o `onChange` devolve o que foi digitado/selecionado — fornecedor novo continua podendo ser criado no backend).
+- Estilo `.ss-*` no `styles.css` usando as variáveis da marca (`--surface`, `--surface-2`, `--border`, `--primary`); o item que corresponde ao valor atual fica em coral (`.ss-opt-sel`), o item sob o cursor em `--surface-2` (`.ss-opt-hl`).
+
+### Onde foi aplicado
+**Toolbar de filtros de Custos (todos uniformes agora):** Mês/Ano, Categoria, Subcategoria, Fornecedor e Tag viraram `SearchableSelect`. **Nº Nota** e **Item** seguem como `<input>` de texto livre (já eram busca por digitação, sem lista de opções). Os **predicados de filtro** desses campos passaram a casar **por trecho** (`includes`, case-insensitive) em vez de igualdade exata — digitar parcial já filtra a listagem sem precisar selecionar o valor exato. A lista de opções de **Subcategoria** acompanha a **Categoria** digitada (também por `includes`).
+
+**Formulário de lançamento de Custo:** **Fornecedor** e **Subcategoria** viraram `SearchableSelect` (a Subcategoria mantém a cascata — reusa a função `setSubcategoria`, que resolve a subcategoria, preenche a categoria e zera o item). O campo **Tag** (que só aparece para categorias de folha) foi de `<select>` para `<input>` + `<datalist>` com **resolução case-insensitive** (`tagResolvida`): a validação bloqueia salvar tag inexistente e grava a tag na **grafia canônica** cadastrada.
+
+### Estado atual dos campos (para referência)
+| Local | Campo | Componente |
+|---|---|---|
+| Toolbar (filtro) | Mês/Ano, Categoria, Subcategoria, Fornecedor, Tag | `SearchableSelect` |
+| Toolbar (filtro) | Nº Nota, Item | `<input>` texto livre |
+| Formulário | Fornecedor, Subcategoria | `SearchableSelect` |
+| Formulário | Categoria, Item | `<input list>` + `<datalist>` nativo (ainda **não** migrados) |
+| Formulário | Tag (folha) | `<input list>` + `<datalist>` + `tagResolvida` |
+
+> Pendência (opcional, alinhar com o gestor): migrar **Categoria** e **Item** do formulário para o `SearchableSelect` também, deixando 100% uniforme. O Item tem ~2.700 opções e hoje depende do `<datalist>` nativo (mesma limitação de lista grande do Fornecedor), então é o principal candidato.
+
+### Changelog técnico — 07/07/2026 (por arquivo, tudo frontend)
+| Arquivo | O que mudou |
+|---|---|
+| `src/components/SearchableSelect.jsx` | **Novo** — combobox de busca (input + lista filtrada própria); busca sem acento/caixa; abre com lista cheia (flag `touched`); cap de 50 + "+N"; teclado; texto livre. |
+| `src/pages/Custos.jsx` | Toolbar: Mês/Ano, Categoria, Subcategoria, Fornecedor e Tag → `SearchableSelect`; predicados desses filtros por `includes` (case-insensitive); memo `subcategorias` segue a categoria por `includes`; novos memos `fornecedorNomes`/`subcatNomes`. Formulário: Fornecedor e Subcategoria → `SearchableSelect`; Tag → `<datalist>` + `tagResolvida` (validação + grafia canônica). |
+| `src/styles.css` | Novas classes `.ss-wrap`/`.ss-list`/`.ss-opt`/`.ss-opt-hl`/`.ss-opt-sel`/`.ss-empty`/`.ss-more` (dropdown no tema da marca). |
+
+### Validação
+- Frontend: `vite build` OK a cada etapa (última: ~10–16s; único aviso é o de tamanho de chunk, pré-existente).
+- Lógica de filtragem do `SearchableSelect` testada em Node com lista de 2.003 opções: busca por trecho sem acento/caixa correta (`peix`→Peixaria, `acou`→Açougue, `pao`→PÃO) e cap de 50 com contador de excedentes.
+- Backend inalterado. **Pendente de teste manual no navegador** (`npm run dev` em `frontend/`) e de gerar o build/instalador para chegar ao app do cliente.
+
+### Ajuste (mesma sessão) — remover o limite de 50 itens da lista
+Feedback do gestor: em listas grandes (Fornecedor, Subcategoria) aparecia "+11 resultado(s) — refine a busca" e ele queria **ver todos os itens** de uma vez. Ajuste: o `maxVisible` do `SearchableSelect` passou de **50** para **`Infinity`** (valor padrão) — a lista agora mostra **todas** as opções que casam com a busca e **rola** dentro do dropdown; o aviso "+N resultado(s)" deixou de aparecer (não há mais corte). Vale para todos os campos que usam o combo. `vite build` OK.
+
+> Nota de performance: para uma lista muito grande (ex.: se o **Item**, ~2.700 opções, for migrado para o combo no futuro), renderizar tudo ao abrir pode gerar leve lentidão — candidato a virar lista **virtualizada** sem mudar a aparência. Fornecedor/Subcategoria/Categoria/Tag são tranquilos.

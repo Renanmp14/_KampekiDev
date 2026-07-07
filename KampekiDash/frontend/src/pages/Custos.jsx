@@ -10,6 +10,7 @@ import ImportNfsePdfModal from '../components/ImportNfsePdfModal.jsx';
 import ImportResult from '../components/ImportResult.jsx';
 import ClassificarItensModal from '../components/ClassificarItensModal.jsx';
 import CellUsageBar from '../components/CellUsageBar.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 import { parseCustos } from '../utils/importParse.js';
 import { brl, toNum, categoriaBadgeClass } from '../utils/format.js';
 
@@ -207,6 +208,12 @@ export default function Custos() {
     [itens, form.ITEM_UUID],
   );
 
+  // Nomes de fornecedor para o combo de busca (evita recriar o array a cada render).
+  const fornecedorNomes = useMemo(
+    () => fornecedores.map((f) => f.NOME_FORNECEDOR),
+    [fornecedores],
+  );
+
   // --- Cascata Categoria → Subcategoria → Item (todos pesquisáveis) ----------
   // Categoria canônica (casa o texto digitado com a lista, case-insensitive).
   const categoriaResolvida = useMemo(
@@ -223,6 +230,11 @@ export default function Custos() {
     () => (categoriaResolvida ? subcats.filter((s) => s.CATEGORIA === categoriaResolvida) : subcats),
     [subcats, categoriaResolvida],
   );
+  // Nomes de subcategoria para o combo de busca.
+  const subcatNomes = useMemo(
+    () => subcatsDaCategoria.map((s) => s.SUB_CATEGORIA),
+    [subcatsDaCategoria],
+  );
   // Itens disponíveis no combo, do filtro mais específico para o mais amplo:
   // subcategoria → categoria → todos. Permite buscar o item diretamente,
   // respeitando o que já foi escolhido na cascata.
@@ -235,6 +247,12 @@ export default function Custos() {
   const resolveItem = (txt) => itensDisponiveis.find((i) => norm(i.DESCRICAO_ITEM) === norm(txt)) || null;
   // Há texto de item novo (não casa com nenhum existente) → habilita criar inline.
   const itemNovo = Boolean(subResolvida && itemText.trim() && !form.ITEM_UUID);
+
+  // Tag canônica (casa o texto digitado com a lista cadastrada, case-insensitive).
+  const tagResolvida = useMemo(
+    () => tags.find((t) => norm(t.TAG) === norm(form.TAG)) || null,
+    [tags, form.TAG],
+  );
 
   const exigeTag = isFolha(categoriaResolvida);
   const valorCalculado = toNum(form.QTD) * toNum(form.VALOR_UNIT);
@@ -345,7 +363,9 @@ export default function Custos() {
     if (!form.ITEM_UUID) return itemText.trim() ? 'Crie o item novo (botão) ou selecione um existente' : 'Selecione o item';
     if (toNum(form.QTD) <= 0) return 'Quantidade inválida';
     if (toNum(form.VALOR_UNIT) < 0) return 'Valor unitário inválido';
-    if (exigeTag && !form.TAG) return 'Selecione a tag (categoria de folha)';
+    if (exigeTag && !tagResolvida) {
+      return form.TAG.trim() ? 'Tag não cadastrada — selecione uma tag válida' : 'Selecione a tag (categoria de folha)';
+    }
     return '';
   }
 
@@ -361,7 +381,8 @@ export default function Custos() {
     try {
       const payload = {
         ...form,
-        TAG: exigeTag ? form.TAG : '',
+        // Envia a tag na grafia canônica quando resolve; senão o texto digitado.
+        TAG: exigeTag ? (tagResolvida ? tagResolvida.TAG : form.TAG) : '',
         // Só envia total quando editado à mão; vazio = backend calcula QTD × V.Unit.
         VALOR_TOTAL: totalManual ? form.VALOR_TOTAL : '',
       };
@@ -401,15 +422,15 @@ export default function Custos() {
     [custos],
   );
   // Subcategorias presentes nos custos, restritas à categoria escolhida (se houver).
-  const subcategorias = useMemo(
-    () => [...new Set(
+  const subcategorias = useMemo(() => {
+    const cat = fCategoria.trim().toLowerCase();
+    return [...new Set(
       custos
-        .filter((c) => !fCategoria || c.CATEGORIA === fCategoria)
+        .filter((c) => !cat || String(c.CATEGORIA || '').toLowerCase().includes(cat))
         .map((c) => c.SUB_CATEGORIA)
         .filter(Boolean),
-    )].sort(),
-    [custos, fCategoria],
-  );
+    )].sort();
+  }, [custos, fCategoria]);
   // Tags presentes nos custos.
   const tagsPresentes = useMemo(
     () => [...new Set(custos.map((c) => String(c.TAG || '').trim()).filter(Boolean))].sort(),
@@ -420,11 +441,15 @@ export default function Custos() {
     const nota = fNota.trim().toLowerCase();
     const item = fItem.trim().toLowerCase();
     const sub = fSubcategoria.trim().toLowerCase();
-    return (!fMesAno || c.MES_ANO === fMesAno)
-      && (!fCategoria || c.CATEGORIA === fCategoria)
+    const forn = fFornecedor.trim().toLowerCase();
+    const mes = fMesAno.trim().toLowerCase();
+    const cat = fCategoria.trim().toLowerCase();
+    const tag = fTag.trim().toLowerCase();
+    return (!mes || String(c.MES_ANO || '').toLowerCase().includes(mes))
+      && (!cat || String(c.CATEGORIA || '').toLowerCase().includes(cat))
       && (!sub || String(c.SUB_CATEGORIA || '').toLowerCase().includes(sub))
-      && (!fFornecedor || c.FORNECEDOR === fFornecedor)
-      && (!fTag || String(c.TAG || '').trim() === fTag)
+      && (!forn || String(c.FORNECEDOR || '').toLowerCase().includes(forn))
+      && (!tag || String(c.TAG || '').toLowerCase().includes(tag))
       && (!nota || String(c.NUM_NOTA || '').toLowerCase().includes(nota))
       && (!item || String(c.ITEM || '').toLowerCase().includes(item));
   });
@@ -528,46 +553,48 @@ export default function Custos() {
         <div className="spacer" />
         <div className="field" style={{ maxWidth: 150 }}>
           <label>Mês/Ano</label>
-          <select value={fMesAno} onChange={(e) => setFMesAno(e.target.value)}>
-            <option value="">Todos</option>
-            {mesesAno.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <SearchableSelect
+            value={fMesAno}
+            onChange={setFMesAno}
+            options={mesesAno}
+            placeholder="Todos..."
+          />
         </div>
         <div className="field" style={{ maxWidth: 180 }}>
           <label>Categoria</label>
-          <select
+          <SearchableSelect
             value={fCategoria}
-            onChange={(e) => { setFCategoria(e.target.value); setFSubcategoria(''); }}
-          >
-            <option value="">Todas</option>
-            {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+            onChange={(v) => { setFCategoria(v); setFSubcategoria(''); }}
+            options={categorias}
+            placeholder="Todas..."
+          />
         </div>
         <div className="field" style={{ maxWidth: 190 }}>
           <label>Subcategoria</label>
-          <input
-            list="custo-fsub-dl"
+          <SearchableSelect
             value={fSubcategoria}
-            onChange={(e) => setFSubcategoria(e.target.value)}
+            onChange={setFSubcategoria}
+            options={subcategorias}
             placeholder="Todas..."
           />
-          <datalist id="custo-fsub-dl">
-            {subcategorias.map((s) => <option key={s} value={s} />)}
-          </datalist>
         </div>
         <div className="field" style={{ maxWidth: 180 }}>
           <label>Fornecedor</label>
-          <select value={fFornecedor} onChange={(e) => setFFornecedor(e.target.value)}>
-            <option value="">Todos</option>
-            {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR}>{f.NOME_FORNECEDOR}</option>)}
-          </select>
+          <SearchableSelect
+            value={fFornecedor}
+            onChange={setFFornecedor}
+            options={fornecedorNomes}
+            placeholder="Todos..."
+          />
         </div>
         <div className="field" style={{ maxWidth: 150 }}>
           <label>Tag</label>
-          <select value={fTag} onChange={(e) => setFTag(e.target.value)}>
-            <option value="">Todas</option>
-            {tagsPresentes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <SearchableSelect
+            value={fTag}
+            onChange={setFTag}
+            options={tagsPresentes}
+            placeholder="Todas..."
+          />
         </div>
         <div className="field" style={{ maxWidth: 150 }}>
           <label>Nº Nota</label>
@@ -682,15 +709,12 @@ export default function Custos() {
 
           <div className="field" style={{ marginBottom: 12 }}>
             <label>Fornecedor</label>
-            <input
-              list="custo-forn-dl"
+            <SearchableSelect
               value={form.FORNECEDOR}
-              onChange={(e) => setForm({ ...form, FORNECEDOR: e.target.value })}
+              onChange={(v) => setForm({ ...form, FORNECEDOR: v })}
+              options={fornecedorNomes}
               placeholder="Selecionar ou digitar..."
             />
-            <datalist id="custo-forn-dl">
-              {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR} />)}
-            </datalist>
           </div>
 
           {/* Cascata Categoria → Subcategoria → Item (todos pesquisáveis por digitação) */}
@@ -709,15 +733,12 @@ export default function Custos() {
             </div>
             <div className="field">
               <label>Subcategoria</label>
-              <input
-                list="custo-sub-dl"
+              <SearchableSelect
                 value={form.SUB_CATEGORIA}
-                onChange={(e) => setSubcategoria(e.target.value)}
+                onChange={setSubcategoria}
+                options={subcatNomes}
                 placeholder={categoriaResolvida ? 'Selecionar ou digitar...' : 'Escolha a categoria (ou digite)'}
               />
-              <datalist id="custo-sub-dl">
-                {subcatsDaCategoria.map((s) => <option key={s.SUB_CATEGORIA} value={s.SUB_CATEGORIA} />)}
-              </datalist>
             </div>
           </div>
 
@@ -760,10 +781,20 @@ export default function Custos() {
           {exigeTag && (
             <div className="field" style={{ marginBottom: 12 }}>
               <label>Tag (obrigatória para folha)</label>
-              <select value={form.TAG} onChange={(e) => setForm({ ...form, TAG: e.target.value })}>
-                <option value="">Selecione...</option>
-                {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
-              </select>
+              <input
+                list="custo-tag-dl"
+                value={form.TAG}
+                onChange={(e) => setForm({ ...form, TAG: e.target.value })}
+                placeholder="Selecionar ou digitar..."
+              />
+              <datalist id="custo-tag-dl">
+                {tags.map((t) => <option key={t.UUID} value={t.TAG} />)}
+              </datalist>
+              {form.TAG.trim() && !tagResolvida && (
+                <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  Tag não encontrada — escolha uma tag cadastrada.
+                </p>
+              )}
             </div>
           )}
 
