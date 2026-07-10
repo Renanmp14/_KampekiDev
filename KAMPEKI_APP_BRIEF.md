@@ -1299,3 +1299,63 @@ O modal **"Importar NFS-e (PDF)"** (`ImportNfsePdfModal.jsx`, reescrito) agora:
 - **Pendente de teste manual** (não rodado por falta do `.env` com credenciais da Service Account, como nas sessões anteriores):
   - No **navegador** (`npm run dev`): selecionar vários PDFs, conferir a lista/edição, abrir um PDF em outra aba, "Importar todas" e ver o resumo (importadas/puladas/erros).
   - No **app empacotado** (`npm run dist` → instalar): confirmar que o link do PDF abre na **janela interna** do Electron (não é jogado para o navegador externo).
+
+---
+
+## Atualizações — 10/07/2026 — versão 1.3.1
+
+> Sessão de melhorias pedidas pelo gestor para a **v1.3.1** (build anterior entregue foi a 1.2.1): filtros mais ricos no lançamento de Custos e de Itens, tag de folha deixando de ser obrigatória, e edição em massa na página Itens. Versão do `desktop/package.json` subida para **1.3.1**.
+
+### Custos — filtro por Dia (aparece ao escolher Mês/Ano)
+Ao aplicar o filtro **Mês/Ano** na listagem de Custos, surge ao lado um filtro **Dia** (`SearchableSelect`) populado **apenas com os dias (DD) que têm custo lançado** naquele mês/ano. Trocar ou limpar o Mês/Ano reseta o dia automaticamente. Implementação 100% frontend (estado `fDia`, memo `diasDisponiveis`, predicado por `DATA_NOTA.split('/')[0]`).
+
+### Custos — opção "(sem tag)" no filtro de Tag
+O filtro de **Tag** ganhou a opção especial **"(sem tag)"** no topo (constante `SEM_TAG`), que filtra os custos **sem nenhuma tag** (`!c.TAG`). As demais opções continuam casando por trecho.
+
+### Custos — filtro de Subcategoria multi-seleção (chips)
+O filtro de **Subcategoria** passou de seleção única para **multi-seleção**: o `SearchableSelect` vira um "adicionador" (nova prop **`onPick`**, que dispara só na escolha — não a cada tecla) e as subcategorias escolhidas viram **chips removíveis**. O filtro passa a considerar **qualquer uma** das subcategorias marcadas (restritas à categoria escolhida). Estado `fSubcategoria` (string) → `fSubcats` (array); trocar a categoria zera a seleção.
+
+### Custos — Tag deixou de ser obrigatória na folha (frontend + backend)
+A tag na folha passou a ser **opcional** (antes era obrigatória e travava o salvamento). A tag continua disponível no formulário (e herda a do item), mas pode ficar em branco; só bloqueia se o usuário **digitar uma tag inexistente**.
+- **Backend (`custos.js` `montarLinha`):** removido o `throw 'TAG é obrigatória para categorias de folha'`; mantida a validação de que, **se informada**, a tag precisa existir na aba TAG.
+- **Frontend (`Custos.jsx`):** `validarLocal` só bloqueia tag digitada e não-resolvida; label "Tag (obrigatória para folha)" → **"Tag (opcional — folha)"**; payload envia a grafia canônica quando resolve, senão vazio.
+
+### Itens — edição em massa (igual à de Custos)
+A página **Itens** ganhou seleção por linha + "selecionar todos os filtrados" + barra **"Editar em massa"**, espelhando a de Custos. Campos editáveis em massa: **Subcategoria** e **Tag (folha)**.
+- **Backend:** novo **`itens.atualizarEmMassa({ ITEM_UUIDS, campo, valor })`** (lista branca `CAMPOS_MASSA = { SUB_CATEGORIA, TAG }`). Como **o item é a fonte da verdade**, a mudança **re-sincroniza os custos** dos itens afetados numa passada (lê ITENS/CUSTOS uma vez, `updateColumnForUuids` por coluna):
+  - `SUB_CATEGORIA`: valida a subcategoria (deriva a categoria), grava sub/cat nos itens **e em todos os custos** desses itens; se a nova categoria **não for de folha**, limpa a TAG (itens + custos).
+  - `TAG`: só vale para itens de **folha** (os não-folha são ignorados e reportados em `itensIgnorados`); grava a tag (ou vazio p/ limpar) nos itens de folha e sincroniza os custos.
+  - Rota `POST /itens/bulk`.
+- **Frontend (`Itens.jsx`):** checkbox por linha, barra de ações, modal de edição em massa (campo + valor), com mensagem de resultado (itens/custos sincronizados).
+
+### Itens — filtros de Subcategoria (multi) e "(sem tag)" — ajuste seguinte
+Logo em seguida, os mesmos dois filtros do Custos foram replicados na página **Itens**:
+- **Subcategoria multi-seleção** com chips (reusa `SearchableSelect` + `onPick`; estado `fSub` string → `fSubs` array; restrita à categoria; "Limpar filtros" e troca de categoria zeram).
+- Opção **"(sem tag)"** no filtro de Tag (mostra itens com `TAG` vazia — combinável com categoria/subcategoria para achar itens de folha a tagear).
+
+### Changelog técnico — 10/07/2026 (por arquivo)
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/custos.js` | `montarLinha`: tag de folha **opcional** (removido o throw de obrigatoriedade; mantida a checagem de tag existente quando informada). |
+| `src/services/itens.js` | Novo `atualizarEmMassa({ ITEM_UUIDS, campo, valor })` (SUB_CATEGORIA/TAG; re-sincroniza os custos dos itens; limpa tag ao virar não-folha) + `CAMPOS_MASSA`. |
+| `src/routes/itens.js` | Nova rota `POST /itens/bulk`. |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/components/SearchableSelect.jsx` | Nova prop `onPick(opt)` — dispara só na escolha (clique/Enter), permitindo usar o combo como "adicionador" de multi-seleção. |
+| `src/pages/Custos.jsx` | Filtro **Dia** (aparece com Mês/Ano; `diasDisponiveis`); Tag com opção **"(sem tag)"** (`SEM_TAG`/`tagOptions`); **Subcategoria multi** (`fSubcats` + chips, `addSubFiltro`/`removeSubFiltro`); tag de folha **opcional** (validação/label/payload). |
+| `src/pages/Itens.jsx` | **Edição em massa** (seleção, barra, modal, `atualizarEmMassa`); filtro **Subcategoria multi** (`fSubs` + chips) e opção **"(sem tag)"** na Tag. |
+| `src/api/resources.js` | Novo `itensApi.atualizarEmMassa(body)` (`POST /itens/bulk`). |
+| `src/styles.css` | Novas classes `.filtro-chips` / `.filtro-chip` (chips dos filtros multi-seleção). |
+| `desktop/package.json` | `version` 1.2.1 → **1.3.1**. |
+
+### Validação
+- Backend: `node --check` OK (`custos.js`, `itens.js`, `routes/itens.js`).
+- Frontend: `vite build` OK (1256 módulos; único aviso é o de tamanho de chunk, pré-existente).
+- **Não** houve escrita contra a planilha real (sem `.env`). **Pendente de teste manual**, com atenção especial à **edição em massa de Itens** (re-sincroniza custos) — testar num item de teste antes de aplicar em massa na base real.
+
+### Pendências em aberto
+- Gerar o instalador **1.3.1** (`npm run dist` em `desktop/`, roda `check-env` antes) e validar no PC do cliente (login + `v1.3.1` no rodapé). Herda o fix pendente da sidebar/rolagem @125% e o import de NFS-e em lote, ainda não empacotados num build entregue.
