@@ -1244,3 +1244,58 @@ Novo `frontend/src/components/SearchableSelect.jsx`: um combobox que **renderiza
 Feedback do gestor: em listas grandes (Fornecedor, Subcategoria) aparecia "+11 resultado(s) — refine a busca" e ele queria **ver todos os itens** de uma vez. Ajuste: o `maxVisible` do `SearchableSelect` passou de **50** para **`Infinity`** (valor padrão) — a lista agora mostra **todas** as opções que casam com a busca e **rola** dentro do dropdown; o aviso "+N resultado(s)" deixou de aparecer (não há mais corte). Vale para todos os campos que usam o combo. `vite build` OK.
 
 > Nota de performance: para uma lista muito grande (ex.: se o **Item**, ~2.700 opções, for migrado para o combo no futuro), renderizar tudo ao abrir pode gerar leve lentidão — candidato a virar lista **virtualizada** sem mudar a aparência. Fornecedor/Subcategoria/Categoria/Tag são tranquilos.
+
+---
+
+## Atualizações — 09/07/2026 — Importação de NFS-e (PDF) em lote (vários PDFs)
+
+> A pedido da cliente/gestor, o import de **NFS-e (PDF)** deixou de ser "um PDF por vez" e passou a aceitar **vários PDFs de uma vez**, com tela de conferência em lista (aceitar todas de uma vez **ou** ajustar item a item), link para abrir cada PDF em outra aba e a tabela compactada para caber sem rolagem horizontal. Sem alteração de versão do `desktop/package.json`.
+
+### Seleção múltipla + tela de conferência em lista
+O modal **"Importar NFS-e (PDF)"** (`ImportNfsePdfModal.jsx`, reescrito) agora:
+- Aceita **`multiple`** no seletor de arquivo; lê os PDFs **um a um** no navegador (mesmo `parseNfsePdf`, pdfjs-dist) com **indicador de progresso** ("Lendo PDF 3 de 10…"). Arquivos que falham na leitura são reportados sem derrubar o lote.
+- A conferência virou uma **lista compacta** (uma linha por PDF): Data · Nº · Fornecedor · Item · Valor · **Situação** · **Arquivo** · remover (✕).
+  - **Clicar na linha expande** um formulário editável daquela nota (mesmos campos de antes: Data/competência, Nº, Fornecedor, Item, Valor com Qtd=1) — permite **ajustar item a item**.
+  - **Situação** por linha via badges: `✓ pronta`, `⚠ Data/Valor inválido`, `⛔ já importada` (chave já em CUSTOS) ou `⛔ repetida no lote` (mesma chave em dois PDFs do próprio lote); indicadores `➕ novo` de fornecedor/item e `a classificar`.
+  - Rodapé com contador **"X de Y válida(s)"** + botão **"Importar todas (N)"** — a cliente pode **aceitar todos os prévios sem ajustar** ou revisar antes.
+- Tela final reaproveita o **`ImportResult`** (importadas, puladas, fornecedores/itens criados, a classificar, erros).
+
+### Backend em lote (uma passada só)
+- **`src/services/custos.js`** → novo **`importarNfseLote(notas)`**: mesma regra de negócio do unitário (`importarNfse` — QTD=1, `VALOR_UNIT=VALOR_TOTAL`, dedup por `CHAVE_NFE`, herda TAG do item, 2 casas), porém processando o lote **numa passada**: lê FORNECEDOR/ITENS/CUSTOS **uma vez** e faz **um append por aba** (padrão do `importarLoteXml`, bom p/ performance e orçamento de células). **Diferença vs. unitário:** nota com chave já existente — ou **repetida no próprio lote** — é **pulada e reportada** (`notasPuladasLista`), **não** bloqueia o restante (o 409 do unitário não se aplica ao lote). Linhas inválidas (sem item, valor/data inválidos) vão para `errosLista`.
+- **`src/routes/custos.js`** → nova rota **`POST /custos/import-nfse-lote`** `{ notas: [...] }`.
+- O envio unitário (`importarNfse` / `POST /custos/import-nfse`) **continua existindo** intacto.
+
+### "Abrir o PDF em outra aba" (conferência/validação)
+- Cada nota guarda o PDF original como **`blob:` URL** (`URL.createObjectURL`, revogada ao fechar o modal). A coluna **"📄 Arquivo"** (e um link na área expandida) **abre o PDF em outra aba** para conferir a origem em caso de erro/dúvida.
+- **`desktop/main.js` (Electron):** o `setWindowOpenHandler` mandava **todo** `target="_blank"` para o navegador externo (`shell.openExternal`) — e um `blob:` **não existe fora do renderer**, então o link quebraria no app empacotado. Agora URLs **`blob:`/`data:`** abrem numa **janela interna** do app com o **visualizador de PDF do Chromium ligado** (`webPreferences.plugins: true`); http(s) segue indo para o navegador externo como antes. Funciona tanto no dev (navegador) quanto no `.exe`.
+
+### Tabela de conferência compacta (sem rolagem horizontal)
+- Nova classe **`.nfse-conf`** em `styles.css` (aplicada ao `.table-wrap`): fonte 13→**12px**, cabeçalho 12→**11px**, padding das células 9×12→**4×6px**, inputs/labels/`kpi-value` da linha expandida menores.
+- Larguras de coluna apertadas no JSX (Fornecedor 180→130, Item 220→160, Arquivo 160→110, com reticências) para caber nos ~900px úteis do `modal-lg` sem barra horizontal. A **rolagem vertical** com muitos PDFs segue proposital (`.modal` tem `max-height: 90vh; overflow-y: auto`).
+
+### Changelog técnico — 09/07/2026 (por arquivo)
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/custos.js` | Novo `importarNfseLote(notas)` — import de vários PDFs numa passada (dedup por chave inclusive dentro do lote, cria fornecedor/item, item novo "a classificar", QTD=1, herda TAG, 2 casas; retorna `importados`/`notasPuladas`/`aClassificar`/`errosLista`). |
+| `src/routes/custos.js` | Nova rota `POST /custos/import-nfse-lote`. |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/components/ImportNfsePdfModal.jsx` | Reescrito: `multiple` + leitura em loop com progresso; conferência em **lista compacta** com expandir/editar por nota, badges de situação, coluna **Arquivo** (abre PDF em outra aba via `blob:` URL revogada no unmount), remover linha, "Importar todas (N)"; resultado via `ImportResult`. |
+| `src/api/resources.js` | Novo `custosApi.importarNfseLote(notas)` (`POST /custos/import-nfse-lote`). |
+| `src/styles.css` | Nova classe `.nfse-conf` (tabela de conferência compacta). |
+
+**Desktop**
+| Arquivo | O que mudou |
+|---|---|
+| `desktop/main.js` | `setWindowOpenHandler`: URLs `blob:`/`data:` abrem em janela interna (PDF viewer do Chromium, `plugins: true`); http(s) segue para o navegador externo. |
+
+### Validação
+- Backend: `node --check` OK (`custos.js`, `routes/custos.js`); `node --check desktop/main.js` OK.
+- Frontend: `vite build` OK (1256 módulos; único aviso é o de tamanho de chunk, pré-existente).
+- **Pendente de teste manual** (não rodado por falta do `.env` com credenciais da Service Account, como nas sessões anteriores):
+  - No **navegador** (`npm run dev`): selecionar vários PDFs, conferir a lista/edição, abrir um PDF em outra aba, "Importar todas" e ver o resumo (importadas/puladas/erros).
+  - No **app empacotado** (`npm run dist` → instalar): confirmar que o link do PDF abre na **janela interna** do Electron (não é jogado para o navegador externo).

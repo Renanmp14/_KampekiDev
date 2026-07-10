@@ -616,6 +616,125 @@ export async function importarNfse(payload) {
   };
 }
 
+/**
+ * Importa VÁRIAS NFS-e (PDF) num único lote — cada uma já extraída/normalizada e
+ * (opcionalmente) ajustada no frontend. 1 nota = 1 item = 1 custo, QTD = 1.
+ * `notas`: [{ chaveNfse, numNota, dataNota:'DD/MM/YYYY', fornecedor, item, valor }]
+ *
+ * Mesma regra do envio unitário (`importarNfse`), porém em UMA passada: lê
+ * FORNECEDOR/ITENS/CUSTOS uma única vez e faz um append por aba (bom p/ performance
+ * e para o orçamento de células). Diferença de comportamento vs. unitário: nota com
+ * CHAVE_NFE já existente (ou repetida no próprio lote) é PULADA e reportada — não
+ * bloqueia o restante do lote (o 409 do unitário não se aplica aqui).
+ */
+export async function importarNfseLote(notas) {
+  const lista = Array.isArray(notas) ? notas : [];
+  const [fornObjs, itemObjs, custoObjs] = await Promise.all([
+    getObjects('FORNECEDOR'), getObjects('ITENS'), getObjects('CUSTOS'),
+  ]);
+
+  const fornByNorm = new Map(fornObjs.map((f) => [norm(f.NOME_FORNECEDOR), f.NOME_FORNECEDOR]));
+  const itemByNorm = new Map(itemObjs.map((i) => [norm(i.DESCRICAO_ITEM), i]));
+  const chavesExistentes = new Set(
+    custoObjs.map((c) => String(c.CHAVE_NFE || '').trim()).filter(Boolean),
+  );
+
+  const novosForn = [];
+  const novosItens = [];
+  const novosCustos = [];
+  const itensAClassificarSet = new Set();
+  const notasPuladas = [];
+  const erros = [];
+
+  lista.forEach((nota, ni) => {
+    const ref = String(nota?.numNota || `#${ni + 1}`);
+    const chave = String(nota?.chaveNfse || '').trim();
+
+    // (1) Dedup por chave — nota já importada (ou repetida no lote) é pulada.
+    if (chave && chavesExistentes.has(chave)) {
+      notasPuladas.push({ chave, numNota: ref });
+      return;
+    }
+
+    const descricao = String(nota?.item || '').trim();
+    const valorNum = num(nota?.valor);
+    const dataStr = String(nota?.dataNota || '').trim();
+
+    if (!descricao) { erros.push({ nota: ref, motivo: 'Item é obrigatório' }); return; }
+    if (!Number.isFinite(valorNum) || valorNum < 0) { erros.push({ nota: ref, item: descricao, motivo: 'Valor inválido' }); return; }
+
+    let campos;
+    try {
+      campos = derivarCamposData(dataStr);
+    } catch (e) {
+      erros.push({ nota: ref, item: descricao, motivo: `Data inválida (${dataStr}): ${e.message}` });
+      return;
+    }
+
+    // (2) Fornecedor: cria se não existir (vazio → "Sem Fornecedor").
+    const fornNome = String(nota?.fornecedor || '').trim() || 'Sem Fornecedor';
+    const fkey = norm(fornNome);
+    let fornecedorNome = fornByNorm.get(fkey);
+    if (!fornecedorNome) {
+      fornecedorNome = fornNome;
+      fornByNorm.set(fkey, fornecedorNome);
+      novosForn.push([newUuid(), fornecedorNome]);
+    }
+
+    // (3) Item: usa classificação do sistema se houver; senão entra "a classificar".
+    const ikey = norm(descricao);
+    let item = itemByNorm.get(ikey);
+    if (!item) {
+      item = { DESCRICAO_ITEM: descricao, SUB_CATEGORIA: '', CATEGORIA: '', TAG: '' };
+      itemByNorm.set(ikey, item);
+      novosItens.push([newUuid(), descricao, '', '', '']);
+    }
+    if (itemSemClassificacao(item)) itensAClassificarSet.add(ikey);
+
+    const valorTotal = +valorNum.toFixed(2);
+
+    // Ordem CUSTOS: UUID, DATA_NOTA, NUM_NOTA, MES_ANO, MES_NUM, ANO, DIA_MES_ANO,
+    // FORNECEDOR, ITEM, SUB_CATEGORIA, CATEGORIA, QTD, VALOR_UNIT, VALOR_TOTAL, TAG, CHAVE_NFE
+    novosCustos.push([
+      newUuid(),
+      campos.DIA_MES_ANO,
+      String(nota?.numNota || 'Sem Nota'),
+      campos.MES_ANO,
+      campos.MES_NUM,
+      campos.ANO,
+      campos.DIA_MES_ANO,
+      fornecedorNome,
+      item.DESCRICAO_ITEM,
+      item.SUB_CATEGORIA || '',
+      item.CATEGORIA || '',
+      1, // QTD sempre 1
+      valorTotal, // VALOR_UNIT = VALOR_TOTAL
+      valorTotal,
+      String(item.TAG || '').trim(), // herda a tag do item (folha)
+      chave,
+    ]);
+
+    // Evita duplicar caso a mesma chave apareça duas vezes no mesmo lote.
+    if (chave) chavesExistentes.add(chave);
+  });
+
+  if (novosForn.length) { await appendRows('FORNECEDOR', novosForn); invalidate('fornecedores'); }
+  if (novosItens.length) { await appendRows('ITENS', novosItens); invalidate('itens'); }
+  if (novosCustos.length) { await appendRows(TAB, novosCustos); }
+
+  return {
+    recebidos: lista.length,
+    importados: novosCustos.length,
+    notasPuladas: notasPuladas.length,
+    notasPuladasLista: notasPuladas,
+    novosFornecedores: novosForn.length,
+    novosItens: novosItens.length,
+    aClassificar: itensAClassificarSet.size,
+    erros: erros.length,
+    errosLista: erros,
+  };
+}
+
 // Lista os itens que estão "a classificar" (sem subcategoria/categoria),
 // já com a contagem de custos pendentes (sem classificação) de cada um — útil
 // para o usuário priorizar quais classificar primeiro.

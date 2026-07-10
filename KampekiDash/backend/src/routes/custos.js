@@ -39,6 +39,16 @@ router.post('/import-nfse', async (req, res, next) => {
   }
 });
 
+// Importação de VÁRIAS NFS-e num lote (PDFs já extraídos/ajustados no frontend):
+// { notas: [ { chaveNfse, numNota, dataNota, fornecedor, item, valor } ] }
+// Notas com chave já existente são puladas e reportadas (não bloqueia o lote).
+router.post('/import-nfse-lote', async (req, res, next) => {
+  try {
+    const notas = Array.isArray(req.body?.notas) ? req.body.notas : [];
+    res.status(201).json(await service.importarNfseLote(notas));
+  } catch (e) { next(e); }
+});
+
 // Itens pendentes de classificação (sem subcategoria/categoria).
 router.get('/itens-a-classificar', async (req, res, next) => {
   try { res.json(await service.itensAClassificar()); } catch (e) { next(e); }

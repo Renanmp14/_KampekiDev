@@ -44,6 +44,8 @@ export const custosApi = {
   importarXml: (notas) => api.post('/custos/import-xml', { notas }),
   // NFS-e (PDF): { chaveNfse, numNota, dataNota, fornecedor, item, valor }
   importarNfse: (payload) => api.post('/custos/import-nfse', payload),
+  // Lote de NFS-e (vários PDFs): { notas: [ { chaveNfse, ... } ] }
+  importarNfseLote: (notas) => api.post('/custos/import-nfse-lote', { notas }),
   atualizarEmMassa: (body) => api.post('/custos/bulk', body),
   removerEmMassa: (uuids) => api.post('/custos/bulk-delete', { uuids }),
   itensAClassificar: () => api.get('/custos/itens-a-classificar'),

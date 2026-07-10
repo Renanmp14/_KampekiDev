@@ -72,8 +72,20 @@ function createWindow(url) {
   mainWindow.maximize();
   mainWindow.show();
   mainWindow.loadURL(url);
-  // Links externos abrem no navegador padrão, não dentro do app.
+  // Links externos abrem no navegador padrão, não dentro do app. Exceção: PDFs de
+  // conferência (import de NFS-e) são blob:/data: locais ao renderer — o navegador
+  // externo não os enxergaria, então abrem numa janela interna com o visualizador
+  // de PDF do Chromium ligado.
   mainWindow.webContents.setWindowOpenHandler(({ url: u }) => {
+    if (/^(blob:|data:)/i.test(u)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          webPreferences: { contextIsolation: true, nodeIntegration: false, plugins: true },
+        },
+      };
+    }
     shell.openExternal(u);
     return { action: 'deny' };
   });

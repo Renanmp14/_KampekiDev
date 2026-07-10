@@ -224,6 +224,15 @@ tbody tr:hover { background: var(--surface-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
+/* Import de NFS-e (PDF) — tabela de conferência compacta: fonte/paddings menores
+   para caber sem barra de rolagem horizontal mesmo com muitas colunas/notas. */
+.nfse-conf table { font-size: 12px; }
+.nfse-conf th, .nfse-conf td { padding: 4px 6px; }
+.nfse-conf th { font-size: 11px; }
+.nfse-conf .field label { font-size: 11px; margin-bottom: 2px; }
+.nfse-conf .field input { padding: 5px 8px; font-size: 12px; }
+.nfse-conf .kpi-value { font-size: 15px; }
+
 /* Coluna de ações fixada à direita (ex.: Custos) — o botão Excluir nunca some
    no scroll horizontal de tabelas largas. O fundo acompanha hover/seleção. */
 .sticky-actions th:last-child,
