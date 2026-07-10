@@ -17,6 +17,9 @@ import { brl, toNum, categoriaBadgeClass } from '../utils/format.js';
 const CATEGORIAS_FOLHA = ['FOLHA CANOAS', 'FOLHA POA', 'FOLHA TELE'];
 const isFolha = (cat) => CATEGORIAS_FOLHA.includes(String(cat || '').toUpperCase());
 
+// Opção especial do filtro de Tag: filtra os custos SEM nenhuma tag.
+const SEM_TAG = '(sem tag)';
+
 const emptyForm = {
   DATA_NOTA: '', NUM_NOTA: '', FORNECEDOR: '', ITEM_UUID: '',
   CATEGORIA: '', SUB_CATEGORIA: '',
@@ -162,8 +165,9 @@ export default function Custos() {
 
   // Filtros da listagem.
   const [fMesAno, setFMesAno] = useState('');
+  const [fDia, setFDia] = useState(''); // dia (DD) — só disponível com Mês/Ano escolhido
   const [fCategoria, setFCategoria] = useState('');
-  const [fSubcategoria, setFSubcategoria] = useState('');
+  const [fSubcats, setFSubcats] = useState([]); // multi-seleção de subcategorias
   const [fFornecedor, setFFornecedor] = useState('');
   const [fTag, setFTag] = useState('');
   const [fNota, setFNota] = useState('');
@@ -363,8 +367,9 @@ export default function Custos() {
     if (!form.ITEM_UUID) return itemText.trim() ? 'Crie o item novo (botão) ou selecione um existente' : 'Selecione o item';
     if (toNum(form.QTD) <= 0) return 'Quantidade inválida';
     if (toNum(form.VALOR_UNIT) < 0) return 'Valor unitário inválido';
-    if (exigeTag && !tagResolvida) {
-      return form.TAG.trim() ? 'Tag não cadastrada — selecione uma tag válida' : 'Selecione a tag (categoria de folha)';
+    // Tag OPCIONAL na folha: só bloqueia se digitou algo que não é tag válida.
+    if (exigeTag && form.TAG.trim() && !tagResolvida) {
+      return 'Tag não cadastrada — selecione uma tag válida ou deixe em branco';
     }
     return '';
   }
@@ -381,8 +386,8 @@ export default function Custos() {
     try {
       const payload = {
         ...form,
-        // Envia a tag na grafia canônica quando resolve; senão o texto digitado.
-        TAG: exigeTag ? (tagResolvida ? tagResolvida.TAG : form.TAG) : '',
+        // Tag opcional na folha: grafia canônica quando resolve; vazio se em branco.
+        TAG: exigeTag && tagResolvida ? tagResolvida.TAG : '',
         // Só envia total quando editado à mão; vazio = backend calcula QTD × V.Unit.
         VALOR_TOTAL: totalManual ? form.VALOR_TOTAL : '',
       };
@@ -421,7 +426,10 @@ export default function Custos() {
     () => [...new Set(custos.map((c) => c.CATEGORIA).filter(Boolean))].sort(),
     [custos],
   );
-  // Subcategorias presentes nos custos, restritas à categoria escolhida (se houver).
+  // Conjunto (normalizado) das subcategorias já escolhidas no filtro multi.
+  const fSubcatsSet = useMemo(() => new Set(fSubcats.map((s) => norm(s))), [fSubcats]);
+  // Subcategorias presentes nos custos, restritas à categoria escolhida (se houver)
+  // e sem as já selecionadas (que viram chips).
   const subcategorias = useMemo(() => {
     const cat = fCategoria.trim().toLowerCase();
     return [...new Set(
@@ -429,30 +437,57 @@ export default function Custos() {
         .filter((c) => !cat || String(c.CATEGORIA || '').toLowerCase().includes(cat))
         .map((c) => c.SUB_CATEGORIA)
         .filter(Boolean),
-    )].sort();
-  }, [custos, fCategoria]);
-  // Tags presentes nos custos.
+    )].filter((s) => !fSubcatsSet.has(norm(s))).sort();
+  }, [custos, fCategoria, fSubcatsSet]);
+  // Tags presentes nos custos (com a opção especial "(sem tag)" no topo).
   const tagsPresentes = useMemo(
     () => [...new Set(custos.map((c) => String(c.TAG || '').trim()).filter(Boolean))].sort(),
     [custos],
   );
+  const tagOptions = useMemo(() => [SEM_TAG, ...tagsPresentes], [tagsPresentes]);
+  // Dias (DD) com custo lançado no Mês/Ano filtrado — só faz sentido com Mês/Ano.
+  const diasDisponiveis = useMemo(() => {
+    const mes = fMesAno.trim().toLowerCase();
+    if (!mes) return [];
+    const set = new Set();
+    for (const c of custos) {
+      if (!String(c.MES_ANO || '').toLowerCase().includes(mes)) continue;
+      const d = String(c.DATA_NOTA || '').split('/')[0];
+      if (/^\d{2}$/.test(d)) set.add(d);
+    }
+    return [...set].sort((a, b) => +a - +b);
+  }, [custos, fMesAno]);
 
   const filtrados = custos.filter((c) => {
     const nota = fNota.trim().toLowerCase();
     const item = fItem.trim().toLowerCase();
-    const sub = fSubcategoria.trim().toLowerCase();
     const forn = fFornecedor.trim().toLowerCase();
     const mes = fMesAno.trim().toLowerCase();
     const cat = fCategoria.trim().toLowerCase();
-    const tag = fTag.trim().toLowerCase();
-    return (!mes || String(c.MES_ANO || '').toLowerCase().includes(mes))
-      && (!cat || String(c.CATEGORIA || '').toLowerCase().includes(cat))
-      && (!sub || String(c.SUB_CATEGORIA || '').toLowerCase().includes(sub))
-      && (!forn || String(c.FORNECEDOR || '').toLowerCase().includes(forn))
-      && (!tag || String(c.TAG || '').toLowerCase().includes(tag))
-      && (!nota || String(c.NUM_NOTA || '').toLowerCase().includes(nota))
-      && (!item || String(c.ITEM || '').toLowerCase().includes(item));
+    const tag = fTag.trim();
+    if (mes && !String(c.MES_ANO || '').toLowerCase().includes(mes)) return false;
+    if (fDia && String(c.DATA_NOTA || '').split('/')[0] !== fDia) return false;
+    if (cat && !String(c.CATEGORIA || '').toLowerCase().includes(cat)) return false;
+    // Multi-subcategoria: a subcategoria do custo precisa estar entre as escolhidas.
+    if (fSubcatsSet.size && !fSubcatsSet.has(norm(c.SUB_CATEGORIA))) return false;
+    if (forn && !String(c.FORNECEDOR || '').toLowerCase().includes(forn)) return false;
+    if (tag) {
+      if (tag === SEM_TAG) { if (String(c.TAG || '').trim()) return false; }
+      else if (!String(c.TAG || '').toLowerCase().includes(tag.toLowerCase())) return false;
+    }
+    if (nota && !String(c.NUM_NOTA || '').toLowerCase().includes(nota)) return false;
+    if (item && !String(c.ITEM || '').toLowerCase().includes(item)) return false;
+    return true;
   });
+
+  // Adiciona/remove subcategoria do filtro multi.
+  function addSubFiltro(v) {
+    const s = String(v || '').trim();
+    if (s && !fSubcatsSet.has(norm(s))) setFSubcats((prev) => [...prev, s]);
+  }
+  function removeSubFiltro(v) {
+    setFSubcats((prev) => prev.filter((s) => norm(s) !== norm(v)));
+  }
 
   const totalFiltrado = filtrados.reduce((s, c) => s + toNum(c.VALOR_TOTAL), 0);
 
@@ -555,28 +590,51 @@ export default function Custos() {
           <label>Mês/Ano</label>
           <SearchableSelect
             value={fMesAno}
-            onChange={setFMesAno}
+            onChange={(v) => { setFMesAno(v); setFDia(''); }}
             options={mesesAno}
             placeholder="Todos..."
           />
         </div>
+        {fMesAno.trim() && (
+          <div className="field" style={{ maxWidth: 110 }}>
+            <label>Dia</label>
+            <SearchableSelect
+              value={fDia}
+              onChange={setFDia}
+              options={diasDisponiveis}
+              placeholder="Todos..."
+              emptyText="Sem dias"
+            />
+          </div>
+        )}
         <div className="field" style={{ maxWidth: 180 }}>
           <label>Categoria</label>
           <SearchableSelect
             value={fCategoria}
-            onChange={(v) => { setFCategoria(v); setFSubcategoria(''); }}
+            onChange={(v) => { setFCategoria(v); setFSubcats([]); }}
             options={categorias}
             placeholder="Todas..."
           />
         </div>
-        <div className="field" style={{ maxWidth: 190 }}>
-          <label>Subcategoria</label>
+        <div className="field" style={{ maxWidth: 210 }}>
+          <label>Subcategoria {fSubcats.length > 0 ? `(${fSubcats.length})` : ''}</label>
           <SearchableSelect
-            value={fSubcategoria}
-            onChange={setFSubcategoria}
+            value=""
+            onPick={addSubFiltro}
+            onChange={() => {}}
             options={subcategorias}
-            placeholder="Todas..."
+            placeholder={fSubcats.length ? 'Adicionar outra...' : 'Todas...'}
           />
+          {fSubcats.length > 0 && (
+            <div className="filtro-chips">
+              {fSubcats.map((s) => (
+                <span key={s} className="filtro-chip">
+                  {s}
+                  <button type="button" onClick={() => removeSubFiltro(s)} title="Remover">×</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="field" style={{ maxWidth: 180 }}>
           <label>Fornecedor</label>
@@ -592,7 +650,7 @@ export default function Custos() {
           <SearchableSelect
             value={fTag}
             onChange={setFTag}
-            options={tagsPresentes}
+            options={tagOptions}
             placeholder="Todas..."
           />
         </div>
@@ -780,7 +838,7 @@ export default function Custos() {
 
           {exigeTag && (
             <div className="field" style={{ marginBottom: 12 }}>
-              <label>Tag (obrigatória para folha)</label>
+              <label>Tag (opcional — folha)</label>
               <input
                 list="custo-tag-dl"
                 value={form.TAG}

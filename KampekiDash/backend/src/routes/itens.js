@@ -42,6 +42,11 @@ router.post('/', async (req, res, next) => {
   try { res.status(201).json(await service.criar(req.body)); } catch (e) { next(e); }
 });
 
+// Edição em massa: { ITEM_UUIDS: [...], campo: 'SUB_CATEGORIA'|'TAG', valor }
+router.post('/bulk', async (req, res, next) => {
+  try { res.json(await service.atualizarEmMassa(req.body || {})); } catch (e) { next(e); }
+});
+
 // Importação em lote: { rows: [ { DESCRICAO_ITEM, SUB_CATEGORIA, CATEGORIA? } ] }
 router.post('/import', async (req, res, next) => {
   try {

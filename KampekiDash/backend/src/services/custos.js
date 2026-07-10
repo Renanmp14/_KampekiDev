@@ -72,10 +72,10 @@ async function montarLinha(uuid, payload) {
 
   let tag = '';
   if (exigeTag(item.CATEGORIA)) {
-    // Tag do lançamento; se não vier, herda a TAG cadastrada no item (folha).
+    // Tag do lançamento (OPCIONAL na folha); se não vier, herda a TAG cadastrada
+    // no item (folha). Quando informada, precisa existir na aba TAG.
     tag = String(TAG || '').trim() || String(item.TAG || '').trim();
-    if (!tag) throw new Error('TAG é obrigatória para categorias de folha');
-    if (!(await tagExiste(tag))) throw new Error('TAG não cadastrada');
+    if (tag && !(await tagExiste(tag))) throw new Error('TAG não cadastrada');
   }
 
   // Ordem das colunas: UUID, DATA_NOTA, NUM_NOTA, MES_ANO, MES_NUM, ANO,

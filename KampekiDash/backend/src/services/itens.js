@@ -105,6 +105,94 @@ export async function atualizar(uuid, payload) {
   };
 }
 
+// Campos permitidos na edição em massa de itens (lista branca).
+const CAMPOS_MASSA = new Set(['SUB_CATEGORIA', 'TAG']);
+
+/**
+ * Edição em massa de itens — espelha a de Custos, mas no cadastro de Itens.
+ * `{ ITEM_UUIDS, campo, valor }` com campo ∈ { SUB_CATEGORIA, TAG }.
+ *
+ * Como o item é a fonte da verdade, a mudança RE-SINCRONIZA os custos dos itens
+ * afetados (não só os "a classificar"):
+ *  - SUB_CATEGORIA: valida a subcategoria (deriva a categoria), grava sub/cat nos
+ *    itens e em TODOS os custos desses itens. Se a nova categoria não for de folha,
+ *    limpa a TAG (itens não-folha nunca têm tag) — nos itens e nos custos.
+ *  - TAG: só vale para itens de folha (os não-folha são ignorados). Grava a tag
+ *    (ou vazio p/ limpar) nos itens de folha selecionados e sincroniza os custos.
+ *
+ * Lê ITENS/CUSTOS uma vez e usa updateColumnForUuids (1 chamada por coluna).
+ */
+export async function atualizarEmMassa({ ITEM_UUIDS, campo, valor }) {
+  if (!Array.isArray(ITEM_UUIDS) || ITEM_UUIDS.length === 0) throw new Error('Nenhum item selecionado');
+  if (!CAMPOS_MASSA.has(campo)) throw new Error(`Campo não permitido: ${campo}`);
+
+  const [itens, custos] = await Promise.all([getObjects(TAB), getObjects('CUSTOS')]);
+  const alvo = new Set(ITEM_UUIDS);
+  const selecionados = itens.filter((i) => alvo.has(i.UUID));
+  if (!selecionados.length) throw new Error('Itens não encontrados');
+
+  if (campo === 'SUB_CATEGORIA') {
+    const sub = String(valor || '').trim().toUpperCase();
+    if (!sub) throw new Error('Subcategoria é obrigatória');
+    const categoria = categoriaDe(sub);
+    if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
+    const folha = exigeTag(categoria);
+
+    const itemUuids = selecionados.map((i) => i.UUID);
+    const descricoes = new Set(selecionados.map((i) => normalizar(i.DESCRICAO_ITEM)));
+
+    await updateColumnForUuids(TAB, 'SUB_CATEGORIA', itemUuids, sub);
+    await updateColumnForUuids(TAB, 'CATEGORIA', itemUuids, categoria);
+    // Categoria não-folha → item não pode ter tag: limpa nos itens que tinham.
+    if (!folha) {
+      const itensComTag = selecionados.filter((i) => String(i.TAG || '').trim()).map((i) => i.UUID);
+      if (itensComTag.length) await updateColumnForUuids(TAB, 'TAG', itensComTag, '');
+    }
+    invalidate(CACHE_KEY);
+
+    // Re-sincroniza TODOS os custos desses itens (sub/cat, e tag se virou não-folha).
+    const custosDoItem = custos.filter((c) => descricoes.has(normalizar(c.ITEM)));
+    let custosAtualizados = 0;
+    if (custosDoItem.length) {
+      const custoUuids = custosDoItem.map((c) => c.UUID);
+      await updateColumnForUuids('CUSTOS', 'SUB_CATEGORIA', custoUuids, sub);
+      await updateColumnForUuids('CUSTOS', 'CATEGORIA', custoUuids, categoria);
+      custosAtualizados = custoUuids.length;
+      if (!folha) {
+        const custosComTag = custosDoItem.filter((c) => String(c.TAG || '').trim()).map((c) => c.UUID);
+        if (custosComTag.length) await updateColumnForUuids('CUSTOS', 'TAG', custosComTag, '');
+      }
+    }
+    return {
+      itensAtualizados: itemUuids.length, campo, SUB_CATEGORIA: sub, CATEGORIA: categoria, custosAtualizados,
+    };
+  }
+
+  // campo === 'TAG' — só para itens de folha; vazio = limpar.
+  const tag = String(valor || '').trim();
+  if (tag && !(await tagExiste(tag))) throw new Error('TAG não cadastrada');
+  const folhaSel = selecionados.filter((i) => exigeTag(i.CATEGORIA));
+  if (!folhaSel.length) throw new Error('Nenhum item de folha selecionado (a tag só se aplica a itens de folha)');
+
+  const itemUuids = folhaSel.map((i) => i.UUID);
+  await updateColumnForUuids(TAB, 'TAG', itemUuids, tag);
+  invalidate(CACHE_KEY);
+
+  // Sincroniza os custos desses itens que estão com tag diferente do alvo.
+  const descricoes = new Set(folhaSel.map((i) => normalizar(i.DESCRICAO_ITEM)));
+  const alvoCustos = custos
+    .filter((c) => descricoes.has(normalizar(c.ITEM)) && String(c.TAG || '').trim() !== tag)
+    .map((c) => c.UUID);
+  let custosAtualizados = 0;
+  if (alvoCustos.length) {
+    await updateColumnForUuids('CUSTOS', 'TAG', alvoCustos, tag);
+    custosAtualizados = alvoCustos.length;
+  }
+  return {
+    itensAtualizados: itemUuids.length, campo, TAG: tag, custosAtualizados, itensIgnorados: selecionados.length - folhaSel.length,
+  };
+}
+
 /**
  * Reprocessa as TAGs nos custos a partir da TAG cadastrada em cada item — o custo
  * SEMPRE segue a tag do item (o item é a fonte da verdade).

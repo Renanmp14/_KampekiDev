@@ -34,6 +34,8 @@ export const itensApi = {
   criarSubcategoria: (body) => api.post('/itens/subcategorias', body),
   removerSubcategoria: (SUB_CATEGORIA) => api.post('/itens/subcategorias/remover', { SUB_CATEGORIA }),
   reprocessarTags: () => api.post('/itens/reprocessar-tags'),
+  // Edição em massa: { ITEM_UUIDS, campo: 'SUB_CATEGORIA'|'TAG', valor }
+  atualizarEmMassa: (body) => api.post('/itens/bulk', body),
   importar: (rows) => api.post('/itens/import', { rows }),
 };
 export const custosApi = {

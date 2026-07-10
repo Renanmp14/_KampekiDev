@@ -17,12 +17,15 @@ const norm = (s) => String(s || '')
  * props:
  *  - value: string atual
  *  - onChange(v): chamado ao digitar ou selecionar
+ *  - onPick(opt): chamado APENAS quando uma opção é escolhida (clique/Enter) —
+ *    útil para usar o combo como "adicionador" (multi-seleção via chips).
  *  - options: string[] (as opções)
  *  - placeholder, disabled, emptyText, maxVisible
  */
 export default function SearchableSelect({
   value = '',
   onChange,
+  onPick,
   options = [],
   placeholder = '',
   disabled = false,
@@ -71,7 +74,7 @@ export default function SearchableSelect({
   }
 
   function escolher(opt) {
-    onChange(opt);
+    if (onPick) onPick(opt); else onChange(opt);
     setQuery(opt);
     setTouched(false);
     setOpen(false);

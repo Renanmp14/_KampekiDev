@@ -6,11 +6,16 @@ import ImportModal from '../components/ImportModal.jsx';
 import ImportResult from '../components/ImportResult.jsx';
 import ClassificarItensModal from '../components/ClassificarItensModal.jsx';
 import SubcategoriasModal from '../components/SubcategoriasModal.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 import { parseItens } from '../utils/importParse.js';
 import { categoriaBadgeClass } from '../utils/format.js';
 
 const CATEGORIAS_FOLHA = ['FOLHA CANOAS', 'FOLHA POA', 'FOLHA TELE'];
 const isFolha = (cat) => CATEGORIAS_FOLHA.includes(String(cat || '').toUpperCase());
+
+// Opção especial do filtro de Tag: filtra os itens SEM nenhuma tag.
+const SEM_TAG = '(sem tag)';
+const norm = (s) => String(s || '').trim().toUpperCase();
 
 const emptyForm = { DESCRICAO_ITEM: '', SUB_CATEGORIA: '', TAG: '' };
 
@@ -30,9 +35,17 @@ export default function Itens() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Filtros combináveis: nome (texto), subcategoria, categoria e tag.
+  // Seleção / edição em massa.
+  const [selected, setSelected] = useState(() => new Set());
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkCampo, setBulkCampo] = useState('SUB_CATEGORIA');
+  const [bulkValor, setBulkValor] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  // Filtros combináveis: nome (texto), subcategorias (multi), categoria e tag.
   const [fNome, setFNome] = useState('');
-  const [fSub, setFSub] = useState('');
+  const [fSubs, setFSubs] = useState([]); // multi-seleção de subcategorias
   const [fCat, setFCat] = useState('');
   const [fTag, setFTag] = useState('');
 
@@ -49,24 +62,41 @@ export default function Itens() {
     [subcats],
   );
 
-  // Subcategorias visíveis no filtro: limitadas à categoria escolhida, se houver.
-  const subcatsFiltro = useMemo(
-    () => (fCat ? subcats.filter((s) => s.CATEGORIA === fCat) : subcats),
-    [subcats, fCat],
+  // Conjunto (normalizado) das subcategorias já escolhidas (viram chips).
+  const fSubsSet = useMemo(() => new Set(fSubs.map((s) => norm(s))), [fSubs]);
+  // Opções de subcategoria: limitadas à categoria escolhida (se houver) e sem as
+  // já selecionadas.
+  const subcatOptions = useMemo(
+    () => (fCat ? subcats.filter((s) => s.CATEGORIA === fCat) : subcats)
+      .map((s) => s.SUB_CATEGORIA)
+      .filter((s) => !fSubsSet.has(norm(s))),
+    [subcats, fCat, fSubsSet],
   );
 
   const filtrados = useMemo(() => {
     const q = fNome.trim().toLowerCase();
     return items.filter((it) => {
       if (q && !String(it.DESCRICAO_ITEM || '').toLowerCase().includes(q)) return false;
-      if (fSub && it.SUB_CATEGORIA !== fSub) return false;
+      if (fSubsSet.size && !fSubsSet.has(norm(it.SUB_CATEGORIA))) return false;
       if (fCat && it.CATEGORIA !== fCat) return false;
-      if (fTag && String(it.TAG || '') !== fTag) return false;
+      if (fTag) {
+        if (fTag === SEM_TAG) { if (String(it.TAG || '').trim()) return false; }
+        else if (String(it.TAG || '') !== fTag) return false;
+      }
       return true;
     });
-  }, [items, fNome, fSub, fCat, fTag]);
+  }, [items, fNome, fSubsSet, fCat, fTag]);
 
-  const filtroAtivo = fNome.trim() || fSub || fCat || fTag;
+  const filtroAtivo = fNome.trim() || fSubs.length || fCat || fTag;
+
+  // Adiciona/remove subcategoria do filtro multi.
+  function addSubFiltro(v) {
+    const s = String(v || '').trim();
+    if (s && !fSubsSet.has(norm(s))) setFSubs((prev) => [...prev, s]);
+  }
+  function removeSubFiltro(v) {
+    setFSubs((prev) => prev.filter((s) => norm(s) !== norm(v)));
+  }
 
   async function carregar() {
     setLoading(true);
@@ -155,6 +185,65 @@ export default function Itens() {
 
   const categoriaAtual = catMap[form.SUB_CATEGORIA] || '';
 
+  // --- Seleção em massa (persiste por UUID, respeita os filtros ativos) ------
+  const uuidsFiltrados = filtrados.map((i) => i.UUID);
+  const selecionadosVisiveis = uuidsFiltrados.filter((u) => selected.has(u));
+  const todosVisiveisSelecionados = uuidsFiltrados.length > 0
+    && selecionadosVisiveis.length === uuidsFiltrados.length;
+
+  function toggleUm(uuid) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(uuid)) next.delete(uuid); else next.add(uuid);
+      return next;
+    });
+  }
+  function toggleTodosVisiveis() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (todosVisiveisSelecionados) uuidsFiltrados.forEach((u) => next.delete(u));
+      else uuidsFiltrados.forEach((u) => next.add(u));
+      return next;
+    });
+  }
+  function limparSelecao() { setSelected(new Set()); }
+
+  function abrirBulk() {
+    setBulkCampo('SUB_CATEGORIA');
+    setBulkValor('');
+    setBulkError('');
+    setShowBulk(true);
+  }
+
+  async function aplicarBulk() {
+    setBulkError('');
+    if (bulkCampo === 'SUB_CATEGORIA' && !bulkValor) { setBulkError('Selecione a subcategoria'); return; }
+    setBulkSaving(true);
+    try {
+      const ITEM_UUIDS = [...selected];
+      const r = await itensApi.atualizarEmMassa({ ITEM_UUIDS, campo: bulkCampo, valor: bulkValor });
+      setShowBulk(false);
+      limparSelecao();
+      if (bulkCampo === 'SUB_CATEGORIA') {
+        setReprocMsg(
+          `${r.itensAtualizados} item(ns) → ${r.SUB_CATEGORIA} (${r.CATEGORIA}); `
+          + `${r.custosAtualizados} custo(s) sincronizado(s).`,
+        );
+      } else {
+        const alvo = r.TAG ? `tag "${r.TAG}"` : 'tag removida';
+        setReprocMsg(
+          `${r.itensAtualizados} item(ns) de folha → ${alvo}; ${r.custosAtualizados} custo(s) sincronizado(s)`
+          + `${r.itensIgnorados ? `; ${r.itensIgnorados} não-folha ignorado(s)` : ''}.`,
+        );
+      }
+      await carregar();
+    } catch (err) {
+      setBulkError(err.message);
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+
   return (
     <div>
       <h1 className="page-title">Itens</h1>
@@ -203,25 +292,37 @@ export default function Itens() {
             <label>Categoria</label>
             <select
               value={fCat}
-              onChange={(e) => { setFCat(e.target.value); setFSub(''); }}
+              onChange={(e) => { setFCat(e.target.value); setFSubs([]); }}
             >
               <option value="">Todas</option>
               {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div className="field">
-            <label>Subcategoria</label>
-            <select value={fSub} onChange={(e) => setFSub(e.target.value)}>
-              <option value="">Todas</option>
-              {subcatsFiltro.map((s) => (
-                <option key={s.SUB_CATEGORIA} value={s.SUB_CATEGORIA}>{s.SUB_CATEGORIA}</option>
-              ))}
-            </select>
+            <label>Subcategoria {fSubs.length > 0 ? `(${fSubs.length})` : ''}</label>
+            <SearchableSelect
+              value=""
+              onPick={addSubFiltro}
+              onChange={() => {}}
+              options={subcatOptions}
+              placeholder={fSubs.length ? 'Adicionar outra...' : 'Todas...'}
+            />
+            {fSubs.length > 0 && (
+              <div className="filtro-chips">
+                {fSubs.map((s) => (
+                  <span key={s} className="filtro-chip">
+                    {s}
+                    <button type="button" onClick={() => removeSubFiltro(s)} title="Remover">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="field">
             <label>Tag</label>
             <select value={fTag} onChange={(e) => setFTag(e.target.value)}>
               <option value="">Todas</option>
+              <option value={SEM_TAG}>(sem tag)</option>
               {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
             </select>
           </div>
@@ -229,7 +330,7 @@ export default function Itens() {
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => { setFNome(''); setFSub(''); setFCat(''); setFTag(''); }}
+              onClick={() => { setFNome(''); setFSubs([]); setFCat(''); setFTag(''); }}
             >
               Limpar filtros
             </button>
@@ -238,11 +339,28 @@ export default function Itens() {
       </div>
 
       <div className="card">
+        {selected.size > 0 && (
+          <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span className="muted">{selected.size} selecionado(s)</span>
+            <div className="row-actions" style={{ alignItems: 'center', gap: 8 }}>
+              <button className="btn btn-sm" onClick={abrirBulk}>Editar em massa</button>
+              <button className="btn btn-sm btn-ghost" onClick={limparSelecao}>Limpar seleção</button>
+            </div>
+          </div>
+        )}
         {loading ? <div className="empty">Carregando...</div> : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 36 }}>
+                    <input
+                      type="checkbox"
+                      checked={todosVisiveisSelecionados}
+                      onChange={toggleTodosVisiveis}
+                      title="Selecionar todos os filtrados"
+                    />
+                  </th>
                   <th>Descrição</th>
                   <th>Subcategoria</th>
                   <th>Categoria</th>
@@ -252,7 +370,14 @@ export default function Itens() {
               </thead>
               <tbody>
                 {filtrados.map((it) => (
-                  <tr key={it.UUID}>
+                  <tr key={it.UUID} className={selected.has(it.UUID) ? 'selected-row' : ''}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(it.UUID)}
+                        onChange={() => toggleUm(it.UUID)}
+                      />
+                    </td>
                     <td>{it.DESCRICAO_ITEM}</td>
                     <td>{it.SUB_CATEGORIA}</td>
                     <td><span className={categoriaBadgeClass(it.CATEGORIA)}>{it.CATEGORIA}</span></td>
@@ -266,7 +391,7 @@ export default function Itens() {
                   </tr>
                 ))}
                 {filtrados.length === 0 && (
-                  <tr><td colSpan={5} className="empty">
+                  <tr><td colSpan={6} className="empty">
                     {items.length === 0 ? 'Nenhum item.' : 'Nenhum item para os filtros.'}
                   </td></tr>
                 )}
@@ -339,6 +464,62 @@ export default function Itens() {
           onConfirm={() => excluir(confirm.UUID)}
           onCancel={() => setConfirm(null)}
         />
+      )}
+
+      {showBulk && (
+        <Modal
+          title={`Editar em massa (${selected.size} itens)`}
+          onClose={() => setShowBulk(false)}
+          footer={(
+            <>
+              <button className="btn btn-ghost" onClick={() => setShowBulk(false)} disabled={bulkSaving}>Cancelar</button>
+              <button className="btn" onClick={aplicarBulk} disabled={bulkSaving}>
+                {bulkSaving ? 'Aplicando...' : 'Aplicar a todos'}
+              </button>
+            </>
+          )}
+        >
+          <p className="muted" style={{ marginTop: 0 }}>
+            O valor escolhido é aplicado aos {selected.size} itens selecionados — e os
+            custos desses itens são sincronizados (o item é a fonte da verdade).
+          </p>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>Campo</label>
+            <select
+              value={bulkCampo}
+              onChange={(e) => { setBulkCampo(e.target.value); setBulkValor(''); setBulkError(''); }}
+            >
+              <option value="SUB_CATEGORIA">Subcategoria</option>
+              <option value="TAG">Tag (folha)</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>{bulkCampo === 'SUB_CATEGORIA' ? 'Nova subcategoria' : 'Nova tag'}</label>
+            {bulkCampo === 'SUB_CATEGORIA' ? (
+              <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
+                <option value="">Selecione...</option>
+                {subcats.map((s) => (
+                  <option key={s.SUB_CATEGORIA} value={s.SUB_CATEGORIA}>{s.SUB_CATEGORIA} — {s.CATEGORIA}</option>
+                ))}
+              </select>
+            ) : (
+              <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
+                <option value="">(limpar tag)</option>
+                {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
+              </select>
+            )}
+          </div>
+          {bulkCampo === 'TAG' ? (
+            <p className="muted" style={{ fontSize: 12 }}>
+              A tag só se aplica a itens de <b>folha</b>; itens de outras categorias na seleção são ignorados.
+            </p>
+          ) : (
+            <p className="muted" style={{ fontSize: 12 }}>
+              A categoria é derivada da subcategoria. Se a nova categoria não for de folha, a tag dos itens/custos afetados é limpa.
+            </p>
+          )}
+          {bulkError && <div className="error-msg">{bulkError}</div>}
+        </Modal>
       )}
 
       {showImport && (
