@@ -105,19 +105,30 @@ export function setSubcategoriasDinamicas(pares) {
   return dynamicMap;
 }
 
-// Lista combinada (fixas + dinâmicas), ordenada, para os selects do frontend.
+// A partir da v1.4.1 a aba SUBCATEGORIA é a fonte da verdade das subcategorias
+// (semeada com o mapa fixo no boot — ver services/subcategoria.js), o que permite
+// editar/mover/excluir inclusive as "fixas". O `categoriaMap` do código passa a
+// ser apenas a SEMENTE inicial + um fallback de resolução.
+
+// Lista as subcategorias (da aba, quando carregada), ordenada, para os selects.
 export function listarSubcategorias() {
-  const out = subCategorias.map((sub) => ({ SUB_CATEGORIA: sub, CATEGORIA: categoriaMap[sub] }));
-  for (const [sub, cat] of Object.entries(dynamicMap)) {
-    if (!categoriaMap[sub]) out.push({ SUB_CATEGORIA: sub, CATEGORIA: cat });
+  const dyn = Object.entries(dynamicMap);
+  if (dyn.length) {
+    return dyn
+      .map(([sub, cat]) => ({ SUB_CATEGORIA: sub, CATEGORIA: cat }))
+      .sort((a, b) => a.SUB_CATEGORIA.localeCompare(b.SUB_CATEGORIA));
   }
-  return out.sort((a, b) => a.SUB_CATEGORIA.localeCompare(b.SUB_CATEGORIA));
+  // Fallback: aba ainda não semeada/carregada — usa o mapa fixo do código.
+  return subCategorias
+    .map((sub) => ({ SUB_CATEGORIA: sub, CATEGORIA: categoriaMap[sub] }))
+    .sort((a, b) => a.SUB_CATEGORIA.localeCompare(b.SUB_CATEGORIA));
 }
 
 export function categoriaDe(subCategoria) {
   if (!subCategoria) return null;
   const key = String(subCategoria).trim().toUpperCase();
-  return categoriaMap[key] || dynamicMap[key] || null;
+  // Dinâmico (aba) primeiro — edições/movimentações prevalecem; código é fallback.
+  return dynamicMap[key] || categoriaMap[key] || null;
 }
 
 export function exigeTag(categoria) {

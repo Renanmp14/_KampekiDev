@@ -164,8 +164,8 @@ export default function Custos() {
   const [loading, setLoading] = useState(false);
 
   // Filtros da listagem.
-  const [fMesAno, setFMesAno] = useState('');
-  const [fDia, setFDia] = useState(''); // dia (DD) — só disponível com Mês/Ano escolhido
+  const [fMesAnos, setFMesAnos] = useState([]); // multi-seleção de Mês/Ano (chips)
+  const [fDia, setFDia] = useState(''); // dia (DD) — só disponível com 1 Mês/Ano escolhido
   const [fCategoria, setFCategoria] = useState('');
   const [fSubcats, setFSubcats] = useState([]); // multi-seleção de subcategorias
   const [fFornecedor, setFFornecedor] = useState('');
@@ -247,6 +247,12 @@ export default function Custos() {
     if (categoriaResolvida) return itens.filter((i) => norm(i.CATEGORIA) === norm(categoriaResolvida));
     return itens;
   }, [itens, subResolvida, categoriaResolvida]);
+  // Nomes de item para o combo (identidade ESTÁVEL entre teclas — evita que o
+  // SearchableSelect re-normalize milhares de itens a cada dígito).
+  const itemNomes = useMemo(
+    () => itensDisponiveis.map((i) => i.DESCRICAO_ITEM),
+    [itensDisponiveis],
+  );
   // Resolve o texto do item para um item existente da lista disponível.
   const resolveItem = (txt) => itensDisponiveis.find((i) => norm(i.DESCRICAO_ITEM) === norm(txt)) || null;
   // Há texto de item novo (não casa com nenhum existente) → habilita criar inline.
@@ -264,6 +270,19 @@ export default function Custos() {
   // passa a valer o que ele digitou.
   const valorTotal = totalManual ? toNum(form.VALOR_TOTAL) : valorCalculado;
 
+  // Reclassificação (item 4): ao editar um custo e escolher uma subcategoria
+  // diferente da classificação atual do item, a mudança afeta o ITEM e TODOS os
+  // lançamentos dele (item = fonte da verdade). `reclassificando` liga o aviso e
+  // o passo extra ao salvar.
+  const reclassificando = Boolean(
+    editing && editing !== 'novo' && itemSelecionado && subResolvida
+    && norm(subResolvida.SUB_CATEGORIA) !== norm(itemSelecionado.SUB_CATEGORIA),
+  );
+  const lancamentosDoItem = useMemo(() => {
+    if (!itemSelecionado) return 0;
+    return custos.filter((c) => norm(c.ITEM) === norm(itemSelecionado.DESCRICAO_ITEM)).length;
+  }, [custos, itemSelecionado]);
+
   function abrirNovo() {
     setForm(emptyForm);
     setItemText('');
@@ -273,20 +292,35 @@ export default function Custos() {
     setShowForm(true);
   }
 
-  // Cascata: trocar a categoria zera subcategoria/item; trocar a subcategoria zera o item.
+  // Novo lançamento: trocar a categoria zera subcategoria/item; trocar a
+  // subcategoria zera o item (cascata de escolha).
+  // Edição de um custo existente: a categoria/subcategoria passam a RECLASSIFICAR
+  // o item (o item permanece; a mudança vira reclassificação ao salvar).
+  const emEdicao = editing && editing !== 'novo' && Boolean(form.ITEM_UUID);
   function setCategoria(v) {
+    if (emEdicao) {
+      setForm((f) => ({ ...f, CATEGORIA: v, SUB_CATEGORIA: '', TAG: isFolha(v) ? f.TAG : '' }));
+      return;
+    }
     setForm((f) => ({ ...f, CATEGORIA: v, SUB_CATEGORIA: '', ITEM_UUID: '', TAG: '' }));
     setItemText('');
   }
   function setSubcategoria(v) {
     const s = subcats.find((x) => norm(x.SUB_CATEGORIA) === norm(v));
+    const cat = s ? s.CATEGORIA : form.CATEGORIA;
+    if (emEdicao) {
+      // Mantém o item; a subcategoria escolhida define a categoria e será aplicada
+      // ao item (e a todos os custos dele) ao salvar.
+      setForm((f) => ({ ...f, SUB_CATEGORIA: v, CATEGORIA: cat, TAG: isFolha(cat) ? f.TAG : '' }));
+      return;
+    }
     setForm((f) => ({
       ...f,
       SUB_CATEGORIA: v,
       // Subcategoria que resolve preenche a categoria canônica (mantém consistência).
-      CATEGORIA: s ? s.CATEGORIA : f.CATEGORIA,
+      CATEGORIA: cat,
       ITEM_UUID: '',
-      TAG: isFolha(s ? s.CATEGORIA : f.CATEGORIA) ? f.TAG : '',
+      TAG: isFolha(cat) ? f.TAG : '',
     }));
     setItemText('');
   }
@@ -384,6 +418,16 @@ export default function Custos() {
   async function confirmarSalvar() {
     setError('');
     try {
+      // Item 4: reclassificação. O item é a fonte da verdade — antes de salvar este
+      // custo, aplica a nova subcategoria ao ITEM e a TODOS os custos dele (cascata
+      // reaproveitando itens.atualizarEmMassa). Depois o custo é salvo já coerente.
+      if (reclassificando) {
+        await itensApi.atualizarEmMassa({
+          ITEM_UUIDS: [itemSelecionado.UUID],
+          campo: 'SUB_CATEGORIA',
+          valor: subResolvida.SUB_CATEGORIA,
+        });
+      }
       const payload = {
         ...form,
         // Tag opcional na folha: grafia canônica quando resolve; vazio se em branco.
@@ -418,9 +462,14 @@ export default function Custos() {
   }
 
   // Opções de filtro derivadas dos dados.
+  // Conjunto (normalizado) dos meses já escolhidos no filtro multi.
+  const fMesAnosSet = useMemo(() => new Set(fMesAnos.map((m) => norm(m))), [fMesAnos]);
+  // Meses/Ano presentes nos custos, sem os já selecionados (que viram chips).
   const mesesAno = useMemo(
-    () => [...new Set(custos.map((c) => c.MES_ANO).filter(Boolean))].sort(),
-    [custos],
+    () => [...new Set(custos.map((c) => c.MES_ANO).filter(Boolean))]
+      .filter((m) => !fMesAnosSet.has(norm(m)))
+      .sort(),
+    [custos, fMesAnosSet],
   );
   const categorias = useMemo(
     () => [...new Set(custos.map((c) => c.CATEGORIA).filter(Boolean))].sort(),
@@ -445,27 +494,28 @@ export default function Custos() {
     [custos],
   );
   const tagOptions = useMemo(() => [SEM_TAG, ...tagsPresentes], [tagsPresentes]);
-  // Dias (DD) com custo lançado no Mês/Ano filtrado — só faz sentido com Mês/Ano.
+  // Dias (DD) com custo lançado — só faz sentido com EXATAMENTE 1 Mês/Ano escolhido
+  // (dia entre meses diferentes seria ambíguo).
+  const mesUnico = fMesAnos.length === 1 ? norm(fMesAnos[0]) : '';
   const diasDisponiveis = useMemo(() => {
-    const mes = fMesAno.trim().toLowerCase();
-    if (!mes) return [];
+    if (!mesUnico) return [];
     const set = new Set();
     for (const c of custos) {
-      if (!String(c.MES_ANO || '').toLowerCase().includes(mes)) continue;
+      if (norm(c.MES_ANO) !== mesUnico) continue;
       const d = String(c.DATA_NOTA || '').split('/')[0];
       if (/^\d{2}$/.test(d)) set.add(d);
     }
     return [...set].sort((a, b) => +a - +b);
-  }, [custos, fMesAno]);
+  }, [custos, mesUnico]);
 
   const filtrados = custos.filter((c) => {
     const nota = fNota.trim().toLowerCase();
     const item = fItem.trim().toLowerCase();
     const forn = fFornecedor.trim().toLowerCase();
-    const mes = fMesAno.trim().toLowerCase();
     const cat = fCategoria.trim().toLowerCase();
     const tag = fTag.trim();
-    if (mes && !String(c.MES_ANO || '').toLowerCase().includes(mes)) return false;
+    // Multi-mês: o custo entra se o MES_ANO estiver entre os meses escolhidos.
+    if (fMesAnosSet.size && !fMesAnosSet.has(norm(c.MES_ANO))) return false;
     if (fDia && String(c.DATA_NOTA || '').split('/')[0] !== fDia) return false;
     if (cat && !String(c.CATEGORIA || '').toLowerCase().includes(cat)) return false;
     // Multi-subcategoria: a subcategoria do custo precisa estar entre as escolhidas.
@@ -487,6 +537,17 @@ export default function Custos() {
   }
   function removeSubFiltro(v) {
     setFSubcats((prev) => prev.filter((s) => norm(s) !== norm(v)));
+  }
+
+  // Adiciona/remove Mês/Ano do filtro multi. Trocar a quantidade de meses zera o
+  // filtro de Dia (que só vale com 1 mês).
+  function addMesFiltro(v) {
+    const m = String(v || '').trim();
+    if (m && !fMesAnosSet.has(norm(m))) { setFMesAnos((prev) => [...prev, m]); setFDia(''); }
+  }
+  function removeMesFiltro(v) {
+    setFMesAnos((prev) => prev.filter((m) => norm(m) !== norm(v)));
+    setFDia('');
   }
 
   const totalFiltrado = filtrados.reduce((s, c) => s + toNum(c.VALOR_TOTAL), 0);
@@ -586,16 +647,27 @@ export default function Custos() {
           </button>
         )}
         <div className="spacer" />
-        <div className="field" style={{ maxWidth: 150 }}>
-          <label>Mês/Ano</label>
+        <div className="field" style={{ maxWidth: 180 }}>
+          <label>Mês/Ano {fMesAnos.length > 0 ? `(${fMesAnos.length})` : ''}</label>
           <SearchableSelect
-            value={fMesAno}
-            onChange={(v) => { setFMesAno(v); setFDia(''); }}
+            value=""
+            onPick={addMesFiltro}
+            onChange={() => {}}
             options={mesesAno}
-            placeholder="Todos..."
+            placeholder={fMesAnos.length ? 'Adicionar outro...' : 'Todos...'}
           />
+          {fMesAnos.length > 0 && (
+            <div className="filtro-chips">
+              {fMesAnos.map((m) => (
+                <span key={m} className="filtro-chip">
+                  {m}
+                  <button type="button" onClick={() => removeMesFiltro(m)} title="Remover">×</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        {fMesAno.trim() && (
+        {mesUnico && (
           <div className="field" style={{ maxWidth: 110 }}>
             <label>Dia</label>
             <SearchableSelect
@@ -779,15 +851,13 @@ export default function Custos() {
           <div className="grid grid-2" style={{ marginBottom: 12 }}>
             <div className="field">
               <label>Categoria</label>
-              <input
-                list="custo-cat-dl"
+              <SearchableSelect
                 value={form.CATEGORIA}
-                onChange={(e) => setCategoria(e.target.value)}
+                onChange={setCategoria}
+                options={categoriasCad}
                 placeholder="Selecionar ou digitar..."
+                fixedMenu
               />
-              <datalist id="custo-cat-dl">
-                {categoriasCad.map((c) => <option key={c} value={c} />)}
-              </datalist>
             </div>
             <div className="field">
               <label>Subcategoria</label>
@@ -802,15 +872,13 @@ export default function Custos() {
 
           <div className="field" style={{ marginBottom: 12 }}>
             <label>Item</label>
-            <input
-              list="custo-item-dl"
+            <SearchableSelect
               value={itemText}
-              onChange={(e) => onItemText(e.target.value)}
+              onChange={onItemText}
+              options={itemNomes}
               placeholder="Digite para buscar o item..."
+              fixedMenu
             />
-            <datalist id="custo-item-dl">
-              {itensDisponiveis.map((i) => <option key={i.UUID} value={i.DESCRICAO_ITEM} />)}
-            </datalist>
             <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
               {subResolvida
                 ? `Buscando entre os itens da subcategoria ${subResolvida.SUB_CATEGORIA} (${itensDisponiveis.length}).`
@@ -835,6 +903,22 @@ export default function Custos() {
               </span>
             )}
           </div>
+
+          {reclassificando && (
+            <div
+              className="card"
+              style={{
+                marginBottom: 12, padding: '10px 12px',
+                borderLeft: '3px solid var(--down, #e0a800)',
+              }}
+            >
+              ⚠ <strong>Reclassificação:</strong> mudar para{' '}
+              <strong>{subResolvida.SUB_CATEGORIA}</strong> ({subResolvida.CATEGORIA}) vai
+              alterar o item <strong>“{itemSelecionado.DESCRICAO_ITEM}”</strong> (hoje em{' '}
+              {itemSelecionado.SUB_CATEGORIA || '—'}/{itemSelecionado.CATEGORIA || '—'}) e{' '}
+              <strong>todos os {lancamentosDoItem} lançamento(s)</strong> desse item — não só este.
+            </div>
+          )}
 
           {exigeTag && (
             <div className="field" style={{ marginBottom: 12 }}>
@@ -1042,6 +1126,7 @@ export default function Custos() {
             setQtdAClassificar(restantes);
             if (restantes === 0) setShowClassificar(false);
           }}
+          onSubcategoriasChanged={carregar}
         />
       )}
     </div>

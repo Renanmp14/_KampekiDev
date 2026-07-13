@@ -544,6 +544,7 @@ export default function Itens() {
             setQtdAClassificar(restantes);
             if (restantes === 0) setShowClassificar(false);
           }}
+          onSubcategoriasChanged={carregar}
         />
       )}
 

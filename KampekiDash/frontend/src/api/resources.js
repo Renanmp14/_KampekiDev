@@ -32,6 +32,8 @@ export const itensApi = {
   subcategoriasGestao: () => api.get('/itens/subcategorias-gestao'),
   categorias: () => api.get('/itens/categorias'),
   criarSubcategoria: (body) => api.post('/itens/subcategorias', body),
+  // { SUB_CATEGORIA (atual), NOVO_NOME, NOVA_CATEGORIA }
+  editarSubcategoria: (body) => api.post('/itens/subcategorias/editar', body),
   removerSubcategoria: (SUB_CATEGORIA) => api.post('/itens/subcategorias/remover', { SUB_CATEGORIA }),
   reprocessarTags: () => api.post('/itens/reprocessar-tags'),
   // Edição em massa: { ITEM_UUIDS, campo: 'SUB_CATEGORIA'|'TAG', valor }

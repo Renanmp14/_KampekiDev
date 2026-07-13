@@ -1408,3 +1408,82 @@ Logo em seguida, os mesmos dois filtros do Custos foram replicados na página **
 
 ### Pendências em aberto
 - Gerar o instalador **1.3.3** (`npm run dist` em `desktop/`, roda `check-env` antes) e validar no PC do cliente (login + `v1.3.3` no rodapé). Continua herdando o fix da sidebar/rolagem @125% e o import de NFS-e em lote, ainda não empacotados num build entregue ao cliente.
+
+---
+
+## Atualizações — 13/07/2026 — versão 1.4.1
+
+> Cinco frentes pedidas pelo cliente, com destaque para a subcategoria virar **editável/excluível de verdade** (a aba `SUBCATEGORIA` passou a ser a fonte da verdade). Versão do `desktop/package.json` subida para **1.4.1**.
+
+### 1 + 2 — Propagação da classificação / criação de subcategoria (refresh)
+Diagnóstico confirmado com o gestor: o item importado sem classe **já é** uma linha em `ITENS` (criado vazio na importação) e a fila "a classificar" é derivada de `ITENS`; classificar apenas **atualiza** essa linha. Então "entrar na tabela de item" já ocorre — faltava a **tela refletir**.
+- **Item classificado**: as telas Custos/Itens já recarregam ao **fechar** o modal (aparece na listagem com a classificação).
+- **Subcategoria criada dentro do "corrigir item"**: era o gap real — o `ClassificarItensModal` gravava no backend mas **não avisava a página-pai**. Novo callback **`onSubcategoriasChanged`** (disparado ao criar subcategoria no modal) faz Custos e Itens recarregarem na hora, então a subcategoria nova passa a aparecer imediatamente no **form de lançamento de item** e na tela **Subcategorias**.
+
+### 3 — Gestão de subcategorias: editar (nome/categoria) + excluir com cascata (inclusive as fixas)
+A aba **`SUBCATEGORIA` passou a ser a fonte da verdade** das subcategorias. No 1º boot após esta versão, uma **migração única** semeia na aba todas as subcategorias que antes viviam só no código (`categoriaMap`), controlada por um **marcador** em `SUBCATEGORIA!A2` (linha de notas) — assim a semeadura **não repete** em boots seguintes e **exclusões/renomeações persistem** (sem o marcador, uma fixa excluída ressuscitaria, pois ainda existe no código). `categoriaDe()`/`listarSubcategorias()` passaram a consultar o **dinâmico (aba) primeiro** e o código só como **fallback**.
+
+Na tela **Subcategorias** (página Itens), agora é possível para **qualquer** subcategoria (fixa do sistema ou personalizada):
+- **Editar** nome e/ou categoria (edição inline na linha). Ao salvar, o backend **reprocessa em cascata** todos os **itens** e **custos** daquela subcategoria para o novo nome/categoria; se a nova categoria não for de folha, **limpa a TAG** dos afetados. Colisão de nome é bloqueada.
+- **Excluir** — em vez de travar quando em uso, **desclassifica**: os itens e custos daquela subcategoria voltam a ficar **sem sub/categoria** (e sem tag) → reaparecem em "a classificar". O `ConfirmDialog` mostra quantos itens/custos serão afetados.
+- **Criar** — como antes (aponta para uma categoria fixa; categorias continuam **não** criáveis).
+
+> Nota: a flag "Sistema/Personalizada" ficou apenas **informativa** (não bloqueia mais nada).
+
+### 4 — Editar custo reclassifica o item inteiro (com aviso)
+No form de **edição** de um custo, trocar a **categoria/subcategoria** deixou de "resetar o item": agora **mantém o item** e vira uma **reclassificação**. Um aviso aparece no form — *"⚠ Reclassificação: mudar para SUB (CAT) vai alterar o item X e todos os N lançamento(s) dele — não só este"*. Ao salvar, a mudança é aplicada ao **item e a todos os custos dele** (reaproveitando `itens.atualizarEmMassa`, que já sincroniza sub/cat e trata a tag), e só então o custo é gravado — coerente com "o item é a fonte da verdade".
+
+### 5 — Filtro de Mês/Ano multi-seleção (chips)
+O filtro **Mês/Ano** da listagem de Custos virou **multi-seleção com chips** (igual ao de Subcategoria): `SearchableSelect` como adicionador (`onPick`) + chips removíveis; o custo entra se o `MES_ANO` estiver **entre** os meses escolhidos — permite avaliar vários meses juntos. O filtro **Dia** só aparece quando há **exatamente 1** mês selecionado (dia entre meses diferentes seria ambíguo).
+
+### 6 — Performance dos campos de busca (virtualização) — trava ao escolher o Item
+**Sintoma reportado:** no app desktop, o lançamento manual de custo **travava bastante** ao chegar no campo **Item**.
+
+**Causa:** o campo Item usava `<datalist>` **nativo** renderizando **todas** as opções (podem ser **10 mil+** itens) como `<option>` no DOM — o Chromium/Electron engasga ao montar/filtrar esse popup gigante. O `SearchableSelect` também renderizava **todas** as opções filtradas (sem virtualização) e, se o array de opções fosse recriado a cada tecla, **re-normalizava** dezenas de milhares de strings por keystroke.
+
+**Correção:**
+- **`SearchableSelect` virtualizado:** só as ~15–24 linhas visíveis (± overscan) vão ao DOM, com spacers no topo/base preservando a altura total (rolagem coerente) — mantém o "ver todos" que o gestor pediu, sem montar milhares de nós. As opções são **normalizadas uma única vez** (memo por identidade de `options`); filtrar reusa as strings normalizadas (busca por trecho, sem acento/caixa). Navegação por teclado com **scroll-into-view**. Validado em Node com **12k opções**: normalizar 21ms (uma vez), filtrar ~1,2ms/tecla, ~24 nós no DOM (0,2%).
+- **Campo Item e Categoria do form** migrados do `<datalist>` nativo para o `SearchableSelect` (com `fixedMenu`, pois o form é um modal). O array de nomes de item (`itemNomes`) é **memoizado** para ter identidade estável entre teclas (senão a normalização de milhares refaria a cada dígito).
+
+**Ajuste seguinte (feedback do cliente — a digitação ainda "engasgava" até achar o item):** a causa remanescente era que **cada tecla** disparava o `onChange` → o `onItemText` do pai roda `resolveItem` (normaliza ~10k itens) e a página Custos inteira re-renderiza e **re-filtra a lista de custos** (`filtrados`), por keystroke. Solução pedida pelo próprio cliente e implementada: **debounce** no `SearchableSelect` — o campo mostra o texto **na hora** (digitação fluida), mas o **filtro e o `onChange`** só disparam quando a pessoa **para de digitar** (prop `debounceMs`, padrão **500ms**). O trabalho pesado passa a rodar **uma vez na pausa**, não a cada tecla. Detalhes: `Enter` com filtro pendente **aplica o filtro na hora** (não seleciona sobre lista desatualizada); escolher/abrir/desmontar cancelam o timer pendente; todos os campos que usam `SearchableSelect` herdam o comportamento.
+
+**Correção — a lista não fechava ao clicar fora (só com Esc):** dentro do form de Custos (um `Modal`), a lista do `SearchableSelect` continuava aberta ao clicar em outro campo/fora, fechando só no `Esc` — dava para ver várias listas abertas ao mesmo tempo. Causa: o fechamento por clique-fora ouvia `mousedown` no `document` em fase de bolha, mas o `Modal` faz `onMouseDown` com **`stopPropagation`** no seu conteúdo, então o evento nunca chegava ao listener. Correção: registrar o listener na **fase de captura** (`addEventListener('mousedown', …, true)`), que roda antes do `stopPropagation` — a lista volta a fechar normalmente ao clicar em qualquer lugar fora dela (só uma aberta por vez), sem afetar a rolagem/seleção dentro da própria lista.
+
+> Recomendação de uso (registrada no próprio componente): sempre passar `options` com **identidade estável** (memoizado no pai). Os demais campos que já usam `SearchableSelect` (Fornecedor, Subcategoria, Tag, Mês) herdam o ganho automaticamente.
+
+### Changelog técnico — 13/07/2026 (por arquivo)
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/sheets.js` | Novos `getCellValue(a1)` / `setCellValue(a1, v)` — leitura/escrita de célula única (marcador de migração fora da área de dados). |
+| `src/utils/switch-categoria.js` | `categoriaDe()` e `listarSubcategorias()` passam a usar o mapa **dinâmico (aba) primeiro**, com o `categoriaMap` do código apenas como semente + fallback. |
+| `src/services/subcategoria.js` | `carregar()` faz a **migração única** (semeia as fixas na aba, marcador em `A2`). Novo `editar({SUB_CATEGORIA,NOVO_NOME,NOVA_CATEGORIA})` + helper `aplicarCascata()` (rename/move ou desclassificação em ITENS+CUSTOS via `updateCellsByUuid`, limpando TAG quando não-folha). `remover()` reescrito: **desclassifica** itens/custos em vez de bloquear. `criar()` sem o bloqueio de "fixa". `listarGestao()` mantém a flag `fixa` só como informação. |
+| `src/routes/itens.js` | Nova rota `POST /itens/subcategorias/editar`. |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/api/resources.js` | Novo `itensApi.editarSubcategoria(body)`. |
+| `src/components/SearchableSelect.jsx` | **Virtualização** da lista (só linhas visíveis + spacers), normalização das opções memoizada (uma vez), scroll-into-view no teclado — suporta 10k+ opções sem travar. **Debounce** (`debounceMs`, padrão **500ms**): digitação fluida; filtro/`onChange` só na pausa; `Enter` aplica o filtro pendente. **Fecha ao clicar fora** mesmo dentro de `Modal`: listener de `mousedown` em fase de **captura** (contorna o `stopPropagation` do modal). |
+| `src/components/SubcategoriasModal.jsx` | Edição inline (nome + categoria) para qualquer subcategoria; exclusão agora avisa quantos itens/custos voltam para "a classificar"; textos atualizados. |
+| `src/components/ClassificarItensModal.jsx` | Novo prop `onSubcategoriasChanged`, disparado ao criar subcategoria (propaga para a página-pai). |
+| `src/pages/Itens.jsx` | `onSubcategoriasChanged={carregar}` no `ClassificarItensModal`. |
+| `src/pages/Custos.jsx` | **Item 4**: `setCategoria`/`setSubcategoria` cientes de edição (mantêm o item), `reclassificando`/`lancamentosDoItem`, aviso no form e reclassificação (`itens.atualizarEmMassa`) no `confirmarSalvar`. **Item 5**: filtro de Mês multi (`fMesAnos` + chips + `addMesFiltro`/`removeMesFiltro`; `mesUnico`); Dia só com 1 mês. **Item 6 (perf)**: campos **Item** e **Categoria** do form migrados de `<datalist>` para `SearchableSelect` (`fixedMenu`); `itemNomes` memoizado. `onSubcategoriasChanged={carregar}` no modal. |
+| `desktop/package.json` | `version` 1.3.3 → **1.4.1**. |
+
+### Validação
+- Backend: `node --check` OK (`sheets.js`, `switch-categoria.js`, `subcategoria.js`, `routes/itens.js`).
+- Frontend: `vite build` OK (único aviso é o de tamanho de chunk, pré-existente).
+- **Performance** (item 6): lógica de filtro + janela virtual do `SearchableSelect` testada em Node com **12k opções** — normalizar 21ms (uma vez), filtrar ~1,2ms/tecla (busca sem acento OK), ~24 nós no DOM por vez (0,2%), altura total preservada.
+- **Não** houve execução contra a planilha real (sem `.env`). **Pendente de teste manual**, com atenção especial (mexem em dados em cascata):
+  - **Migração**: no 1º boot, conferir que a aba `SUBCATEGORIA` recebe as fixas e o marcador em `A2`; nos boots seguintes não re-semeia.
+  - **Editar subcategoria**: renomear/mover e conferir que itens+custos foram reprocessados (e tag limpa quando vira não-folha).
+  - **Excluir subcategoria**: itens/custos voltam para "a classificar" (sem sub/cat) e a subcategoria **não** ressuscita ao reiniciar.
+  - **Editar custo** com troca de subcategoria: confirmar o aviso e que o item + todos os lançamentos dele foram reclassificados.
+  - **Filtro multi-mês**: somar/avaliar vários meses; Dia aparece só com 1 mês.
+  - **Performance (item 6)**: no app desktop empacotado, abrir o combo de **Item** no lançamento manual com a base real (~10k) e confirmar que **não trava** ao abrir/digitar/rolar/selecionar.
+
+### Pendências em aberto
+- Gerar o instalador **1.4.1** (`npm run dist` em `desktop/`) e validar no PC do cliente (login + `v1.4.1` no rodapé). Segue herdando o fix da sidebar/rolagem @125% e o import de NFS-e em lote, ainda não empacotados num build entregue.
+- (Opcional) A flag "Sistema/Personalizada" na gestão de subcategorias ficou só informativa — avaliar se ainda faz sentido exibir agora que tudo é editável.

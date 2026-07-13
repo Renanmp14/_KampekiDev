@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampeki Finance — Notas da versão 1.4.1</title>
+<style>html{background:#0e1b18}@media(prefers-color-scheme:light){html{background:#efe7dd}}body{margin:0}.page{min-height:100vh}</style>
+</head>
+<body>
+<style>
+  :root{
+    /* Tema claro (areia/verde) — padrão */
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de;
+    --text:#173229; --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --ring:rgba(224,106,84,.45);
+    --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+      --muted:#9bb0a7; --border:#2a4e44;
+      --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+      --primary-soft:rgba(255,139,124,.14);
+      --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+      --ring:rgba(255,139,124,.5);
+      --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de; --text:#173229;
+    --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --ring:rgba(224,106,84,.45); --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+    --muted:#9bb0a7; --border:#2a4e44;
+    --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(255,139,124,.14);
+    --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+    --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    padding:clamp(20px,5vw,64px) 20px 72px;
+  }
+  .wrap{max-width:940px; margin:0 auto}
+  .eyebrow{
+    font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--teal); margin:0 0 14px;
+  }
+  h1{
+    font-size:clamp(2.3rem,6.4vw,3.7rem); line-height:1.02; font-weight:800;
+    letter-spacing:-.028em; text-wrap:balance; margin:0 0 18px;
+  }
+  h1 .accent{color:var(--primary)}
+  .lede{
+    font-size:clamp(1.05rem,2.4vw,1.28rem); color:var(--muted); max-width:60ch;
+    margin:0 0 26px;
+  }
+  .meta{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  .pill{
+    display:inline-flex; align-items:center; gap:8px; font-weight:700;
+    font-size:.82rem; padding:7px 13px; border-radius:999px;
+    border:1px solid var(--border); background:var(--surface);
+  }
+  .pill.version{background:var(--primary-fill); color:var(--primary-ink); border-color:transparent}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--olive)}
+  .mono{font-family:var(--mono)}
+
+  /* Marca no topo */
+  .brandbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:clamp(34px,7vw,64px)}
+  .wordmark{font-weight:800; letter-spacing:.26em; font-size:.82rem; text-transform:uppercase; color:var(--text)}
+  .wordmark span{color:var(--primary)}
+  .stamp{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+
+  /* Resumo */
+  .summary{margin:clamp(40px,7vw,68px) 0}
+  .sec-label{
+    font-size:12px; font-weight:700; letter-spacing:.15em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 18px; display:flex; align-items:center; gap:12px;
+  }
+  .sec-label::after{content:""; flex:1; height:1px; background:var(--border)}
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px}
+  .tile{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:18px 18px 20px; box-shadow:var(--shadow);
+  }
+  .tile .k{font-size:1.5rem; line-height:1}
+  .tile h4{margin:12px 0 6px; font-size:1rem; font-weight:700; letter-spacing:-.01em}
+  .tile p{margin:0; font-size:.9rem; color:var(--muted)}
+
+  /* Cartões de novidade */
+  .feature{
+    display:grid; grid-template-columns:1fr 1fr; gap:clamp(20px,4vw,44px);
+    align-items:center;
+    background:var(--surface); border:1px solid var(--border); border-radius:20px;
+    padding:clamp(22px,3.4vw,38px); box-shadow:var(--shadow);
+    margin:20px 0;
+  }
+  .feature.flip .copy{order:2}
+  .feature .tag{
+    display:inline-flex; align-items:center; gap:7px; font-size:.72rem; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--teal);
+    border:1px solid var(--border); border-radius:999px; padding:5px 11px; margin-bottom:16px;
+  }
+  .feature h3{font-size:clamp(1.28rem,2.6vw,1.6rem); font-weight:800; letter-spacing:-.02em; margin:0 0 12px; text-wrap:balance}
+  .feature p{margin:0 0 12px; color:var(--text)}
+  .feature p.why{color:var(--muted); font-size:.94rem}
+  .feature .why b{color:var(--text); font-weight:700}
+
+  /* Moldura de "screenshot" — sempre no visual escuro do app */
+  .shot{
+    border-radius:14px; overflow:hidden; border:1px solid #2a4e44;
+    background:#0f201c; box-shadow:0 20px 44px -26px rgba(0,0,0,.75);
+  }
+  .shot svg{display:block; width:100%; height:auto}
+  .shot .bar{
+    display:flex; align-items:center; gap:6px; padding:9px 12px;
+    background:#12251f; border-bottom:1px solid #23443b;
+  }
+  .shot .bar i{width:9px;height:9px;border-radius:50%;display:block;background:#2f5348}
+  .shot .bar i.c{background:#ff8b7c66}
+  .shot .bar b{margin-left:8px; font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:#7f958c; font-weight:700}
+
+  /* Seção menor (1.3.3) */
+  .minor{margin-top:clamp(44px,7vw,72px)}
+  .minor-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:22px 22px 24px; box-shadow:var(--shadow);
+  }
+  .card .tag{color:var(--olive)}
+  .card h4{margin:12px 0 8px; font-size:1.12rem; font-weight:800; letter-spacing:-.015em}
+  .card p{margin:0; color:var(--muted); font-size:.94rem}
+  .card .tag{
+    display:inline-flex; align-items:center; gap:7px; font-size:.7rem; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase;
+    border:1px solid var(--border); border-radius:999px; padding:4px 10px;
+  }
+
+  /* Como atualizar */
+  .howto{
+    margin-top:clamp(44px,7vw,72px);
+    background:linear-gradient(180deg,var(--surface),var(--surface-2));
+    border:1px solid var(--border); border-radius:20px; padding:clamp(24px,4vw,40px);
+    box-shadow:var(--shadow);
+  }
+  .howto h3{font-size:1.4rem; font-weight:800; letter-spacing:-.02em; margin:0 0 8px}
+  .howto p.sub{margin:0 0 22px; color:var(--muted)}
+  .steps{list-style:none; margin:0; padding:0; display:grid; gap:14px; counter-reset:s}
+  .steps li{display:flex; gap:14px; align-items:flex-start}
+  .steps li::before{
+    counter-increment:s; content:counter(s);
+    flex:none; width:30px; height:30px; border-radius:50%;
+    display:grid; place-items:center; font-weight:800; font-size:.9rem;
+    background:var(--primary-fill); color:var(--primary-ink);
+  }
+  .steps li b{font-weight:700}
+  .steps li span{color:var(--muted)}
+  .callout{
+    margin-top:20px; font-size:.9rem; color:var(--muted);
+    border-left:3px solid var(--teal); padding:4px 0 4px 14px;
+  }
+
+  footer.foot{margin-top:56px; padding-top:26px; border-top:1px solid var(--border); color:var(--muted); font-size:.85rem;
+    display:flex; flex-wrap:wrap; gap:10px 20px; justify-content:space-between; align-items:center}
+
+  a{color:var(--primary); text-decoration:none}
+  a:focus-visible, .pill:focus-visible{outline:3px solid var(--ring); outline-offset:2px; border-radius:6px}
+
+  @media (max-width:760px){
+    .feature{grid-template-columns:1fr}
+    .feature.flip .copy{order:0}
+    .minor-grid{grid-template-columns:1fr}
+  }
+
+  /* Entrada suave */
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0; transform:translateY(14px); animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+    .summary{animation-delay:.05s}
+    .feature:nth-of-type(odd){animation-delay:.02s}
+    @keyframes rise{to{opacity:1; transform:none}}
+  }
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <div class="brandbar">
+      <div class="wordmark">KAM<span>P</span>EKI · FINANCE</div>
+      <div class="stamp">Notas da versão</div>
+    </div>
+
+    <header class="reveal">
+      <p class="eyebrow">Atualização de 13 de julho de 2026</p>
+      <h1>Mais rápido de usar e <span class="accent">no seu controle</span>.</h1>
+      <p class="lede">
+        Esta atualização foca em duas coisas que você pediu: encontrar itens sem
+        travamento, mesmo com milhares deles, e ter total liberdade para organizar
+        suas subcategorias e corrigir classificações — sem retrabalho.
+      </p>
+      <div class="meta">
+        <span class="pill version"><span class="mono">v1.4.1</span></span>
+        <span class="pill"><span class="dot"></span>Inclui também a v1.3.3</span>
+        <span class="pill">Restaurante Kampeki</span>
+      </div>
+    </header>
+
+    <!-- RESUMO -->
+    <section class="summary reveal">
+      <p class="sec-label">Em resumo</p>
+      <div class="tiles">
+        <div class="tile">
+          <div class="k" style="color:var(--primary)">⚡</div>
+          <h4>Busca de item instantânea</h4>
+          <p>Digite à vontade: nada de travar, mesmo com 10 mil+ itens.</p>
+        </div>
+        <div class="tile">
+          <div class="k" style="color:var(--teal)">✎</div>
+          <h4>Gerencie subcategorias</h4>
+          <p>Criar, renomear, mudar de categoria e excluir — tudo por você.</p>
+        </div>
+        <div class="tile">
+          <div class="k" style="color:var(--olive)">↻</div>
+          <h4>Corrija de uma vez</h4>
+          <p>Reclassificar um item já ajusta todos os lançamentos dele.</p>
+        </div>
+        <div class="tile">
+          <div class="k" style="color:var(--sand)">▦</div>
+          <h4>Vários meses juntos</h4>
+          <p>Compare o custo de mais de um mês no mesmo filtro.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1.4.1 -->
+    <p class="sec-label reveal">Novidades da versão 1.4.1</p>
+
+    <!-- Performance -->
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Desempenho · Lançamento de custo</span>
+        <h3>Escolher o item ficou instantâneo</h3>
+        <p>
+          Ao lançar um custo, a busca de item agora responde na hora — mesmo quando
+          a lista tem <b>mais de 10 mil itens</b>. Você digita normalmente e a lista
+          filtra assim que você faz uma pausa; nada mais de tela “congelada” esperando.
+        </p>
+        <p class="why">
+          <b>Por baixo dos panos:</b> a lista mostra só o que cabe na tela e a busca
+          só roda quando você para de digitar — o esforço pesado deixou de acontecer
+          a cada letra.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Novo custo — Item</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <text x="26" y="40" fill="#8ea59c" font-family="system-ui" font-size="13" letter-spacing="1">ITEM</text>
+          <rect x="24" y="52" width="512" height="42" rx="9" fill="#17332b" stroke="#3a5f54"/>
+          <text x="40" y="79" fill="#e7ede9" font-family="system-ui" font-size="17">salm</text>
+          <rect x="126" y="63" width="2" height="20" fill="#ff8b7c"><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/></rect>
+          <!-- dropdown -->
+          <rect x="24" y="104" width="512" height="176" rx="11" fill="#132824" stroke="#2a4e44"/>
+          <rect x="30" y="110" width="500" height="38" rx="7" fill="#24443b"/>
+          <text x="44" y="134" fill="#ffd9d0" font-family="system-ui" font-size="15" font-weight="600">SALMÃO FRESCO</text>
+          <text x="44" y="174" fill="#dfe8e3" font-family="system-ui" font-size="15">SALMÃO CONGELADO</text>
+          <text x="44" y="212" fill="#dfe8e3" font-family="system-ui" font-size="15">SALMÃO DEFUMADO</text>
+          <text x="44" y="250" fill="#dfe8e3" font-family="system-ui" font-size="15">SALMÃO SELVAGEM</text>
+          <!-- pill instantâneo -->
+          <rect x="392" y="116" width="128" height="26" rx="13" fill="#ff8b7c22" stroke="#ff8b7c66"/>
+          <circle cx="410" cy="129" r="4" fill="#bfcb7f"/>
+          <text x="422" y="133" fill="#ffb9ad" font-family="system-ui" font-size="12" font-weight="700">resposta na hora</text>
+          <!-- scrollbar -->
+          <rect x="522" y="112" width="6" height="80" rx="3" fill="#3a5f54"/>
+        </svg>
+      </div>
+    </article>
+
+    <!-- Subcategorias -->
+    <article class="feature flip reveal">
+      <div class="copy">
+        <span class="tag">Itens · Subcategorias</span>
+        <h3>Suas subcategorias, do seu jeito</h3>
+        <p>
+          Na tela <b>Subcategorias</b> agora você pode <b>criar</b>, <b>renomear</b>,
+          <b>mudar a categoria</b> e <b>excluir</b> qualquer subcategoria — inclusive as
+          que já vinham prontas no sistema.
+        </p>
+        <p class="why">
+          Ao <b>renomear</b> ou trocar a categoria, todos os itens e lançamentos daquela
+          subcategoria são <b>corrigidos automaticamente</b>. Ao <b>excluir</b>, os itens
+          voltam para a fila de “a classificar”, para você reorganizar com calma.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Gerenciar subcategorias</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <!-- header -->
+          <text x="26" y="40" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1.5">SUBCATEGORIA</text>
+          <text x="250" y="40" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1.5">CATEGORIA</text>
+          <text x="430" y="40" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1.5">AÇÕES</text>
+          <line x1="24" y1="52" x2="536" y2="52" stroke="#23443b"/>
+          <!-- row normal -->
+          <text x="26" y="86" fill="#e7ede9" font-family="system-ui" font-size="15">HORTIFRUTI</text>
+          <rect x="250" y="72" width="58" height="24" rx="6" fill="#4f868f33" stroke="#4f868f66"/>
+          <text x="262" y="89" fill="#9fd0d6" font-family="system-ui" font-size="12" font-weight="700">CMV</text>
+          <rect x="404" y="70" width="58" height="28" rx="7" fill="#1e3d34" stroke="#3a5f54"/>
+          <text x="414" y="89" fill="#cfe0da" font-family="system-ui" font-size="12">Editar</text>
+          <rect x="470" y="70" width="62" height="28" rx="7" fill="#623232" stroke="#8a4a4a"/>
+          <text x="480" y="89" fill="#f0cdcd" font-family="system-ui" font-size="12">Excluir</text>
+          <!-- row em edição -->
+          <rect x="18" y="112" width="524" height="52" rx="9" fill="#17332b" stroke="#ff8b7c55"/>
+          <rect x="26" y="124" width="200" height="30" rx="7" fill="#0f201c" stroke="#3a5f54"/>
+          <text x="38" y="144" fill="#e7ede9" font-family="system-ui" font-size="14">CONGELADOS</text>
+          <rect x="250" y="124" width="120" height="30" rx="7" fill="#0f201c" stroke="#3a5f54"/>
+          <text x="262" y="144" fill="#e7ede9" font-family="system-ui" font-size="14">CMV ▾</text>
+          <rect x="404" y="123" width="58" height="30" rx="7" fill="#ff8b7c"/>
+          <text x="416" y="143" fill="#123029" font-family="system-ui" font-size="13" font-weight="700">Salvar</text>
+          <!-- row normal 2 -->
+          <text x="26" y="200" fill="#e7ede9" font-family="system-ui" font-size="15">FOLHA POA</text>
+          <rect x="250" y="186" width="118" height="24" rx="6" fill="#bfcb7f33" stroke="#bfcb7f66"/>
+          <text x="262" y="203" fill="#d6e0a8" font-family="system-ui" font-size="12" font-weight="700">FOLHA POA</text>
+          <rect x="404" y="184" width="58" height="28" rx="7" fill="#1e3d34" stroke="#3a5f54"/>
+          <text x="414" y="203" fill="#cfe0da" font-family="system-ui" font-size="12">Editar</text>
+          <rect x="470" y="184" width="62" height="28" rx="7" fill="#623232" stroke="#8a4a4a"/>
+          <text x="480" y="203" fill="#f0cdcd" font-family="system-ui" font-size="12">Excluir</text>
+          <text x="26" y="252" fill="#7f958c" font-family="system-ui" font-size="13">Renomear corrige itens e lançamentos automaticamente.</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- Reclassificar custo -->
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Lançamento de custo</span>
+        <h3>Corrija a classificação sem retrabalho</h3>
+        <p>
+          Ao editar um custo, se você trocar a subcategoria/categoria do item, o Kampeki
+          avisa que a mudança vale para <b>o item e todos os lançamentos dele</b> — e
+          aplica tudo de uma vez ao salvar.
+        </p>
+        <p class="why">
+          Assim o item continua sendo a <b>fonte da verdade</b>: você conserta num lugar
+          só e a base inteira fica coerente, sem sair caçando lançamento por lançamento.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Editar custo</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <text x="26" y="38" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1">SUBCATEGORIA</text>
+          <rect x="24" y="48" width="250" height="38" rx="8" fill="#17332b" stroke="#3a5f54"/>
+          <text x="38" y="72" fill="#e7ede9" font-family="system-ui" font-size="15">SALMÃO</text>
+          <text x="300" y="38" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1">CATEGORIA</text>
+          <rect x="298" y="48" width="238" height="38" rx="8" fill="#17332b" stroke="#3a5f54"/>
+          <text x="312" y="72" fill="#e7ede9" font-family="system-ui" font-size="15">CMV</text>
+          <!-- warning banner -->
+          <rect x="24" y="104" width="512" height="96" rx="12" fill="#e0a80014" stroke="#e0a80055"/>
+          <rect x="24" y="104" width="5" height="96" rx="2.5" fill="#e0a800"/>
+          <text x="46" y="136" fill="#f2c94c" font-family="system-ui" font-size="15" font-weight="700">⚠  Reclassificação</text>
+          <text x="46" y="164" fill="#dfe8e3" font-family="system-ui" font-size="14">Isto vai alterar o item “SALMÃO” e todos os</text>
+          <text x="46" y="186" fill="#dfe8e3" font-family="system-ui" font-size="14"><tspan fill="#ffb9ad" font-weight="700">12 lançamentos</tspan> desse item — não só este.</text>
+          <!-- buttons -->
+          <rect x="330" y="232" width="96" height="40" rx="9" fill="#1e3d34" stroke="#3a5f54"/>
+          <text x="352" y="257" fill="#cfe0da" font-family="system-ui" font-size="14">Cancelar</text>
+          <rect x="436" y="232" width="100" height="40" rx="9" fill="#ff8b7c"/>
+          <text x="452" y="257" fill="#123029" font-family="system-ui" font-size="14" font-weight="700">Salvar</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- Multi mês -->
+    <article class="feature flip reveal">
+      <div class="copy">
+        <span class="tag">Custos · Filtros</span>
+        <h3>Analise vários meses de uma vez</h3>
+        <p>
+          O filtro de <b>Mês/Ano</b> na lista de custos virou multi-seleção: escolha
+          quantos meses quiser e eles viram etiquetas. A lista passa a somar os
+          lançamentos de <b>todos os meses selecionados</b>.
+        </p>
+        <p class="why">
+          Perfeito para comparar um trimestre, uma temporada ou conferir um período
+          fechado sem trocar de mês o tempo todo.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Custos — filtros</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <text x="26" y="44" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1">MÊS/ANO (3)</text>
+          <rect x="24" y="56" width="300" height="40" rx="9" fill="#17332b" stroke="#3a5f54"/>
+          <text x="40" y="81" fill="#7f958c" font-family="system-ui" font-size="14">Adicionar outro…</text>
+          <!-- chips -->
+          <g font-family="system-ui" font-size="13" font-weight="600">
+            <rect x="24" y="112" width="112" height="34" rx="17" fill="#4f868f2e" stroke="#4f868f70"/>
+            <text x="42" y="134" fill="#bfe0e5">05/2026</text><text x="116" y="135" fill="#9fd0d6" font-size="16">×</text>
+            <rect x="146" y="112" width="112" height="34" rx="17" fill="#4f868f2e" stroke="#4f868f70"/>
+            <text x="164" y="134" fill="#bfe0e5">06/2026</text><text x="238" y="135" fill="#9fd0d6" font-size="16">×</text>
+            <rect x="268" y="112" width="112" height="34" rx="17" fill="#4f868f2e" stroke="#4f868f70"/>
+            <text x="286" y="134" fill="#bfe0e5">07/2026</text><text x="360" y="135" fill="#9fd0d6" font-size="16">×</text>
+          </g>
+          <!-- total -->
+          <line x1="24" y1="176" x2="536" y2="176" stroke="#23443b"/>
+          <text x="26" y="212" fill="#8ea59c" font-family="system-ui" font-size="13" letter-spacing="1">TOTAL NO PERÍODO</text>
+          <text x="26" y="250" fill="#ff8b7c" font-family="system-ui" font-size="30" font-weight="800">R$ 214.860,00</text>
+          <text x="330" y="250" fill="#7f958c" font-family="system-ui" font-size="14">3 meses · 1.204 lançamentos</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- Propagação (texto curto, sem mockup grande) -->
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Geral</span>
+        <h3>O que você cria aparece na hora</h3>
+        <p>
+          Criou uma subcategoria nova enquanto classificava itens? Agora ela já aparece
+          imediatamente nos formulários e na tela de subcategorias — sem precisar
+          recarregar ou fechar e abrir de novo.
+        </p>
+        <p class="why">
+          Pequeno detalhe, menos fricção: o app e a planilha ficam sempre em sintonia.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Sincronizado</b></div>
+        <svg viewBox="0 0 560 250" role="img">
+          <rect width="560" height="250" fill="#0f201c"/>
+          <rect x="30" y="42" width="220" height="166" rx="12" fill="#132824" stroke="#2a4e44"/>
+          <text x="48" y="72" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1">CLASSIFICAR ITENS</text>
+          <rect x="48" y="86" width="184" height="30" rx="7" fill="#17332b" stroke="#3a5f54"/>
+          <text x="60" y="106" fill="#e7ede9" font-family="system-ui" font-size="13">➕ Nova: TEMPEROS</text>
+          <rect x="48" y="126" width="120" height="26" rx="13" fill="#bfcb7f26" stroke="#bfcb7f66"/>
+          <text x="62" y="143" fill="#d6e0a8" font-family="system-ui" font-size="12" font-weight="700">criada ✓</text>
+          <!-- arrow -->
+          <path d="M262 125 h36 m-8 -7 l8 7 l-8 7" stroke="#ff8b7c" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="310" y="42" width="220" height="166" rx="12" fill="#132824" stroke="#2a4e44"/>
+          <text x="328" y="72" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1">LANÇAMENTO DE ITEM</text>
+          <rect x="328" y="86" width="184" height="30" rx="7" fill="#17332b" stroke="#3a5f54"/>
+          <text x="340" y="106" fill="#e7ede9" font-family="system-ui" font-size="13">Subcategoria ▾</text>
+          <rect x="328" y="126" width="184" height="26" rx="6" fill="#24443b"/>
+          <text x="340" y="144" fill="#ffd9d0" font-family="system-ui" font-size="13" font-weight="600">TEMPEROS</text>
+          <text x="340" y="180" fill="#7f958c" font-family="system-ui" font-size="12">já disponível aqui</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- 1.3.3 -->
+    <section class="minor reveal">
+      <p class="sec-label">Também nesta rodada — versão 1.3.3</p>
+      <div class="minor-grid">
+        <div class="card">
+          <span class="tag">Itens · Classificar</span>
+          <h4>Classifique vários itens de uma vez</h4>
+          <p>
+            Na tela de corrigir itens, dá para preencher a subcategoria de vários itens —
+            <b>cada um com a sua</b> — e confirmar todos juntos no botão “Classificar tudo”.
+            Continua valendo também classificar um a um ou vários com a mesma subcategoria.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag">Busca</span>
+          <h4>Campos de busca com a cara do Kampeki</h4>
+          <p>
+            As listas de escolha (fornecedor, subcategoria, item…) ganharam o visual do
+            app — mesma paleta, busca que ignora acento e maiúscula, e a lista fecha
+            certinho ao clicar fora.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMO ATUALIZAR -->
+    <section class="howto reveal">
+      <h3>Como atualizar</h3>
+      <p class="sub">É rápido e mantém todos os seus dados na planilha.</p>
+      <ol class="steps">
+        <li><span><b>Feche</b> o Kampeki Finance, se estiver aberto.</span></li>
+        <li><span><b>Rode o instalador</b> da nova versão (o arquivo enviado a você). Ele substitui a versão anterior.</span></li>
+        <li><span><b>Entre</b> com o mesmo login de sempre.</span></li>
+        <li><span>Confira no <b>rodapé do app</b> se aparece <span class="mono">v1.4.1</span>.</span></li>
+      </ol>
+      <p class="callout">
+        Seus lançamentos, itens e configurações continuam na planilha — a atualização
+        não apaga nada. Na primeira abertura, o app organiza a lista de subcategorias
+        automaticamente.
+      </p>
+    </section>
+
+    <footer class="foot">
+      <span>Kampeki Finance — notas da versão <span class="mono">1.4.1</span></span>
+      <span>13 de julho de 2026</span>
+    </footer>
+
+  </div>
+</div>
+</body>
+</html>

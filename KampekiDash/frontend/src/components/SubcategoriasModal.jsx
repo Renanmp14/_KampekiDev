@@ -26,6 +26,10 @@ export default function SubcategoriasModal({ onClose, onChanged }) {
   const [novaCat, setNovaCat] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Edição inline (nome + categoria).
+  const [editando, setEditando] = useState(null); // { SUB_CATEGORIA, nome, cat }
+  const [editSaving, setEditSaving] = useState(false);
+
   // Exclusão.
   const [confirmDel, setConfirmDel] = useState(null);
   const [delSaving, setDelSaving] = useState(false);
@@ -72,13 +76,46 @@ export default function SubcategoriasModal({ onClose, onChanged }) {
     }
   }
 
+  function abrirEdicao(s) {
+    setError(''); setInfo('');
+    setEditando({ SUB_CATEGORIA: s.SUB_CATEGORIA, nome: s.SUB_CATEGORIA, cat: s.CATEGORIA });
+  }
+
+  async function salvarEdicao() {
+    if (!editando) return;
+    if (!editando.nome.trim() || !editando.cat) { setError('Informe nome e categoria'); return; }
+    setError(''); setInfo('');
+    setEditSaving(true);
+    try {
+      const r = await itensApi.editarSubcategoria({
+        SUB_CATEGORIA: editando.SUB_CATEGORIA,
+        NOVO_NOME: editando.nome,
+        NOVA_CATEGORIA: editando.cat,
+      });
+      setEditando(null);
+      setInfo(
+        `Subcategoria salva como "${r.SUB_CATEGORIA}" (${r.CATEGORIA}); `
+        + `${r.itensAtualizados} item(ns) e ${r.custosAtualizados} custo(s) reprocessados.`,
+      );
+      await carregar();
+      if (onChanged) onChanged();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   async function excluir(sub) {
     setError(''); setInfo('');
     setDelSaving(true);
     try {
-      await itensApi.removerSubcategoria(sub.SUB_CATEGORIA);
+      const r = await itensApi.removerSubcategoria(sub.SUB_CATEGORIA);
       setConfirmDel(null);
-      setInfo(`Subcategoria "${sub.SUB_CATEGORIA}" excluída.`);
+      setInfo(
+        `Subcategoria "${sub.SUB_CATEGORIA}" excluída. `
+        + `${r.itensDesclassificados} item(ns) e ${r.custosDesclassificados} custo(s) voltaram para "a classificar".`,
+      );
       await carregar();
       if (onChanged) onChanged();
     } catch (e) {
@@ -97,9 +134,11 @@ export default function SubcategoriasModal({ onClose, onChanged }) {
       footer={<button className="btn" onClick={onClose}>Fechar</button>}
     >
       <p className="muted" style={{ marginTop: 0 }}>
-        Subcategorias fixas vêm do sistema e não podem ser excluídas. As
-        personalizadas ({personalizadas}) podem ser excluídas se não estiverem em uso.
-        Toda subcategoria aponta para uma categoria fixa.
+        Toda subcategoria aponta para uma categoria fixa. Você pode <strong>criar</strong>,
+        <strong> editar</strong> (nome/categoria) e <strong>excluir</strong> qualquer uma
+        ({personalizadas} personalizada(s), as demais são do sistema). Ao <strong>editar</strong>,
+        os itens e custos daquela subcategoria são reprocessados para o novo nome/categoria.
+        Ao <strong>excluir</strong>, eles voltam para “a classificar”.
       </p>
 
       <div className="card" style={{ padding: 12, marginBottom: 12 }}>
@@ -147,29 +186,72 @@ export default function SubcategoriasModal({ onClose, onChanged }) {
                 </tr>
               </thead>
               <tbody>
-                {filtrada.map((s) => (
-                  <tr key={s.SUB_CATEGORIA}>
-                    <td>{s.SUB_CATEGORIA}</td>
-                    <td><span className={categoriaBadgeClass(s.CATEGORIA)}>{s.CATEGORIA}</span></td>
-                    <td>
-                      <span className="muted">{s.fixa ? 'Fixa' : 'Personalizada'}</span>
-                    </td>
-                    <td className="num">{s.itens}</td>
-                    <td className="num">{s.custos}</td>
-                    <td>
-                      {!s.fixa && (
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => setConfirmDel(s)}
-                          disabled={s.itens > 0 || s.custos > 0}
-                          title={s.itens > 0 || s.custos > 0 ? 'Em uso — reclassifique antes de excluir' : 'Excluir subcategoria'}
-                        >
-                          Excluir
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtrada.map((s) => {
+                  const emEdicao = editando && editando.SUB_CATEGORIA === s.SUB_CATEGORIA;
+                  if (emEdicao) {
+                    return (
+                      <tr key={s.SUB_CATEGORIA} className="selected-row">
+                        <td>
+                          <input
+                            value={editando.nome}
+                            onChange={(e) => setEditando((ed) => ({ ...ed, nome: e.target.value }))}
+                            style={{ minWidth: 160 }}
+                            autoFocus
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={editando.cat}
+                            onChange={(e) => setEditando((ed) => ({ ...ed, cat: e.target.value }))}
+                          >
+                            {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </td>
+                        <td><span className="muted">{s.fixa ? 'Sistema' : 'Personalizada'}</span></td>
+                        <td className="num">{s.itens}</td>
+                        <td className="num">{s.custos}</td>
+                        <td>
+                          <div className="row-actions">
+                            <button className="btn btn-sm" onClick={salvarEdicao} disabled={editSaving}>
+                              {editSaving ? '...' : 'Salvar'}
+                            </button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setEditando(null)} disabled={editSaving}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={s.SUB_CATEGORIA}>
+                      <td>{s.SUB_CATEGORIA}</td>
+                      <td><span className={categoriaBadgeClass(s.CATEGORIA)}>{s.CATEGORIA}</span></td>
+                      <td><span className="muted">{s.fixa ? 'Sistema' : 'Personalizada'}</span></td>
+                      <td className="num">{s.itens}</td>
+                      <td className="num">{s.custos}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => abrirEdicao(s)}
+                            disabled={Boolean(editando)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => setConfirmDel(s)}
+                            disabled={Boolean(editando)}
+                            title="Excluir — os itens/custos voltam para “a classificar”"
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filtrada.length === 0 && (
                   <tr><td colSpan={6} className="empty">Nenhuma subcategoria.</td></tr>
                 )}
@@ -184,8 +266,12 @@ export default function SubcategoriasModal({ onClose, onChanged }) {
 
       {confirmDel && (
         <ConfirmDialog
-          message={`Excluir a subcategoria "${confirmDel.SUB_CATEGORIA}"?`}
-          confirmLabel={delSaving ? 'Excluindo...' : 'Excluir'}
+          message={
+            `Excluir a subcategoria "${confirmDel.SUB_CATEGORIA}"? `
+            + `${confirmDel.itens} item(ns) e ${confirmDel.custos} custo(s) que a usam `
+            + 'voltarão para "a classificar" (sem subcategoria/categoria).'
+          }
+          confirmLabel={delSaving ? 'Excluindo...' : 'Excluir e desclassificar'}
           onConfirm={() => excluir(confirmDel)}
           onCancel={() => setConfirmDel(null)}
         />

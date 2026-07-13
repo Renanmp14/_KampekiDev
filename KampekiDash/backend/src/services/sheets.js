@@ -111,6 +111,25 @@ export async function initSheets() {
   }
 }
 
+// Lê o valor de uma célula única (range A1, ex.: 'SUBCATEGORIA!A2'). '' se vazia.
+// Usado para marcadores de controle fora da área de dados (linha 2 = notas).
+export async function getCellValue(a1Range) {
+  const sheets = await getSheets();
+  const spreadsheetId = getSpreadsheetId();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: a1Range });
+  const v = res.data.values;
+  return v && v[0] && v[0][0] !== undefined ? v[0][0] : '';
+}
+
+// Grava o valor de uma célula única (range A1). RAW (texto literal).
+export async function setCellValue(a1Range, value) {
+  const sheets = await getSheets();
+  const spreadsheetId = getSpreadsheetId();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId, range: a1Range, valueInputOption: 'RAW', requestBody: { values: [[value]] },
+  });
+}
+
 // Lê as linhas de dados (a partir da linha 3) como matriz de valores.
 //
 // valueRenderOption=UNFORMATTED_VALUE: números (QTD, VALOR_UNIT, VALOR_TOTAL...)

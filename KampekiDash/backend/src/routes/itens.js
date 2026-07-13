@@ -24,7 +24,13 @@ router.post('/subcategorias', async (req, res, next) => {
   try { res.status(201).json(await subcategoria.criar(req.body || {})); } catch (e) { next(e); }
 });
 
-// Exclui uma subcategoria personalizada: { SUB_CATEGORIA }
+// Edita uma subcategoria (nome e/ou categoria), com cascata em itens/custos:
+// { SUB_CATEGORIA (atual), NOVO_NOME, NOVA_CATEGORIA }
+router.post('/subcategorias/editar', async (req, res, next) => {
+  try { res.json(await subcategoria.editar(req.body || {})); } catch (e) { next(e); }
+});
+
+// Exclui uma subcategoria (desclassifica itens/custos que a usavam): { SUB_CATEGORIA }
 router.post('/subcategorias/remover', async (req, res, next) => {
   try { res.json(await subcategoria.remover(req.body || {})); } catch (e) { next(e); }
 });

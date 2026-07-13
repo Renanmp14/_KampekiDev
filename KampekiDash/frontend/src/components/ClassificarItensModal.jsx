@@ -19,7 +19,7 @@ import { custosApi, itensApi } from '../api/resources.js';
  * Props: onClose, onChanged(restantes) — chamado a cada classificação com a
  * quantidade de pendentes restante.
  */
-export default function ClassificarItensModal({ onClose, onChanged }) {
+export default function ClassificarItensModal({ onClose, onChanged, onSubcategoriasChanged }) {
   const [itens, setItens] = useState([]);
   const [subcats, setSubcats] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -192,9 +192,11 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
     try {
       const criada = await itensApi.criarSubcategoria({ SUB_CATEGORIA: novaSub, CATEGORIA: novaCat });
       const subs = await itensApi.subcategorias();
-      setSubcats(subs); // a recém-criada já aparece nos selects
+      setSubcats(subs); // a recém-criada já aparece nos selects deste modal
       setNovaSub(''); setNovaCat(''); setNovaOpen(false);
       setError(`Subcategoria "${criada.SUB_CATEGORIA}" criada.`);
+      // Propaga para a página-pai (form de item, gestão de subcategorias) refletir na hora.
+      if (onSubcategoriasChanged) onSubcategoriasChanged();
     } catch (e) {
       setNovaErr(e.message);
     } finally {
