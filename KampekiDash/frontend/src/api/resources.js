@@ -53,5 +53,7 @@ export const custosApi = {
   itensAClassificar: () => api.get('/custos/itens-a-classificar'),
   classificar: (body) => api.post('/custos/classificar', body),
   classificarLote: (body) => api.post('/custos/classificar-lote', body),
+  // Lote com subcategorias variadas: { classificacoes: [{ ITEM_UUID, SUB_CATEGORIA }] }
+  classificarLoteVariado: (body) => api.post('/custos/classificar-lote-variado', body),
 };
 export const folhaApi = crud('/folha');

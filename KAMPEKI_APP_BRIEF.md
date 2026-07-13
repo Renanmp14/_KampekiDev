@@ -1359,3 +1359,52 @@ Logo em seguida, os mesmos dois filtros do Custos foram replicados na página **
 
 ### Pendências em aberto
 - Gerar o instalador **1.3.1** (`npm run dist` em `desktop/`, roda `check-env` antes) e validar no PC do cliente (login + `v1.3.1` no rodapé). Herda o fix pendente da sidebar/rolagem @125% e o import de NFS-e em lote, ainda não empacotados num build entregue.
+
+---
+
+## Atualizações — 13/07/2026 — versão 1.3.3
+
+> Sessão de melhorias no fluxo de **classificação de itens** (itens importados sem categoria/subcategoria), pedidas pelo cliente: (1) poder classificar vários itens com subcategorias **diferentes** e confirmar tudo de uma vez, e (2) padronizar o **visual** do campo de subcategoria com o da tela de Custos. Versão do `desktop/package.json` subida para **1.3.3** (build anterior era 1.3.1).
+
+### Classificar itens — "Classificar tudo" (subcategorias variadas por item)
+
+**Antes:** o modal "Classificar itens" tinha dois caminhos — **individual** (botão "Classificar" por linha) e **em massa com a MESMA subcategoria** (marca vários itens e aplica uma subcategoria a todos). Faltava o caso do cliente: ir preenchendo item a item com subcategorias **diferentes** e confirmar tudo no fim — ele era obrigado a clicar "Classificar" linha a linha, o que atrasava o cadastro em massa.
+
+**Agora** (mantendo os dois caminhos anteriores intactos): o cliente preenche o campo de subcategoria de várias linhas — **cada uma podendo ser diferente** — e um botão novo no rodapé **"Classificar tudo (N)"** comita todas de uma vez. O estado por linha (`sel`, ITEM_UUID → subcategoria) **persiste por UUID** enquanto ele busca/filtra, então dá para acumular ao longo de várias buscas. Cada linha com subcategoria válida ganha um indicador **✓ + categoria derivada** (verde) e entra na contagem `N` do botão.
+
+**Backend — performance (foco reforçado pelo gestor):** a classificação variada inteira roda em **2 leituras + 2 escritas**, independente de quantas subcategorias distintas — nada de uma chamada por item. Para isso, nova primitiva genérica `sheets.updateCellsByUuid(tab, updates)` grava várias células (campo/valor por UUID, variando por registro) num **único** `values.batchUpdate`. O serviço `custos.classificarItensLoteVariado({ classificacoes })` valida cada entrada (deriva a categoria da subcategoria pelo mapa fixo + dinâmico), grava os itens e faz o **back-fill** nos custos ainda sem classificação de cada item, com a sub/cat própria daquele item.
+
+### Classificar itens — visual do campo de subcategoria padronizado
+
+**Antes:** os campos de subcategoria do modal usavam `<input list>` + `<datalist>` **nativo** (popup renderizado pelo SO/Chromium — fundo azulado, destoando do tema verde da marca), diferente do filtro de subcategoria da tela de **Lançamento de Custo**, que usa o componente próprio `SearchableSelect`.
+
+**Agora:** os **dois** campos de subcategoria do modal (o de cada **linha** e o da **barra de massa**) usam o mesmo `SearchableSelect` — dropdown no tema da marca, busca sem acento/caixa, idêntico ao de Custos.
+
+**Detalhe técnico (evita corte do dropdown):** o `SearchableSelect` posiciona a lista de forma `absolute`, e dentro da **tabela rolável** do modal (`.table-wrap`/`.modal` com `overflow`) ela seria **cortada**. Foi adicionado um prop **opt-in `fixedMenu`** ao componente: quando ligado, a lista abre com `position: fixed` ancorada ao input (recalculando ao rolar/redimensionar, inclusive rolagem de contêineres internos via listener em modo *capture*), escapando do overflow sem cortar. Como é opt-in, os usos existentes na tela de Custos ficam **inalterados**.
+
+### Changelog técnico — 13/07/2026 (por arquivo)
+
+**Backend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/sheets.js` | Nova primitiva `updateCellsByUuid(tab, updates)` — grava várias células (campo/valor por UUID, variando por registro) numa única chamada `values.batchUpdate` (1 leitura p/ mapear UUID→linha + 1 escrita). |
+| `src/services/custos.js` | Novo `classificarItensLoteVariado({ classificacoes })` — classifica vários itens com subcategorias diferentes numa passada (valida/deriva categoria, grava itens e back-fill nos custos, tudo em 2 leituras + 2 escritas via `updateCellsByUuid`). Importa a nova primitiva. |
+| `src/routes/custos.js` | Nova rota `POST /custos/classificar-lote-variado` `{ classificacoes: [{ ITEM_UUID, SUB_CATEGORIA }] }`. |
+
+**Frontend**
+| Arquivo | O que mudou |
+|---|---|
+| `src/api/resources.js` | Novo `custosApi.classificarLoteVariado(body)` (`POST /custos/classificar-lote-variado`). |
+| `src/components/SearchableSelect.jsx` | Novo prop opt-in `fixedMenu` — lista ancorada ao input via `position: fixed`, reposicionando no scroll (capture) e resize; escapa de contêineres com overflow (tabela dentro de modal). Usos existentes inalterados. |
+| `src/components/ClassificarItensModal.jsx` | Botão de rodapé **"Classificar tudo (N)"** (memo `preenchidos` + handler `classificarTudo`); indicador ✓/categoria por linha; texto de ajuda com os 3 fluxos. Os dois campos de subcategoria (linha e massa) trocaram `<input list>`+`<datalist>` por `SearchableSelect` com `fixedMenu`; `datalist` antigo removido. |
+| `desktop/package.json` | `version` 1.3.1 → **1.3.3**. |
+
+### Validação
+- Backend: `node --check` OK (`sheets.js`, `custos.js`, `routes/custos.js`).
+- Frontend: `vite build` OK (único aviso é o de tamanho de chunk, pré-existente).
+- **Não** houve escrita contra a planilha real (sem `.env`, como nas sessões anteriores). **Pendente de teste manual** no navegador (`npm run dev` em `frontend/`):
+  - Preencher subcategorias **diferentes** em 2–3 itens → "Classificar tudo" → conferir a escrita na planilha (itens + back-fill nos custos).
+  - Abrir o dropdown de subcategoria numa linha do **meio/fim** da lista e confirmar que aparece por cima da tabela **sem cortar**.
+
+### Pendências em aberto
+- Gerar o instalador **1.3.3** (`npm run dist` em `desktop/`, roda `check-env` antes) e validar no PC do cliente (login + `v1.3.3` no rodapé). Continua herdando o fix da sidebar/rolagem @125% e o import de NFS-e em lote, ainda não empacotados num build entregue ao cliente.

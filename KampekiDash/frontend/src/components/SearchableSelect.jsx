@@ -21,6 +21,8 @@ const norm = (s) => String(s || '')
  *    útil para usar o combo como "adicionador" (multi-seleção via chips).
  *  - options: string[] (as opções)
  *  - placeholder, disabled, emptyText, maxVisible
+ *  - fixedMenu: quando true, a lista abre com position:fixed (ancorada ao input),
+ *    escapando de contêineres com overflow (ex.: tabela rolável dentro de modal).
  */
 export default function SearchableSelect({
   value = '',
@@ -31,6 +33,7 @@ export default function SearchableSelect({
   disabled = false,
   emptyText = 'Nenhuma opção',
   maxVisible = Infinity, // sem corte: mostra todas as opções (a lista rola)
+  fixedMenu = false,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -39,7 +42,9 @@ export default function SearchableSelect({
   // abertura fica igual esteja o campo vazio ou já preenchido.
   const [touched, setTouched] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [menuStyle, setMenuStyle] = useState(null); // posição fixed (fixedMenu)
   const wrapRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Só filtra depois que o usuário digita; antes disso, lista cheia.
   const filterText = touched ? query : '';
@@ -64,6 +69,27 @@ export default function SearchableSelect({
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
+
+  // Modo fixedMenu: ancora a lista ao input via position:fixed, recalculando ao
+  // rolar/redimensionar (inclusive rolagem de contêineres internos, via capture).
+  useEffect(() => {
+    if (!fixedMenu || !open) { setMenuStyle(null); return undefined; }
+    function reposicionar() {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setMenuStyle({
+        position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, right: 'auto',
+      });
+    }
+    reposicionar();
+    window.addEventListener('scroll', reposicionar, true);
+    window.addEventListener('resize', reposicionar);
+    return () => {
+      window.removeEventListener('scroll', reposicionar, true);
+      window.removeEventListener('resize', reposicionar);
+    };
+  }, [fixedMenu, open]);
 
   function abrir() {
     if (disabled) return;
@@ -107,6 +133,7 @@ export default function SearchableSelect({
   return (
     <div className="ss-wrap" ref={wrapRef}>
       <input
+        ref={inputRef}
         className="ss-input"
         value={display}
         onChange={onInput}
@@ -117,7 +144,7 @@ export default function SearchableSelect({
         autoComplete="off"
       />
       {open && (
-        <ul className="ss-list">
+        <ul className="ss-list" style={fixedMenu ? (menuStyle || undefined) : undefined}>
           {filtered.length === 0 && <li className="ss-empty">{emptyText}</li>}
           {filtered.map((opt, i) => (
             <li

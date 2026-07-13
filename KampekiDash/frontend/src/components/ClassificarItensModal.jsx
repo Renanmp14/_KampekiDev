@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
+import SearchableSelect from './SearchableSelect.jsx';
 import { custosApi, itensApi } from '../api/resources.js';
 
 /**
@@ -25,6 +26,7 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
   const [sel, setSel] = useState({}); // ITEM_UUID -> SUB_CATEGORIA (classificação individual)
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState('');
+  const [loteSaving, setLoteSaving] = useState(false); // "classificar tudo" (subcats variadas)
   const [loading, setLoading] = useState(true);
 
   // Busca e seleção em massa.
@@ -75,6 +77,14 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
     if (!q) return itens;
     return itens.filter((i) => String(i.DESCRICAO_ITEM || '').toLowerCase().includes(q));
   }, [itens, busca]);
+
+  // Itens com subcategoria preenchida e VÁLIDA (podendo ser diferente por item).
+  // Base do botão "Classificar tudo" — considera todos os pendentes (não só os
+  // visíveis), pois o `sel` persiste por UUID enquanto o usuário busca/navega.
+  const preenchidos = useMemo(
+    () => itens.filter((i) => resolveSub(sel[i.UUID])),
+    [itens, sel, subcats],
+  );
 
   // Mantém a seleção em massa coerente com o que está visível/pendente.
   const uuidsFiltrados = filtrados.map((i) => i.UUID);
@@ -146,6 +156,35 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
     }
   }
 
+  // Confirma de uma vez TODAS as linhas preenchidas — cada item com a sua própria
+  // subcategoria (podem ser diferentes entre si). Mantém a classificação
+  // individual e a em massa (mesma subcategoria) intactas.
+  async function classificarTudo() {
+    const classificacoes = preenchidos.map((i) => ({
+      ITEM_UUID: i.UUID,
+      SUB_CATEGORIA: resolveSub(sel[i.UUID]).SUB_CATEGORIA,
+    }));
+    if (!classificacoes.length) { setError('Preencha a subcategoria de ao menos um item'); return; }
+    setError('');
+    setLoteSaving(true);
+    try {
+      const r = await custosApi.classificarLoteVariado({ classificacoes });
+      const uuids = classificacoes.map((c) => c.ITEM_UUID);
+      // Limpa os valores já comitados e remove os itens da lista.
+      setSel((s) => {
+        const next = { ...s };
+        uuids.forEach((u) => delete next[u]);
+        return next;
+      });
+      removerDaLista(uuids);
+      setError(`${r.itensClassificados} item(ns) classificados (${r.custosAtualizados} custo(s) atualizados).`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoteSaving(false);
+    }
+  }
+
   async function criarSubcategoria() {
     if (!novaSub.trim() || !novaCat) { setNovaErr('Informe nome e categoria'); return; }
     setNovaErr('');
@@ -163,28 +202,34 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
     }
   }
 
-  // Opções compartilhadas pelo combo (input + datalist): escolher na lista ou
-  // digitar para filtrar rápido.
-  const subDatalist = (
-    <datalist id="subcats-classif-dl">
-      {subcats.map((s) => <option key={s.SUB_CATEGORIA} value={s.SUB_CATEGORIA} />)}
-    </datalist>
-  );
+  // Nomes das subcategorias para o combo pesquisável (mesmo visual do filtro de
+  // Custos — componente SearchableSelect).
+  const subNomes = useMemo(() => subcats.map((s) => s.SUB_CATEGORIA), [subcats]);
 
   return (
     <Modal
       className="modal-lg"
       title={`Classificar itens (${itens.length})`}
       onClose={onClose}
-      footer={<button className="btn" onClick={onClose}>Fechar</button>}
+      footer={(
+        <>
+          {preenchidos.length > 0 && (
+            <button className="btn" onClick={classificarTudo} disabled={loteSaving}>
+              {loteSaving ? 'Classificando...' : `Classificar tudo (${preenchidos.length})`}
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={onClose} disabled={loteSaving}>Fechar</button>
+        </>
+      )}
     >
       <p className="muted" style={{ marginTop: 0 }}>
         Itens importados sem categoria/subcategoria. Escolha a subcategoria (a
-        categoria é derivada) — individualmente ou marcando vários e aplicando de
-        uma vez. Ao classificar, todos os custos do item são corrigidos.
+        categoria é derivada) de três formas: <strong>individual</strong> (botão por
+        linha), <strong>em massa com a mesma subcategoria</strong> (marque vários e
+        aplique) ou preenchendo a subcategoria de várias linhas — mesmo que
+        diferentes — e usando <strong>“Classificar tudo”</strong> no rodapé. Ao
+        classificar, todos os custos do item são corrigidos.
       </p>
-
-      {subDatalist}
 
       <div className="row-actions" style={{ gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
         <div className="field" style={{ flex: '1 1 220px', margin: 0 }}>
@@ -234,11 +279,12 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
         >
           <div className="field" style={{ flex: '1 1 220px', margin: 0 }}>
             <label>{marcados.size} item(ns) marcado(s) → aplicar subcategoria</label>
-            <input
-              list="subcats-classif-dl"
+            <SearchableSelect
               value={subMassa}
-              onChange={(e) => setSubMassa(e.target.value)}
+              onChange={setSubMassa}
+              options={subNomes}
               placeholder="Selecionar ou digitar..."
+              fixedMenu
             />
           </div>
           <span className="muted" style={{ paddingBottom: 8 }}>
@@ -286,6 +332,7 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
               <tbody>
                 {filtrados.map((item) => {
                   const sub = sel[item.UUID] || '';
+                  const canon = resolveSub(sub);
                   return (
                     <tr key={item.UUID} className={marcados.has(item.UUID) ? 'selected-row' : ''}>
                       <td>
@@ -297,21 +344,23 @@ export default function ClassificarItensModal({ onClose, onChanged }) {
                       </td>
                       <td>{item.DESCRICAO_ITEM}</td>
                       <td className="num">{item.custos ?? 0}</td>
-                      <td>
-                        <input
-                          list="subcats-classif-dl"
+                      <td style={{ minWidth: 200 }}>
+                        <SearchableSelect
                           value={sub}
-                          onChange={(e) => setSel((s) => ({ ...s, [item.UUID]: e.target.value }))}
+                          onChange={(v) => setSel((s) => ({ ...s, [item.UUID]: v }))}
+                          options={subNomes}
                           placeholder="Selecionar ou digitar..."
-                          style={{ minWidth: 180 }}
+                          fixedMenu
                         />
                       </td>
-                      <td className="muted">{resolveSub(sub)?.CATEGORIA || '—'}</td>
+                      <td className={canon ? '' : 'muted'} style={canon ? { color: 'var(--up, #7fae5c)' } : undefined}>
+                        {canon ? `✓ ${canon.CATEGORIA}` : '—'}
+                      </td>
                       <td>
                         <button
                           className="btn btn-sm"
                           onClick={() => classificar(item)}
-                          disabled={!resolveSub(sub) || savingId === item.UUID}
+                          disabled={!canon || savingId === item.UUID}
                         >
                           {savingId === item.UUID ? '...' : 'Classificar'}
                         </button>

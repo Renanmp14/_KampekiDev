@@ -236,6 +236,40 @@ export async function updateColumnForUuids(tab, field, uuids, value) {
   return data.length;
 }
 
+// Atualiza VÁRIAS células (campo/valor por UUID, podendo variar o campo e o
+// valor a cada registro) em UMA única chamada à API (values.batchUpdate).
+// Lê a aba uma vez para mapear UUID → linha, monta os ranges e grava tudo de
+// uma vez — barato mesmo com muitos registros e valores diferentes.
+// `updates`: [{ uuid, field, value }]. Retorna quantas células foram escritas.
+export async function updateCellsByUuid(tab, updates) {
+  const lista = Array.isArray(updates) ? updates : [];
+  if (!lista.length) return 0;
+  const headers = TABS[tab];
+  const objs = await getObjects(tab);
+  const rowByUuid = new Map(objs.map((o) => [o.UUID, o._row]));
+  const colByField = new Map();
+  const data = [];
+  for (const { uuid, field, value } of lista) {
+    const row = rowByUuid.get(uuid);
+    if (row === undefined) continue; // registro não encontrado: ignora
+    let colIdx = colByField.get(field);
+    if (colIdx === undefined) {
+      colIdx = headers.indexOf(field);
+      if (colIdx < 0) throw new Error(`Campo desconhecido em ${tab}: ${field}`);
+      colByField.set(field, colIdx);
+    }
+    data.push({ range: `${tab}!${colLetter(colIdx)}${row}`, values: [[value]] });
+  }
+  if (!data.length) return 0;
+  const sheets = await getSheets();
+  const spreadsheetId = getSpreadsheetId();
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: { valueInputOption: 'USER_ENTERED', data },
+  });
+  return data.length;
+}
+
 // Localiza o número da linha (real) de um registro pelo UUID, ou null.
 export async function findRowByUuid(tab, uuid) {
   const objs = await getObjects(tab);

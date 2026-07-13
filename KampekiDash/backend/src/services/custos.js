@@ -1,6 +1,6 @@
 import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
-  deleteRowsByUuid, updateColumnForUuids,
+  deleteRowsByUuid, updateColumnForUuids, updateCellsByUuid,
 } from './sheets.js';
 import { invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
@@ -842,5 +842,75 @@ export async function classificarItensEmLote({ ITEM_UUIDS, SUB_CATEGORIA }) {
     SUB_CATEGORIA: sub,
     CATEGORIA: categoria,
     custosAtualizados: custoUuids.length,
+  };
+}
+
+/**
+ * Classificação em lote com subcategorias VARIADAS por item: cada item pode
+ * receber uma subcategoria diferente numa única confirmação (caso de uso: o
+ * usuário vai preenchendo item a item na tela — subcategorias diferentes — e no
+ * fim clica "Classificar tudo"). Complementa `classificarItensEmLote` (mesma
+ * subcategoria p/ vários) sem substituí-la.
+ *
+ * `classificacoes`: [{ ITEM_UUID, SUB_CATEGORIA }, ...]. A categoria é derivada
+ * da subcategoria (mapa fixo + dinâmico). Faz o back-fill nos custos ainda sem
+ * classificação de cada item, com a sub/cat própria daquele item.
+ *
+ * Performance: lê ITENS/CUSTOS uma única vez e grava TUDO em duas chamadas
+ * (um updateCellsByUuid para ITENS, outro para CUSTOS), independente de quantas
+ * subcategorias distintas — nada de uma chamada por item.
+ */
+export async function classificarItensLoteVariado({ classificacoes }) {
+  if (!Array.isArray(classificacoes) || classificacoes.length === 0) {
+    throw new Error('Nenhum item para classificar');
+  }
+
+  // Normaliza e valida cada entrada; deriva a categoria da subcategoria.
+  const alvoPorUuid = new Map(); // ITEM_UUID -> { sub, categoria }
+  for (const c of classificacoes) {
+    const uuid = String(c?.ITEM_UUID || '').trim();
+    const sub = String(c?.SUB_CATEGORIA || '').trim().toUpperCase();
+    if (!uuid || !sub) continue;
+    const categoria = categoriaDe(sub);
+    if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
+    alvoPorUuid.set(uuid, { sub, categoria });
+  }
+  if (!alvoPorUuid.size) throw new Error('Nenhuma classificação válida');
+
+  const [itens, custos] = await Promise.all([getObjects('ITENS'), getObjects('CUSTOS')]);
+  const itensByUuid = new Map(itens.map((i) => [i.UUID, i]));
+
+  // Monta as escritas dos itens e o alvo por descrição (para o back-fill).
+  const itensUpdates = [];
+  const alvoPorDescricao = new Map(); // norm(DESCRICAO_ITEM) -> { sub, categoria }
+  for (const [uuid, { sub, categoria }] of alvoPorUuid) {
+    const item = itensByUuid.get(uuid);
+    if (!item) continue; // item sumiu do cadastro: ignora
+    itensUpdates.push({ uuid, field: 'SUB_CATEGORIA', value: sub });
+    itensUpdates.push({ uuid, field: 'CATEGORIA', value: categoria });
+    alvoPorDescricao.set(norm(item.DESCRICAO_ITEM), { sub, categoria });
+  }
+  if (!itensUpdates.length) throw new Error('Itens não encontrados');
+
+  // Back-fill: custos desses itens que ainda estão sem classificação recebem a
+  // sub/cat do respectivo item.
+  const custosUpdates = [];
+  const custosAfetados = new Set();
+  for (const c of custos) {
+    if (!itemSemClassificacao(c)) continue;
+    const alvo = alvoPorDescricao.get(norm(c.ITEM));
+    if (!alvo) continue;
+    custosUpdates.push({ uuid: c.UUID, field: 'SUB_CATEGORIA', value: alvo.sub });
+    custosUpdates.push({ uuid: c.UUID, field: 'CATEGORIA', value: alvo.categoria });
+    custosAfetados.add(c.UUID);
+  }
+
+  await updateCellsByUuid('ITENS', itensUpdates);
+  if (custosUpdates.length) await updateCellsByUuid('CUSTOS', custosUpdates);
+  invalidate('itens');
+
+  return {
+    itensClassificados: alvoPorDescricao.size,
+    custosAtualizados: custosAfetados.size,
   };
 }

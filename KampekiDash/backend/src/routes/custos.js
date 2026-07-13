@@ -59,9 +59,15 @@ router.post('/classificar', async (req, res, next) => {
   try { res.json(await service.classificarItem(req.body || {})); } catch (e) { next(e); }
 });
 
-// Classificação em lote: { ITEM_UUIDS: [...], SUB_CATEGORIA }
+// Classificação em lote (mesma subcategoria p/ vários): { ITEM_UUIDS: [...], SUB_CATEGORIA }
 router.post('/classificar-lote', async (req, res, next) => {
   try { res.json(await service.classificarItensEmLote(req.body || {})); } catch (e) { next(e); }
+});
+
+// Classificação em lote com subcategorias variadas por item (o usuário preenche
+// item a item e confirma tudo): { classificacoes: [ { ITEM_UUID, SUB_CATEGORIA }, ... ] }
+router.post('/classificar-lote-variado', async (req, res, next) => {
+  try { res.json(await service.classificarItensLoteVariado(req.body || {})); } catch (e) { next(e); }
 });
 
 // Edição em massa: { uuids: [...], campo: 'TAG'|'FORNECEDOR', valor }
