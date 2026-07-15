@@ -14,6 +14,7 @@ import Saida from './pages/Saida.jsx';
 import DashCustos from './pages/dash/DashCustos.jsx';
 import DashFolha from './pages/dash/DashFolha.jsx';
 import DashPeriodo from './pages/dash/DashPeriodo.jsx';
+import DashAvancado from './pages/dash/DashAvancado.jsx';
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/dash/custos" element={<DashCustos />} />
         <Route path="/dash/folha" element={<DashFolha />} />
         <Route path="/dash/periodo" element={<DashPeriodo />} />
+        <Route path="/dash/avancado" element={<DashAvancado />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

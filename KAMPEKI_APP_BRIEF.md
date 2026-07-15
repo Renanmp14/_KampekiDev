@@ -1487,3 +1487,73 @@ O filtro **Mês/Ano** da listagem de Custos virou **multi-seleção com chips** 
 ### Pendências em aberto
 - Gerar o instalador **1.4.1** (`npm run dist` em `desktop/`) e validar no PC do cliente (login + `v1.4.1` no rodapé). Segue herdando o fix da sidebar/rolagem @125% e o import de NFS-e em lote, ainda não empacotados num build entregue.
 - (Opcional) A flag "Sistema/Personalizada" na gestão de subcategorias ficou só informativa — avaliar se ainda faz sentido exibir agora que tudo é editável.
+
+---
+
+## Atualizações — 14/07/2026 — versão 1.5.1 (em preparação)
+
+> Sessão focada em **dashboards e exportação de relatórios**, mais um ajuste de **login** no app desktop. Trabalho pedido "aos poucos", dash a dash. **Sem mudança de backend** em nenhum ponto (tudo frontend). A versão do `desktop/package.json` **ainda não foi subida** para `1.5.1` — só ao gerar o build.
+
+### Abertura do app (desktop) — login persistente
+**Problema:** o token JWT expira em 7 dias e não havia credencial salva, então o gestor redigitava usuário/senha a cada tanto. **Solução:** login persistente com auto-login opcional.
+- **`client.js`:** novos `saveCredentials` / `getCredentials` / `clearCredentials` (guardadas neste computador em base64 — **não é criptografia**; coerente com o modelo do app, que já leva o `.env` em texto puro no disco).
+- **`Login.jsx`:** checkbox **"Manter-me conectado neste computador"** (marcado por padrão). Ao abrir, se há credencial salva faz **auto-login silencioso** (mostra "Entrando…" e vai direto ao dashboard). Se a senha salva estiver errada (mudou no `.env`), limpa e volta ao form — sem loop.
+- **`Layout.jsx`:** o **"Sair"** agora limpa também a credencial salva (logout de verdade).
+
+### Dash Custos — relatório com quebra por mês
+Na exportação PDF, **"Composição por grupo"** e **"Custos por categoria"** saíam como um total único do período. Agora, quando o período tem **2+ meses e nenhum mês está selecionado**, ambos saem **separados mês a mês** (tabelas: mês nas linhas; grupos/categorias nas colunas; Subtotal + Total). Com 1 mês (ou mês clicado), mantém o formato de barras do total. Respeita o drill ativo.
+
+### Dash Custos — ver notas de um item
+Nova coluna **"Notas"** na tabela "Top N itens" com botão **📄 ver** → abre o **`NotasItemModal`**, listando **todas as notas em que o item aparece** (data, nº, fornecedor, total, chave NF-e) e **todos os itens de cada nota** (item, subcategoria, qtd, V. unit, V. total), com a linha do item destacada. Identidade da nota: `CHAVE_NFE` quando existe; senão fornecedor + nº + data.
+
+### Dash Custos — PDF: alinhamento + "Período anterior"
+- **Alinhamento:** o cabeçalho das colunas numéricas do `autoTable` ficava à esquerda enquanto os valores iam à direita. Novo hook **`rightAlignNumCols` (didParseCell)** força alinhamento à direita em **cabeçalho + corpo + rodapé** de todas as tabelas dos relatórios (Custos, Folha e Período). Nos gráficos de barras vetoriais (categoria/grupo), os valores passaram a ser **right-align** numa coluna fixa.
+- **Período anterior:** a tabela "Top N itens" no PDF ganhou a coluna **Período anterior** (faltava) + rótulo **`Coluna "Período anterior" refere-se a: MM/YYYY – MM/YYYY`** (a janela anterior de mesmo tamanho).
+
+### Visões avançadas — nova página na sidebar
+A análise **"Evolução de preço médio × quantidade"** nasceu como uma seção experimental no Dash Custos (junto de rascunhos de fornecedor/ABC/variações, depois descartados) e, por decisão de estrutura, virou uma **página própria**: **`/dash/avancado` (`DashAvancado.jsx`)**, na seção Dashboards da sidebar, como **hub** que pode crescer (e abraçar Folha no futuro) sem inchar os dashboards operacionais.
+- **A visão:** escolhe **Categoria → Subcategoria** (cascata; subcategoria opcional) e vê, mês a mês, o **preço médio ponderado** (Σ valor ÷ Σ quantidade, eixo esquerdo/coral) e a **quantidade pedida** (eixo direito/teal). Usa `QTD`/`VALOR_UNIT`, antes ignorados. Autocontida (seus próprios selects), respeitando só o filtro de período.
+- **Caveat na tela:** itens de unidades diferentes dentro do recorte são somados → leia como "preço médio por unidade pedida". O Dash Custos voltou a ficar enxuto (a seção experimental foi removida).
+
+### Dash Folha — 4 ajustes + flag
+1. **Tooltip branco:** os tooltips da pizza "Participação por Tag" **e** do gráfico "Evolução mensal" tinham texto escuro sobre fundo escuro (ilegível). Ajustados para **texto branco** (`#f1f3f5`) mantendo o fundo verde.
+2. **Cruzamento Tag × Categoria por mês:** botão **👁 Ver por mês** abre o **`CruzamentoMesModal`** (mesma tabela, **uma por mês** do período, cada uma com Subtotal + Total) com **exportação própria em PDF** (`exportarCruzamentoMensalFolha` → `cruzamento-folha-mensal-*.pdf`). Respeita os filtros ativos.
+3. **Multi-tag (filtro real):** o filtro de Tag virou **multi-seleção** (adicionador + chips). Deixou de ser um "drill que mantinha tudo visível" e passou a **filtrar na base** — agora **todas** as visões (pizza, Subtotal por Tag/Item, cruzamento, KPIs e **PDF**) refletem só as tags escolhidas. Clicar na fatia/linha adiciona/remove a tag. (Corrige o problema de o PDF/tabela mostrarem todas as tags mesmo com filtro.)
+4. **Flag "Ocultar folha sem tag":** checkbox no topo (padrão desligado). Ligado, descarta os lançamentos **sem tag** de **todas** as visões (filtra na base), unificando o comportamento (antes a pizza já ignorava, mas KPIs/cruzamento incluíam).
+5. **Correção — linha "(sem tag)" no cruzamento:** o refactor de multi-tag introduziu um `.filter(Boolean)` que removia a folha **sem tag** do cruzamento (subtotal ficava menor que o total real). Restaurada como linha **"(sem tag)"** (no dashboard, no modal por mês e no PDF).
+
+### Dash Análise por Período — filtros + análises novas + relatório
+1. **Filtros que afetam gráficos, itens e PDF:** **Custos** ganhou **Categoria (single) + Subcategoria (multi, chips)**; **Folha** ganhou **Categoria/unidade (single) + Tag (multi, chips)**. *(Folha não tem subcategoria nem QTD nos dados — o mapa `custoParaFolha` só carrega TAG/ITEM_FOLHA/VALOR/CATEGORIA.)* Aplicados aos **dois períodos** antes de comparar.
+2. **"Quantidade de itens":** **Nº de lançamentos A/B** nos KPIs (`TotaisAB`) e no cabeçalho do PDF.
+3. **Limitador Top N itens:** campo na barra de filtros (padrão 15) que limita a tabela do "Comparativo por Item" na tela (nota "Mostrando os N maiores de M") **e no PDF** (título "…(top N)") — resolvendo a tabela gigante/feia de item no relatório.
+4. **Contribuição para a variação (bridge):** gráfico em **cascata** (Total A → contribuições ↑ oliva / ↓ vinho → Total B) por **Categoria** (Custos) e **Tag** (Folha). **Só na tela** (removido do PDF a pedido).
+5. **Preço médio × quantidade A×B (Custos):** tabela por subcategoria com **Qtd A/B (+Δ)** e **Preço médio A/B (+Δ)** — separa se o gasto mudou por preço ou por volume. Vai ao PDF **com as colunas de Δ** (Δ Qtd e Δ Preço).
+6. **Composição por grupo A×B:** Custos = CMV/Despesas/Folha; Folha = unidades (Canoas/POA/Tele) — reusa o gráfico A×B + tabela e entra no PDF como mais uma seção.
+7. **PDF do período:** ganhou linha de **Filtros** e de **Lançamentos A/B** no cabeçalho.
+
+### Changelog técnico — 14/07/2026 (por arquivo, tudo frontend)
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/api/client.js` | Novos `saveCredentials`/`getCredentials`/`clearCredentials` (login salvo em base64 no `localStorage`, chave `kampeki_login`). |
+| `src/pages/Login.jsx` | Prefill + checkbox "Manter-me conectado" + auto-login com credenciais salvas (uma vez; limpa se inválidas). |
+| `src/components/Layout.jsx` | `sair()` limpa também a credencial salva; novo link **"Visões avançadas"** (`/dash/avancado`) na sidebar. |
+| `src/App.jsx` | Rota `/dash/avancado` → `DashAvancado`. |
+| `src/pages/dash/DashAvancado.jsx` | **Novo** — página "Visões avançadas": evolução de preço médio ponderado × quantidade por categoria/subcategoria. |
+| `src/components/NotasItemModal.jsx` | **Novo** — notas em que um item aparece + itens de cada nota. |
+| `src/components/CruzamentoMesModal.jsx` | **Novo** — cruzamento Tag × Categoria quebrado por mês (Folha) + export PDF próprio. |
+| `src/pages/dash/DashCustos.jsx` | Export por mês (composição/categoria); coluna/botão "Notas"; `periodoAnteriorLabel`; (seção avançada adicionada e depois removida ao migrar para `DashAvancado`). |
+| `src/pages/dash/DashFolha.jsx` | Tooltip branco (pizza + evolução); multi-tag como filtro de base; flag "Ocultar folha sem tag"; botão 👁 "Ver por mês" + modal; cruzamento com "(sem tag)". |
+| `src/pages/dash/DashPeriodo.jsx` | Filtros Categoria/Subcategoria(multi)/Tag(multi) + Top N itens; `TotaisAB` com nº de lançamentos; `BridgeChart` (cascata); `precoQtdPorSub` + tabela preço×qtd; composição por grupo/unidade; `ComparativoSecao` com `maxRows`. |
+| `src/utils/exportPdf.js` | `rightAlignNumCols` (didParseCell) em todas as tabelas; right-align nos valores de `barrasCategoria`/`barrasGrupo`; `tabelaGrupoMes`/`tabelaCategoriaMes` (custos por mês); coluna "Período anterior"; `exportarCruzamentoMensalFolha` (**novo**); `exportarRelatorioPeriodo` com filtros/contagens/preço×qtd (Δ) e item limitado ao top N (bridge **não** vai ao PDF). |
+| `src/styles.css` | `.login-remember` (checkbox do login). |
+
+### Validação
+- Frontend: `vite build` OK a cada etapa (1256+ módulos; único aviso é o de tamanho de chunk, pré-existente). Sem referências órfãs (grep após cada refactor).
+- Backend: **inalterado** nesta sessão.
+- **Pendente de teste manual no navegador** (`npm run dev`), com atenção a: auto-login (marcar/fechar/reabrir); PDFs de Custos (quebra por mês, alinhamento, período anterior), Folha (👁 por mês, multi-tag, flag sem-tag) e Período (filtros multi, Top N, preço×qtd com Δ, bridge só na tela).
+
+### Pendências em aberto
+- **Subir `desktop/package.json` → `1.5.1`** e gerar/validar o instalador (herda o fix da sidebar/rolagem @125% e o NFS-e em lote, ainda não empacotados num build entregue).
+- Rascunhos descartados nesta sessão (ranking por fornecedor, curva ABC, maiores variações, KPIs de comparação) — podem voltar como "Visões avançadas" se o gestor quiser.
+- Reflexo no PDF de análises da página "Visões avançadas" (hoje ela não exporta) — avaliar quando o layout estabilizar.

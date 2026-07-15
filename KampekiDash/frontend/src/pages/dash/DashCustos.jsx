@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { custosApi, getConfig } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import NotasItemModal from '../../components/NotasItemModal.jsx';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import { exportarRelatorioCustos } from '../../utils/exportPdf.js';
 import {
@@ -43,6 +44,8 @@ export default function DashCustos() {
   // Mês selecionado no "Comparativo mês a mês" (dropdown / clique na barra).
   const [selMes, setSelMes] = useState('');
   const [exportando, setExportando] = useState(false);
+  // Item cujas notas estão sendo visualizadas (modal).
+  const [notaItem, setNotaItem] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -186,6 +189,13 @@ export default function DashCustos() {
   const effDe = selMes || deKey;
   const effAte = selMes || ateKey;
 
+  // Rótulo da janela "período anterior" (reusado na UI dos KPIs e no PDF).
+  const periodoAnteriorLabel = useMemo(() => {
+    const p = previousWindow(effDe, effAte);
+    if (!p.de) return null;
+    return p.de === p.ate ? keyToLabel(p.de) : `${keyToLabel(p.de)} – ${keyToLabel(p.ate)}`;
+  }, [effDe, effAte]);
+
   // Item a item com % do total e variação vs janela anterior (respeita o mesmo
   // drill-down de categoria/subcategoria).
   const tabelaItens = useMemo(() => {
@@ -236,6 +246,48 @@ export default function DashCustos() {
         { key: 'Outros', total: resumoGrupos.Outros, color: [215, 196, 182] },
       ];
 
+      // Quebra por mês (só quando o período tem 2+ meses e nenhum mês está
+      // selecionado): o relatório passa a mostrar Composição por grupo e Custos
+      // por categoria separados mês a mês, em vez de um único total do período.
+      const monthsList = monthsBetween(deKey, ateKey);
+      const multiMes = !selMes && monthsList.length > 1;
+
+      // Composição por grupo por mês — `porGrupoMes` já é [{mes, CMV, Despesas,
+      // Folha, Outros}] por mês e respeita o drill de categoria/subcategoria.
+      const porGrupoMesExport = multiMes ? porGrupoMes : null;
+
+      // Custos por categoria por mês — matriz mês × categoria (mesma base da
+      // pizza; respeita o drill de categoria). Categorias limitadas às maiores
+      // (as demais viram "Outros") para caber na largura do relatório.
+      let porCategoriaMes = null;
+      if (multiMes) {
+        const baseCatExport = selCategoria
+          ? noPeriodo.filter((r) => r.CATEGORIA === selCategoria)
+          : noPeriodo;
+        const totais = groupSum(baseCatExport, (r) => r.CATEGORIA, val); // desc, ignora vazias
+        const CAP = 7;
+        const keep = totais.slice(0, CAP).map((t) => t.key);
+        const keepSet = new Set(keep);
+        const foldRest = totais.length > CAP;
+        const rows = monthsList.map((k) => {
+          const cats = {};
+          keep.forEach((c) => { cats[c] = 0; });
+          if (foldRest) cats.Outros = 0;
+          let total = 0;
+          for (const r of baseCatExport) {
+            if (rowMonthKey(r) !== k) continue;
+            const c = r.CATEGORIA;
+            if (!c) continue; // sem categoria fica fora da pizza (mantém a semântica)
+            const v = val(r);
+            total += v;
+            if (keepSet.has(c)) cats[c] += v;
+            else if (foldRest) cats.Outros += v;
+          }
+          return { key: k, mes: keyToLabel(k), cats, total };
+        });
+        porCategoriaMes = { categorias: foldRest ? [...keep, 'Outros'] : keep, rows };
+      }
+
       exportarRelatorioCustos({
         periodoLabel,
         drillLabel: drillParts.join(' · ') || null,
@@ -244,10 +296,13 @@ export default function DashCustos() {
         nLanc: filtrado.length,
         porMes: porMesExport,
         porGrupo,
+        porGrupoMes: porGrupoMesExport,
         porCategoria: porCategoriaExport,
+        porCategoriaMes,
         porSubcategoria,
         topItens,
         topN: Number(topN) || 10,
+        periodoAnteriorLabel,
       });
     } finally {
       setExportando(false);
@@ -526,6 +581,7 @@ export default function DashCustos() {
                 <th className="num">% do total</th>
                 <th className="num">Período anterior</th>
                 <th className="num">Variação</th>
+                <th className="num">Notas</th>
               </tr>
             </thead>
             <tbody>
@@ -542,14 +598,21 @@ export default function DashCustos() {
                         ? <span className="up">novo</span>
                         : <span className={r.variacao >= 0 ? 'up' : 'down'}>{r.variacao >= 0 ? '+' : ''}{pct(r.variacao)}</span>}
                     </td>
+                    <td className="num">
+                      <button className="btn btn-sm btn-ghost" onClick={() => setNotaItem(r.item)}>📄 ver</button>
+                    </td>
                   </tr>
                 );
               })}
-              {topItens.length === 0 && <tr><td colSpan={5} className="empty">Sem dados no período.</td></tr>}
+              {topItens.length === 0 && <tr><td colSpan={6} className="empty">Sem dados no período.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
+
+      {notaItem && (
+        <NotasItemModal item={notaItem} custos={custos} onClose={() => setNotaItem('')} />
+      )}
     </div>
   );
 }

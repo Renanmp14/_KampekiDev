@@ -5,6 +5,8 @@ import {
 } from 'recharts';
 import { folhaApi, tagApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import SearchableSelect from '../../components/SearchableSelect.jsx';
+import CruzamentoMesModal from '../../components/CruzamentoMesModal.jsx';
 import { exportarRelatorioFolha } from '../../utils/exportPdf.js';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import {
@@ -18,9 +20,13 @@ export default function DashFolha() {
   const [folha, setFolha] = useState([]);
   const [tags, setTags] = useState([]);
   const [period, setPeriod] = useState({ de: '', ate: '' });
-  const [fTag, setFTag] = useState('');
+  // Filtro de tag MULTI-seleção: filtra TODO o dashboard (pizza, subtotais,
+  // cruzamento, KPIs e PDF). Clicar na pizza/tabela adiciona/remove tags aqui.
+  const [fTags, setFTags] = useState([]);
   const [selMes, setSelMes] = useState(''); // mês selecionado na evolução (filtro global)
-  const [selTag, setSelTag] = useState(''); // tag selecionada na pizza (drill-down)
+  const [showCruzMes, setShowCruzMes] = useState(false); // modal do cruzamento por mês
+  // Flag global: quando ligada, descarta a folha SEM tag de TODAS as visões.
+  const [ocultarSemTag, setOcultarSemTag] = useState(false);
   const [loading, setLoading] = useState(true);
   const [exportando, setExportando] = useState(false);
 
@@ -28,9 +34,15 @@ export default function DashFolha() {
     if (!key) return;
     setSelMes((prev) => (prev === key ? '' : key));
   }
-  function toggleTag(key) {
-    if (!key) return;
-    setSelTag((prev) => (prev === key ? '' : key));
+  function addTagFiltro(t) {
+    if (t) setFTags((prev) => (prev.includes(t) ? prev : [...prev, t]));
+  }
+  function toggleTagFiltro(t) {
+    if (!t) return;
+    setFTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  }
+  function removeTagFiltro(t) {
+    setFTags((prev) => prev.filter((x) => x !== t));
   }
 
   useEffect(() => {
@@ -47,6 +59,11 @@ export default function DashFolha() {
 
   const val = (r) => toNum(r.VALOR);
 
+  const tagNomes = useMemo(
+    () => [...new Set(tags.map((t) => t.TAG).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [tags],
+  );
+
   const todasChaves = useMemo(
     () => [...new Set(folha.map(rowMonthKey).filter(Boolean))].sort(),
     [folha],
@@ -59,12 +76,14 @@ export default function DashFolha() {
     if (selMes && deKey && ateKey && (selMes < deKey || selMes > ateKey)) setSelMes('');
   }, [selMes, deKey, ateKey]);
 
-  // base: período + filtro de tag (alimenta a evolução mensal — todos os meses,
-  // para permitir trocar de mês).
+  // base: período + filtro de tags (multi). Filtra o dashboard inteiro — quando há
+  // tags escolhidas, TODAS as visões (inclusive "por Tag") mostram só elas.
   const base = useMemo(() => {
-    const noPeriodo = filterByPeriod(folha, deKey, ateKey);
-    return fTag ? noPeriodo.filter((r) => r.TAG === fTag) : noPeriodo;
-  }, [folha, deKey, ateKey, fTag]);
+    let r = filterByPeriod(folha, deKey, ateKey);
+    if (fTags.length) r = r.filter((x) => fTags.includes(x.TAG));
+    if (ocultarSemTag) r = r.filter((x) => String(x.TAG || '').trim() !== '');
+    return r;
+  }, [folha, deKey, ateKey, fTags, ocultarSemTag]);
 
   const porMes = useMemo(() => {
     const sums = groupSum(base, rowMonthKey, val);
@@ -79,39 +98,28 @@ export default function DashFolha() {
     [base, selMes],
   );
 
-  // Drill-down por Tag (pizza): recorta as visões de Item, cruzamento e KPIs,
-  // mas a pizza/tabela "por Tag" continua sobre baseMes (todas as tags) para
-  // permitir trocar de tag a qualquer momento — espelha o Dash Custos.
-  const baseTag = useMemo(
-    () => (selTag ? baseMes.filter((r) => r.TAG === selTag) : baseMes),
-    [baseMes, selTag],
-  );
-
-  const totalBaseMes = baseMes.reduce((s, r) => s + val(r), 0); // todas as tags (base do % e da pizza)
-  const total = baseTag.reduce((s, r) => s + val(r), 0);        // reflete o drill de tag (KPIs)
+  const total = baseMes.reduce((s, r) => s + val(r), 0);
   const porTag = useMemo(() => groupSum(baseMes, (r) => r.TAG, val), [baseMes]);
-  const porItem = useMemo(() => groupSum(baseTag, (r) => r.ITEM_FOLHA, val), [baseTag]);
+  const porItem = useMemo(() => groupSum(baseMes, (r) => r.ITEM_FOLHA, val), [baseMes]);
 
-  // Se a tag selecionada sumir da base (mudou período/mês/filtro), limpa o drill.
-  useEffect(() => {
-    if (selTag && !porTag.some((t) => t.key === selTag)) setSelTag('');
-  }, [selTag, porTag]);
-
-  // Cruzamento Tag (linha) × Categoria (coluna) — respeita o drill de tag.
+  // Cruzamento Tag (linha) × Categoria (coluna) — respeita o filtro de tags/mês.
   const cruzamento = useMemo(() => {
     const catOf = (r) => String(r.CATEGORIA || '').trim() || '(sem categoria)';
-    // Sempre lista TODAS as tags cadastradas (mais as eventuais presentes nos
-    // dados, ex.: custos de folha ainda sem tag) — tags sem lançamento aparecem
-    // zeradas (R$ 0,00).
-    const tagsList = [...new Set([...tags.map((t) => t.TAG), ...baseTag.map((r) => r.TAG)])]
+    // Lançamentos de folha sem tag entram como linha "(sem tag)" para o subtotal
+    // continuar honesto (a folha sem tag ainda soma na categoria).
+    const tagOf = (r) => String(r.TAG || '').trim() || '(sem tag)';
+    // Lista as tags cadastradas (mais as presentes nos dados). Quando há filtro de
+    // tags, restringe às escolhidas.
+    let tagsList = [...new Set([...tags.map((t) => t.TAG), ...baseMes.map(tagOf)])]
+      .filter(Boolean)
       .sort((a, b) => String(a).localeCompare(String(b)));
-    const colsList = [...new Set(baseTag.map(catOf))].sort();
+    if (fTags.length) tagsList = tagsList.filter((t) => fTags.includes(t));
+    const colsList = [...new Set(baseMes.map(catOf))].sort();
     const cell = {};
-    for (const r of baseTag) {
-      const k = `${r.TAG}|||${catOf(r)}`;
+    for (const r of baseMes) {
+      const k = `${tagOf(r)}|||${catOf(r)}`;
       cell[k] = (cell[k] || 0) + val(r);
     }
-    // Subtotais por coluna (categoria) e total geral — para a linha de rodapé.
     const colTotais = {};
     let grand = 0;
     for (const cat of colsList) {
@@ -123,23 +131,27 @@ export default function DashFolha() {
     return {
       tagsList, colsList, cell, colTotais, grand,
     };
-  }, [baseTag, tags]);
+  }, [baseMes, tags, fTags]);
+
+  // Rótulos reusados no PDF e no modal.
+  const periodoLabel = selMes
+    ? keyToLabel(selMes)
+    : (deKey ? `${keyToLabel(deKey)} – ${keyToLabel(ateKey)}` : 'Todo o período');
+  const filtrosLabel = useMemo(() => {
+    const parts = [];
+    if (fTags.length) parts.push(`Tags: ${fTags.join(', ')}`);
+    if (selMes) parts.push(`Mês: ${keyToLabel(selMes)}`);
+    return parts.join(' · ') || null;
+  }, [fTags, selMes]);
 
   function exportarPdf() {
     setExportando(true);
     try {
-      const periodoLabel = selMes
-        ? keyToLabel(selMes)
-        : (deKey ? `${keyToLabel(deKey)} – ${keyToLabel(ateKey)}` : 'Todo o período');
-      const filtrosParts = [];
-      if (fTag) filtrosParts.push(`Filtro tag: ${fTag}`);
-      if (selMes) filtrosParts.push(`Mês: ${keyToLabel(selMes)}`);
-      if (selTag) filtrosParts.push(`Tag: ${selTag}`);
       exportarRelatorioFolha({
         periodoLabel,
-        filtrosLabel: filtrosParts.join(' · ') || null,
+        filtrosLabel,
         total,
-        nLanc: baseTag.length,
+        nLanc: baseMes.length,
         porMes,
         porTag,
         porItem,
@@ -156,33 +168,44 @@ export default function DashFolha() {
     <div>
       <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Dash Folha</h1>
-        <button className="btn btn-ghost" onClick={exportarPdf} disabled={exportando}>
-          {exportando ? 'Gerando PDF...' : '⬇ Exportar PDF'}
-        </button>
+        <div className="row-actions" style={{ gap: 14, alignItems: 'center', margin: 0, flexWrap: 'wrap' }}>
+          <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={ocultarSemTag}
+              onChange={(e) => setOcultarSemTag(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
+            />
+            <span className="muted" style={{ fontSize: 13 }}>Ocultar folha sem tag</span>
+          </label>
+          <button className="btn btn-ghost" onClick={exportarPdf} disabled={exportando}>
+            {exportando ? 'Gerando PDF...' : '⬇ Exportar PDF'}
+          </button>
+        </div>
       </div>
 
       <PeriodFilter de={period.de} ate={period.ate} onChange={setPeriod}>
-        <div className="field" style={{ maxWidth: 180 }}>
-          <label>Tag</label>
-          <select value={fTag} onChange={(e) => setFTag(e.target.value)}>
-            <option value="">Todas</option>
-            {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
-          </select>
+        <div className="field" style={{ minWidth: 200, maxWidth: 240 }}>
+          <label>Tags (uma ou mais)</label>
+          <SearchableSelect value="" onPick={addTagFiltro} options={tagNomes} placeholder="Adicionar tag..." />
         </div>
       </PeriodFilter>
 
-      {(selMes || selTag) && (
+      {(selMes || fTags.length > 0) && (
         <div className="row-actions" style={{ marginBottom: 14, gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Filtros ativos:</span>
+          {fTags.map((t) => (
+            <button key={t} className="btn btn-sm btn-ghost" onClick={() => removeTagFiltro(t)}>
+              Tag: {t} ✕
+            </button>
+          ))}
           {selMes && (
             <button className="btn btn-sm btn-ghost" onClick={() => setSelMes('')}>
               Mês: {keyToLabel(selMes)} ✕
             </button>
           )}
-          {selTag && (
-            <button className="btn btn-sm btn-ghost" onClick={() => setSelTag('')}>
-              Tag: {selTag} ✕
-            </button>
+          {fTags.length > 0 && (
+            <button className="btn btn-sm" onClick={() => setFTags([])}>Limpar tags</button>
           )}
         </div>
       )}
@@ -194,7 +217,7 @@ export default function DashFolha() {
         </div>
         <div className="kpi">
           <div className="kpi-label">Lançamentos</div>
-          <div className="kpi-value">{baseTag.length}</div>
+          <div className="kpi-value">{baseMes.length}</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">{selMes ? 'Mês' : 'Período'}</div>
@@ -224,7 +247,13 @@ export default function DashFolha() {
             <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
             <XAxis dataKey="mes" stroke="#93a39b" fontSize={12} />
             <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
-            <Tooltip formatter={(v) => brl(v)} contentStyle={{ background: '#16302b', border: '1px solid #2c4a43' }} />
+            <Tooltip
+              formatter={(v) => brl(v)}
+              contentStyle={{ background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6 }}
+              itemStyle={{ color: '#f1f3f5' }}
+              labelStyle={{ color: '#f1f3f5' }}
+              cursor={{ fill: 'rgba(255,255,255,0.08)' }}
+            />
             <Bar
               dataKey="total"
               radius={[4, 4, 0, 0]}
@@ -247,18 +276,10 @@ export default function DashFolha() {
 
       <div className="grid grid-2">
         <div className="card">
-          <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <h3 className="card-title" style={{ margin: 0 }}>
-              Participação por Tag
-              <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (clique numa fatia para filtrar)</span>
-            </h3>
-            <div className="field" style={{ maxWidth: 180, margin: 0 }}>
-              <select value={selTag} onChange={(e) => setSelTag(e.target.value)}>
-                <option value="">Filtrar por tag...</option>
-                {porTag.map((t) => <option key={t.key} value={t.key}>{t.key}</option>)}
-              </select>
-            </div>
-          </div>
+          <h3 className="card-title" style={{ margin: '0 0 10px' }}>
+            Participação por Tag
+            <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (clique numa fatia para filtrar)</span>
+          </h3>
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
@@ -268,21 +289,26 @@ export default function DashFolha() {
                 cx="50%"
                 cy="50%"
                 outerRadius={90}
-                onClick={(d) => toggleTag(d?.key ?? d?.payload?.key)}
+                onClick={(d) => toggleTagFiltro(d?.key ?? d?.payload?.key)}
                 style={{ cursor: 'pointer', outline: 'none' }}
               >
                 {porTag.map((entry, i) => (
                   <Cell
                     key={entry.key}
                     fill={COLORS[i % COLORS.length]}
-                    fillOpacity={!selTag || selTag === entry.key ? 1 : 0.28}
-                    stroke={selTag === entry.key ? '#fff' : undefined}
-                    strokeWidth={selTag === entry.key ? 2 : undefined}
+                    fillOpacity={!fTags.length || fTags.includes(entry.key) ? 1 : 0.28}
+                    stroke={fTags.includes(entry.key) ? '#fff' : undefined}
+                    strokeWidth={fTags.includes(entry.key) ? 2 : undefined}
                   />
                 ))}
               </Pie>
-              <Legend onClick={(e) => toggleTag(e?.value)} wrapperStyle={{ cursor: 'pointer' }} />
-              <Tooltip formatter={(v) => brl(v)} contentStyle={{ background: '#16302b', border: '1px solid #2c4a43' }} />
+              <Legend onClick={(e) => toggleTagFiltro(e?.value)} wrapperStyle={{ cursor: 'pointer' }} />
+              <Tooltip
+                formatter={(v) => brl(v)}
+                contentStyle={{ background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6 }}
+                itemStyle={{ color: '#f1f3f5' }}
+                labelStyle={{ color: '#f1f3f5' }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -299,13 +325,13 @@ export default function DashFolha() {
                 {porTag.map((s) => (
                   <tr
                     key={s.key}
-                    className={selTag === s.key ? 'selected-row' : ''}
+                    className={fTags.includes(s.key) ? 'selected-row' : ''}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => toggleTag(s.key)}
+                    onClick={() => toggleTagFiltro(s.key)}
                   >
                     <td>{s.key}</td>
                     <td className="num">{brl(s.total)}</td>
-                    <td className="num">{pct(totalBaseMes > 0 ? (s.total / totalBaseMes) * 100 : 0)}</td>
+                    <td className="num">{pct(total > 0 ? (s.total / total) * 100 : 0)}</td>
                   </tr>
                 ))}
                 {porTag.length === 0 && <tr><td colSpan={3} className="empty">Sem dados.</td></tr>}
@@ -335,7 +361,16 @@ export default function DashFolha() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">Cruzamento Tag × Categoria</h3>
+        <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <h3 className="card-title" style={{ margin: 0 }}>Cruzamento Tag × Categoria</h3>
+          <button
+            className="btn btn-sm btn-ghost"
+            title="Ver quebrado por mês do período"
+            onClick={() => setShowCruzMes(true)}
+          >
+            👁 Ver por mês
+          </button>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -379,6 +414,19 @@ export default function DashFolha() {
           </table>
         </div>
       </div>
+
+      {showCruzMes && (
+        <CruzamentoMesModal
+          base={base}
+          tags={fTags.length ? tags.filter((t) => fTags.includes(t.TAG)) : tags}
+          deKey={deKey}
+          ateKey={ateKey}
+          selMes={selMes}
+          periodoLabel={periodoLabel}
+          filtrosLabel={filtrosLabel}
+          onClose={() => setShowCruzMes(false)}
+        />
+      )}
     </div>
   );
 }

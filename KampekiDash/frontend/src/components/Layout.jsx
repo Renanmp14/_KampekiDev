@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
-import { clearToken } from '../api/client.js';
+import { clearToken, clearCredentials } from '../api/client.js';
 import Logo from './Logo.jsx';
 import ZoomControl from './ZoomControl.jsx';
 
@@ -16,6 +16,7 @@ const dashboards = [
   { to: '/dash/custos', label: 'Dash Custos' },
   { to: '/dash/folha', label: 'Dash Folha' },
   { to: '/dash/periodo', label: 'Análise por Período' },
+  { to: '/dash/avancado', label: 'Visões avançadas' },
 ];
 
 const saidas = [
@@ -28,6 +29,7 @@ export default function Layout() {
 
   function sair() {
     clearToken();
+    clearCredentials(); // logout de verdade: esquece o login salvo
     navigate('/login');
   }
   const closeMenu = () => setMenuOpen(false);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell,
 } from 'recharts';
 import { custosApi, folhaApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
@@ -19,6 +19,110 @@ function periodLabel(p) {
 
 const A_COLOR = '#4f868f'; // Período A (teal)
 const B_COLOR = '#ff8b7c'; // Período B (coral)
+const UP_COLOR = '#bfcb7f'; // contribuição positiva (oliva)
+const DOWN_COLOR = '#9c6b6b'; // contribuição negativa (vinho)
+const TOTAL_COLOR = '#93a39b'; // barras de total no bridge
+
+// Agrupamento macro das categorias de Custos (espelha o Dash Custos).
+const GRUPOS = [
+  { key: 'CMV', cats: ['CMV'] },
+  { key: 'Despesas', cats: ['DESPESA ADMINISTRATIVA', 'DISTRIBUIÇÃO DE LUCRO'] },
+  { key: 'Folha', cats: ['FOLHA CANOAS', 'FOLHA POA', 'FOLHA TELE'] },
+];
+function grupoDe(categoria) {
+  const c = String(categoria || '').trim().toUpperCase();
+  for (const g of GRUPOS) if (g.cats.includes(c)) return g.key;
+  return 'Outros';
+}
+
+const fmtQtd = (n) => toNum(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+// Preço médio ponderado (Σ valor ÷ Σ qtd) e quantidade por subcategoria, A vs B.
+function precoQtdPorSub(rowsA, rowsB, valFn) {
+  const agg = (rows) => {
+    const m = new Map();
+    for (const r of rows) {
+      const k = r.SUB_CATEGORIA || '(sem subcategoria)';
+      const cur = m.get(k) || { val: 0, qtd: 0 };
+      cur.val += valFn(r);
+      cur.qtd += toNum(r.QTD);
+      m.set(k, cur);
+    }
+    return m;
+  };
+  const A = agg(rowsA);
+  const B = agg(rowsB);
+  const keys = [...new Set([...A.keys(), ...B.keys()])];
+  return keys.map((k) => {
+    const va = A.get(k) || { val: 0, qtd: 0 };
+    const vb = B.get(k) || { val: 0, qtd: 0 };
+    return {
+      key: k,
+      qtdA: va.qtd,
+      qtdB: vb.qtd,
+      precoA: va.qtd > 0 ? va.val / va.qtd : 0,
+      precoB: vb.qtd > 0 ? vb.val / vb.qtd : 0,
+      valB: vb.val,
+    };
+  }).sort((x, y) => y.valB - x.valB);
+}
+
+function BridgeTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div style={{
+      background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6, padding: '6px 10px', color: '#f1f3f5', fontSize: 12,
+    }}
+    >
+      <div style={{ marginBottom: 2 }}>{d.name}</div>
+      <div>{d.tipo === 'total' ? brl(d.val) : `${d.delta >= 0 ? '+' : ''}${brl(d.delta)}`}</div>
+    </div>
+  );
+}
+
+// Gráfico "cascata" (bridge): parte do Total A, soma as contribuições (↑/↓) e
+// chega ao Total B. Contribuições pequenas viram "Outros".
+function BridgeChart({
+  totalA, totalB, contribs, labelA = 'Total A', labelB = 'Total B', topN = 8,
+}) {
+  const data = useMemo(() => {
+    const sorted = [...contribs].sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+    let main = sorted;
+    if (sorted.length > topN) {
+      const rest = sorted.slice(topN).reduce((s, c) => s + c.delta, 0);
+      main = [...sorted.slice(0, topN), { key: 'Outros', delta: rest }];
+    }
+    const pos = main.filter((c) => c.delta >= 0).sort((a, b) => b.delta - a.delta);
+    const neg = main.filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta);
+    const out = [{ name: labelA, base: 0, val: totalA, tipo: 'total' }];
+    let cum = totalA;
+    for (const c of [...pos, ...neg]) {
+      let base; let val;
+      if (c.delta >= 0) { base = cum; val = c.delta; cum += c.delta; } else { cum += c.delta; base = cum; val = -c.delta; }
+      out.push({ name: c.key, base, val, delta: c.delta, tipo: 'delta' });
+    }
+    out.push({ name: labelB, base: 0, val: totalB, tipo: 'total' });
+    return out;
+  }, [contribs, totalA, totalB, labelA, labelB, topN]);
+
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(240, data.length * 40)}>
+      <BarChart data={data} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
+        <XAxis type="number" stroke="#93a39b" fontSize={11} tickFormatter={brlCompact} />
+        <YAxis type="category" dataKey="name" stroke="#93a39b" fontSize={11} width={140} />
+        <Tooltip content={<BridgeTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+        <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+        <Bar dataKey="val" stackId="w" radius={[0, 3, 3, 0]} isAnimationActive={false}>
+          {data.map((d) => (
+            <Cell key={d.name} fill={d.tipo === 'total' ? TOTAL_COLOR : (d.delta >= 0 ? UP_COLOR : DOWN_COLOR)} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
 // Compara duas agregações por chave e calcula variação absoluta e percentual.
 function comparar(rowsA, rowsB, keyFn, valFn) {
@@ -38,10 +142,13 @@ function comparar(rowsA, rowsB, keyFn, valFn) {
 
 // Seção comparativa: gráfico de barras horizontais (A vs B, top N) + tabela
 // detalhada com todas as chaves e a variação.
-function ComparativoSecao({ titulo, labelCol, rows, topN = 8 }) {
+function ComparativoSecao({
+  titulo, labelCol, rows, topN = 8, maxRows = null,
+}) {
   const chartData = rows.slice(0, topN).map((r) => ({
     nome: r.key, 'Período A': r.va, 'Período B': r.vb,
   }));
+  const tableRows = maxRows ? rows.slice(0, maxRows) : rows;
   return (
     <div className="card">
       <h3 className="card-title">{titulo}</h3>
@@ -64,7 +171,11 @@ function ComparativoSecao({ titulo, labelCol, rows, topN = 8 }) {
               <Bar dataKey="Período B" fill={B_COLOR} radius={[0, 3, 3, 0]} />
             </BarChart>
           </ResponsiveContainer>
-          {rows.length > topN && (
+          {maxRows && rows.length > maxRows ? (
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+              Mostrando os {maxRows} maiores (por Período B) de {rows.length}.
+            </p>
+          ) : rows.length > topN && (
             <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
               Gráfico mostra os {topN} maiores (por Período B); a tabela abaixo traz todos.
             </p>
@@ -81,7 +192,7 @@ function ComparativoSecao({ titulo, labelCol, rows, topN = 8 }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {tableRows.map((r) => (
                   <tr key={r.key}>
                     <td>{r.key}</td>
                     <td className="num">{brl(r.va)}</td>
@@ -120,18 +231,27 @@ function PeriodHeaders({ periodoA, setPeriodoA, periodoB, setPeriodoB }) {
   );
 }
 
-// KPIs de totais A vs B.
-function TotaisAB({ totalA, totalB }) {
+// KPIs de totais A vs B (com nº de lançamentos — a "quantidade de itens").
+function TotaisAB({ totalA, totalB, nLancA, nLancB }) {
   const delta = totalB - totalA;
   return (
     <div className="grid grid-3" style={{ marginBottom: 18 }}>
-      <div className="kpi"><div className="kpi-label">Total A</div><div className="kpi-value">{brl(totalA)}</div></div>
-      <div className="kpi"><div className="kpi-label">Total B</div><div className="kpi-value">{brl(totalB)}</div></div>
+      <div className="kpi">
+        <div className="kpi-label">Total A</div>
+        <div className="kpi-value">{brl(totalA)}</div>
+        <div className="muted" style={{ fontSize: 11 }}>{nLancA} lançamento(s)</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi-label">Total B</div>
+        <div className="kpi-value">{brl(totalB)}</div>
+        <div className="muted" style={{ fontSize: 11 }}>{nLancB} lançamento(s)</div>
+      </div>
       <div className="kpi">
         <div className="kpi-label">Variação</div>
         <div className={`kpi-value ${delta >= 0 ? 'up' : 'down'}`}>
           {delta >= 0 ? '+' : ''}{brl(delta)} {totalA > 0 && <span style={{ fontSize: 14 }}>({delta >= 0 ? '+' : ''}{pct((delta / totalA) * 100)})</span>}
         </div>
+        <div className="muted" style={{ fontSize: 11 }}>lançamentos: {nLancA} → {nLancB}</div>
       </div>
     </div>
   );
@@ -151,11 +271,30 @@ function AnaliseHeader({ exportando, onExport }) {
 function AnaliseCustos({ custos }) {
   const [periodoA, setPeriodoA] = useState({ de: '', ate: '' });
   const [periodoB, setPeriodoB] = useState({ de: '', ate: '' });
+  const [fCat, setFCat] = useState('');
+  const [fSubs, setFSubs] = useState([]);
+  const [topItens, setTopItens] = useState(15);
   const [exportando, setExportando] = useState(false);
   const val = (r) => toNum(r.VALOR_TOTAL);
 
-  const a = useMemo(() => filterByPeriod(custos, periodoA.de, periodoA.ate), [custos, periodoA]);
-  const b = useMemo(() => filterByPeriod(custos, periodoB.de, periodoB.ate), [custos, periodoB]);
+  const categorias = useMemo(
+    () => [...new Set(custos.map((r) => r.CATEGORIA).filter(Boolean))].sort((x, y) => x.localeCompare(y)),
+    [custos],
+  );
+  const subcategorias = useMemo(() => {
+    if (!fCat) return [];
+    const set = new Set();
+    for (const r of custos) if (r.CATEGORIA === fCat && r.SUB_CATEGORIA) set.add(r.SUB_CATEGORIA);
+    return [...set].sort((x, y) => x.localeCompare(y));
+  }, [custos, fCat]);
+
+  // Filtro de categoria/subcategoria aplicado aos DOIS períodos antes de comparar.
+  const filtrar = useMemo(
+    () => (r) => (!fCat || r.CATEGORIA === fCat) && (!fSubs.length || fSubs.includes(r.SUB_CATEGORIA)),
+    [fCat, fSubs],
+  );
+  const a = useMemo(() => filterByPeriod(custos, periodoA.de, periodoA.ate).filter(filtrar), [custos, periodoA, filtrar]);
+  const b = useMemo(() => filterByPeriod(custos, periodoB.de, periodoB.ate).filter(filtrar), [custos, periodoB, filtrar]);
 
   const totalA = a.reduce((s, r) => s + val(r), 0);
   const totalB = b.reduce((s, r) => s + val(r), 0);
@@ -163,6 +302,12 @@ function AnaliseCustos({ custos }) {
   const porCategoria = useMemo(() => comparar(a, b, (r) => r.CATEGORIA, val), [a, b]);
   const porSubcategoria = useMemo(() => comparar(a, b, (r) => r.SUB_CATEGORIA, val), [a, b]);
   const porItem = useMemo(() => comparar(a, b, (r) => r.ITEM, val), [a, b]);
+  const porGrupo = useMemo(() => comparar(a, b, (r) => grupoDe(r.CATEGORIA), val), [a, b]);
+  const precoQtd = useMemo(() => precoQtdPorSub(a, b, val), [a, b]);
+
+  const filtrosLabel = [fCat && `Categoria: ${fCat}`, fSubs.length && `Subcategorias: ${fSubs.join(', ')}`]
+    .filter(Boolean).join(' · ') || null;
+  const nItens = Number(topItens) || 15;
 
   function exportarPdf() {
     setExportando(true);
@@ -171,12 +316,17 @@ function AnaliseCustos({ custos }) {
         tipo: 'Custos',
         periodoALabel: periodLabel(periodoA),
         periodoBLabel: periodLabel(periodoB),
+        filtrosLabel,
         totalA,
         totalB,
+        nLancA: a.length,
+        nLancB: b.length,
+        precoQtd,
         secoes: [
+          { titulo: 'Composição por grupo', labelCol: 'Grupo', rows: porGrupo },
           { titulo: 'Comparativo por Categoria', labelCol: 'Categoria', rows: porCategoria },
           { titulo: 'Comparativo por Subcategoria', labelCol: 'Subcategoria', rows: porSubcategoria },
-          { titulo: 'Comparativo por Item', labelCol: 'Item', rows: porItem },
+          { titulo: `Comparativo por Item (top ${nItens})`, labelCol: 'Item', rows: porItem.slice(0, nItens) },
         ],
       });
     } finally {
@@ -188,10 +338,103 @@ function AnaliseCustos({ custos }) {
     <div>
       <AnaliseHeader exportando={exportando} onExport={exportarPdf} />
       <PeriodHeaders {...{ periodoA, setPeriodoA, periodoB, setPeriodoB }} />
-      <TotaisAB totalA={totalA} totalB={totalB} />
+      <div className="row-actions" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
+        <div className="field" style={{ minWidth: 180, maxWidth: 220, margin: 0 }}>
+          <label>Categoria</label>
+          <select value={fCat} onChange={(e) => { setFCat(e.target.value); setFSubs([]); }}>
+            <option value="">Todas</option>
+            {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 200, maxWidth: 260, margin: 0 }}>
+          <label>Subcategoria (uma ou mais)</label>
+          <select
+            value=""
+            disabled={!fCat}
+            onChange={(e) => { if (e.target.value) setFSubs((p) => (p.includes(e.target.value) ? p : [...p, e.target.value])); }}
+          >
+            <option value="">{fCat ? 'Adicionar...' : 'Escolha a categoria'}</option>
+            {subcategorias.filter((s) => !fSubs.includes(s)).map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {fSubs.length > 0 && (
+            <div className="filtro-chips">
+              {fSubs.map((s) => (
+                <span key={s} className="filtro-chip">{s}<button onClick={() => setFSubs((p) => p.filter((x) => x !== s))}>×</button></span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="field" style={{ maxWidth: 120, margin: 0 }}>
+          <label>Top N itens</label>
+          <input type="number" min="1" value={topItens} onChange={(e) => setTopItens(e.target.value)} />
+        </div>
+        {(fCat || fSubs.length > 0) && (
+          <button className="btn btn-sm" onClick={() => { setFCat(''); setFSubs([]); }}>Limpar filtros</button>
+        )}
+      </div>
+      <TotaisAB totalA={totalA} totalB={totalB} nLancA={a.length} nLancB={b.length} />
+
+      <div className="card">
+        <h3 className="card-title">
+          Contribuição para a variação
+          <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (do Total A ao Total B, por categoria)</span>
+        </h3>
+        {porCategoria.length === 0 ? <div className="empty">Sem dados.</div> : (
+          <BridgeChart totalA={totalA} totalB={totalB} contribs={porCategoria.map((r) => ({ key: r.key, delta: r.deltaAbs }))} />
+        )}
+      </div>
+
+      <ComparativoSecao titulo="Composição por grupo" labelCol="Grupo" rows={porGrupo} />
       <ComparativoSecao titulo="Comparativo por Categoria" labelCol="Categoria" rows={porCategoria} />
       <ComparativoSecao titulo="Comparativo por Subcategoria" labelCol="Subcategoria" rows={porSubcategoria} />
-      <ComparativoSecao titulo="Comparativo por Item" labelCol="Item" rows={porItem} />
+      <ComparativoSecao titulo="Comparativo por Item" labelCol="Item" rows={porItem} maxRows={nItens} />
+
+      <div className="card">
+        <h3 className="card-title">
+          Preço médio × quantidade
+          <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (por subcategoria — separa preço de volume)</span>
+        </h3>
+        {precoQtd.length === 0 ? <div className="empty">Sem dados.</div> : (
+          <div className="table-wrap" style={{ maxHeight: 360, overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Subcategoria</th>
+                  <th className="num">Qtd A</th>
+                  <th className="num">Qtd B</th>
+                  <th className="num">Δ Qtd</th>
+                  <th className="num">Preço méd. A</th>
+                  <th className="num">Preço méd. B</th>
+                  <th className="num">Δ Preço</th>
+                </tr>
+              </thead>
+              <tbody>
+                {precoQtd.map((r) => {
+                  const dQtd = r.qtdA > 0 ? ((r.qtdB - r.qtdA) / r.qtdA) * 100 : (r.qtdB > 0 ? null : 0);
+                  const dPreco = r.precoA > 0 ? ((r.precoB - r.precoA) / r.precoA) * 100 : (r.precoB > 0 ? null : 0);
+                  return (
+                    <tr key={r.key}>
+                      <td>{r.key}</td>
+                      <td className="num">{fmtQtd(r.qtdA)}</td>
+                      <td className="num">{fmtQtd(r.qtdB)}</td>
+                      <td className="num">
+                        {dQtd === null ? <span className="up">novo</span>
+                          : <span className={dQtd >= 0 ? 'up' : 'down'}>{dQtd >= 0 ? '+' : ''}{pct(dQtd)}</span>}
+                      </td>
+                      <td className="num">{brl(r.precoA)}</td>
+                      <td className="num">{brl(r.precoB)}</td>
+                      <td className="num">
+                        {dPreco === null ? <span className="up">novo</span>
+                          : <span className={dPreco >= 0 ? 'up' : 'down'}>{dPreco >= 0 ? '+' : ''}{pct(dPreco)}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -199,17 +442,41 @@ function AnaliseCustos({ custos }) {
 function AnaliseFolha({ folha }) {
   const [periodoA, setPeriodoA] = useState({ de: '', ate: '' });
   const [periodoB, setPeriodoB] = useState({ de: '', ate: '' });
+  const [fCat, setFCat] = useState(''); // unidade FOLHA CANOAS/POA/TELE
+  const [fTags, setFTags] = useState([]); // folha não tem subcategoria → filtro por Tag (multi)
+  const [topItens, setTopItens] = useState(15);
   const [exportando, setExportando] = useState(false);
   const val = (r) => toNum(r.VALOR);
 
-  const a = useMemo(() => filterByPeriod(folha, periodoA.de, periodoA.ate), [folha, periodoA]);
-  const b = useMemo(() => filterByPeriod(folha, periodoB.de, periodoB.ate), [folha, periodoB]);
+  const categorias = useMemo(
+    () => [...new Set(folha.map((r) => r.CATEGORIA).filter(Boolean))].sort((x, y) => x.localeCompare(y)),
+    [folha],
+  );
+  const tagsList = useMemo(
+    () => [...new Set(folha.map((r) => r.TAG).filter(Boolean))].sort((x, y) => x.localeCompare(y)),
+    [folha],
+  );
+
+  const filtrar = useMemo(
+    () => (r) => (!fCat || r.CATEGORIA === fCat) && (!fTags.length || fTags.includes(r.TAG)),
+    [fCat, fTags],
+  );
+  const a = useMemo(() => filterByPeriod(folha, periodoA.de, periodoA.ate).filter(filtrar), [folha, periodoA, filtrar]);
+  const b = useMemo(() => filterByPeriod(folha, periodoB.de, periodoB.ate).filter(filtrar), [folha, periodoB, filtrar]);
 
   const totalA = a.reduce((s, r) => s + val(r), 0);
   const totalB = b.reduce((s, r) => s + val(r), 0);
 
   const porTag = useMemo(() => comparar(a, b, (r) => r.TAG, val), [a, b]);
   const porItem = useMemo(() => comparar(a, b, (r) => r.ITEM_FOLHA, val), [a, b]);
+  const porUnidade = useMemo(
+    () => comparar(a, b, (r) => String(r.CATEGORIA || '').trim() || '(sem unidade)', val),
+    [a, b],
+  );
+
+  const filtrosLabel = [fCat && `Categoria: ${fCat}`, fTags.length && `Tags: ${fTags.join(', ')}`]
+    .filter(Boolean).join(' · ') || null;
+  const nItens = Number(topItens) || 15;
 
   function exportarPdf() {
     setExportando(true);
@@ -218,11 +485,15 @@ function AnaliseFolha({ folha }) {
         tipo: 'Folha',
         periodoALabel: periodLabel(periodoA),
         periodoBLabel: periodLabel(periodoB),
+        filtrosLabel,
         totalA,
         totalB,
+        nLancA: a.length,
+        nLancB: b.length,
         secoes: [
+          { titulo: 'Composição por unidade', labelCol: 'Unidade', rows: porUnidade },
           { titulo: 'Comparativo por Tag', labelCol: 'Tag', rows: porTag },
-          { titulo: 'Comparativo por Item Folha', labelCol: 'Item Folha', rows: porItem },
+          { titulo: `Comparativo por Item Folha (top ${nItens})`, labelCol: 'Item Folha', rows: porItem.slice(0, nItens) },
         ],
       });
     } finally {
@@ -234,9 +505,54 @@ function AnaliseFolha({ folha }) {
     <div>
       <AnaliseHeader exportando={exportando} onExport={exportarPdf} />
       <PeriodHeaders {...{ periodoA, setPeriodoA, periodoB, setPeriodoB }} />
-      <TotaisAB totalA={totalA} totalB={totalB} />
+      <div className="row-actions" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
+        <div className="field" style={{ minWidth: 180, maxWidth: 220, margin: 0 }}>
+          <label>Categoria (unidade)</label>
+          <select value={fCat} onChange={(e) => setFCat(e.target.value)}>
+            <option value="">Todas</option>
+            {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 200, maxWidth: 260, margin: 0 }}>
+          <label>Tag (uma ou mais)</label>
+          <select
+            value=""
+            onChange={(e) => { if (e.target.value) setFTags((p) => (p.includes(e.target.value) ? p : [...p, e.target.value])); }}
+          >
+            <option value="">Adicionar tag...</option>
+            {tagsList.filter((t) => !fTags.includes(t)).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {fTags.length > 0 && (
+            <div className="filtro-chips">
+              {fTags.map((t) => (
+                <span key={t} className="filtro-chip">{t}<button onClick={() => setFTags((p) => p.filter((x) => x !== t))}>×</button></span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="field" style={{ maxWidth: 120, margin: 0 }}>
+          <label>Top N itens</label>
+          <input type="number" min="1" value={topItens} onChange={(e) => setTopItens(e.target.value)} />
+        </div>
+        {(fCat || fTags.length > 0) && (
+          <button className="btn btn-sm" onClick={() => { setFCat(''); setFTags([]); }}>Limpar filtros</button>
+        )}
+      </div>
+      <TotaisAB totalA={totalA} totalB={totalB} nLancA={a.length} nLancB={b.length} />
+
+      <div className="card">
+        <h3 className="card-title">
+          Contribuição para a variação
+          <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (do Total A ao Total B, por tag)</span>
+        </h3>
+        {porTag.length === 0 ? <div className="empty">Sem dados.</div> : (
+          <BridgeChart totalA={totalA} totalB={totalB} contribs={porTag.map((r) => ({ key: r.key, delta: r.deltaAbs }))} />
+        )}
+      </div>
+
+      <ComparativoSecao titulo="Composição por unidade" labelCol="Unidade" rows={porUnidade} />
       <ComparativoSecao titulo="Comparativo por Tag" labelCol="Tag" rows={porTag} />
-      <ComparativoSecao titulo="Comparativo por Item Folha" labelCol="Item Folha" rows={porItem} />
+      <ComparativoSecao titulo="Comparativo por Item Folha" labelCol="Item Folha" rows={porItem} maxRows={nItens} />
     </div>
   );
 }

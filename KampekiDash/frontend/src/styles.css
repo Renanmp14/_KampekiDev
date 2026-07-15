@@ -335,6 +335,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .login-card { width: 100%; max-width: 360px; }
 .login-brand { display: flex; justify-content: center; color: var(--primary); margin-bottom: 12px; }
 .login-sub { text-align: center; color: var(--muted); margin-bottom: 22px; text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; }
+.login-remember { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; color: var(--muted); font-size: 13px; cursor: pointer; user-select: none; }
+.login-remember input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
 
 /* ---------- Tabs ---------- */
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 20px; flex-wrap: wrap; }

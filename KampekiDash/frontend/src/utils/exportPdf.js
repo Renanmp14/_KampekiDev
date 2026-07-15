@@ -13,6 +13,13 @@ const PALETA = [
 
 const trunc = (s, n) => { const t = String(s || ''); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
+// Alinha à direita o CABEÇALHO + corpo + rodapé das colunas numéricas (col >= from).
+// Necessário porque no autoTable o `halign` de columnStyles alinha só as células do
+// corpo — o cabeçalho fica à esquerda por padrão, desalinhando título × valor.
+const rightAlignNumCols = (from = 1) => (data) => {
+  if (data.column.index >= from) data.cell.styles.halign = 'right';
+};
+
 // Rodapé com paginação em todas as páginas (chamar ao final, já com tudo pronto).
 function rodape(doc, M) {
   const pages = doc.internal.getNumberOfPages();
@@ -86,7 +93,6 @@ function barrasCategoria(doc, x, y, w, data) {
   const labelW = 132;
   const valW = 118; // coluna fixa de valor + %
   const barMaxW = Math.max(40, w - labelW - valW);
-  const valX = x + labelW + barMaxW + 8;
   let cy = y;
 
   rows.forEach((r, i) => {
@@ -98,7 +104,8 @@ function barrasCategoria(doc, x, y, w, data) {
     doc.rect(x + labelW, cy + 1, bw, 11, 'F');
     doc.setFontSize(8);
     doc.setTextColor(60);
-    doc.text(`${brl(r.total)}  (${pct((r.total / total) * 100)})`, valX, cy + 9);
+    // Valor + % alinhados à direita numa coluna fixa (evita o texto "ragged").
+    doc.text(`${brl(r.total)}  (${pct((r.total / total) * 100)})`, x + w, cy + 9, { align: 'right' });
     cy += rowH;
   });
   return cy;
@@ -115,7 +122,6 @@ function barrasGrupo(doc, x, y, w, grupos) {
   const labelW = 110;
   const valW = 130;
   const barMaxW = Math.max(40, w - labelW - valW);
-  const valX = x + labelW + barMaxW + 8;
   let cy = y;
   rows.forEach((r) => {
     doc.setFontSize(9); doc.setTextColor(40);
@@ -124,7 +130,7 @@ function barrasGrupo(doc, x, y, w, grupos) {
     doc.setFillColor(...r.color);
     doc.rect(x + labelW, cy + 1, bw, 11, 'F');
     doc.setFontSize(8); doc.setTextColor(60);
-    doc.text(`${brl(r.total)}  (${pct((r.total / total) * 100)})`, valX, cy + 9);
+    doc.text(`${brl(r.total)}  (${pct((r.total / total) * 100)})`, x + w, cy + 9, { align: 'right' });
     cy += rowH;
   });
   // Linha de total.
@@ -132,9 +138,67 @@ function barrasGrupo(doc, x, y, w, grupos) {
   doc.line(x, cy + 2, x + w, cy + 2);
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30);
   doc.text('Total', x, cy + 14);
-  doc.text(brl(total), valX, cy + 14);
+  doc.text(brl(total), x + w, cy + 14, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   return cy + 20;
+}
+
+// Tabela "Composição por grupo" quebrada por mês (mês nas linhas; CMV/Despesas/
+// Folha/[Outros] nas colunas), com linha de Subtotal por grupo + Total geral.
+function tabelaGrupoMes(doc, y, M, porGrupoMes) {
+  const temOutros = porGrupoMes.some((m) => (m.Outros || 0) > 0.005);
+  const cols = ['CMV', 'Despesas', 'Folha', ...(temOutros ? ['Outros'] : [])];
+  const totCol = Object.fromEntries(cols.map((c) => [c, 0]));
+  let grand = 0;
+  const body = porGrupoMes.map((m) => {
+    const linhaTotal = cols.reduce((s, c) => s + (m[c] || 0), 0);
+    grand += linhaTotal;
+    cols.forEach((c) => { totCol[c] += (m[c] || 0); });
+    return [m.mes, ...cols.map((c) => brl(m[c] || 0)), brl(linhaTotal)];
+  });
+  autoTable(doc, {
+    startY: y,
+    head: [['Mês', ...cols, 'Total']],
+    body,
+    foot: [['Subtotal', ...cols.map((c) => brl(totCol[c])), brl(grand)]],
+    headStyles: { fillColor: VERDE, textColor: 255 },
+    footStyles: { fillColor: [230, 236, 233], textColor: 20, fontStyle: 'bold' },
+    columnStyles: Object.fromEntries(
+      [...Array(cols.length + 1)].map((_, i) => [i + 1, { halign: 'right' }]),
+    ),
+    styles: { fontSize: 8, cellPadding: 3 },
+    margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(1),
+  });
+  return doc.lastAutoTable.finalY;
+}
+
+// Tabela "Custos por categoria" quebrada por mês (mês nas linhas; categorias nas
+// colunas), com Subtotal por categoria + Total geral.
+function tabelaCategoriaMes(doc, y, M, porCategoriaMes) {
+  const { categorias, rows } = porCategoriaMes;
+  const totCol = Object.fromEntries(categorias.map((c) => [c, 0]));
+  let grand = 0;
+  const body = rows.map((r) => {
+    grand += r.total;
+    categorias.forEach((c) => { totCol[c] += (r.cats[c] || 0); });
+    return [r.mes, ...categorias.map((c) => brl(r.cats[c] || 0)), brl(r.total)];
+  });
+  autoTable(doc, {
+    startY: y,
+    head: [['Mês', ...categorias, 'Total']],
+    body,
+    foot: [['Subtotal', ...categorias.map((c) => brl(totCol[c])), brl(grand)]],
+    headStyles: { fillColor: VERDE, textColor: 255 },
+    footStyles: { fillColor: [230, 236, 233], textColor: 20, fontStyle: 'bold' },
+    columnStyles: Object.fromEntries(
+      [...Array(categorias.length + 1)].map((_, i) => [i + 1, { halign: 'right' }]),
+    ),
+    styles: { fontSize: 7.5, cellPadding: 2.5 },
+    margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(1),
+  });
+  return doc.lastAutoTable.finalY;
 }
 
 /**
@@ -143,7 +207,8 @@ function barrasGrupo(doc, x, y, w, grupos) {
  */
 export function exportarRelatorioCustos({
   periodoLabel, drillLabel, subLabel, totalGeral, nLanc,
-  porMes = [], porGrupo = [], porCategoria = [], porSubcategoria = [], topItens = [], topN = 10,
+  porMes = [], porGrupo = [], porGrupoMes = null, porCategoria = [], porCategoriaMes = null,
+  porSubcategoria = [], topItens = [], topN = 10, periodoAnteriorLabel = null,
 }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const M = 40;
@@ -182,24 +247,33 @@ export function exportarRelatorioCustos({
   }
 
   // --- Composição por grupo (CMV / Despesas / Folha / Outros) ---
-  if (porGrupo.some((g) => g.total > 0.005)) {
-    y = ensureSpace(doc, y, 40 + porGrupo.length * 18, M);
+  // Com período multi-mês, sai quebrado por mês (tabela); senão, barras do total.
+  const grupoPorMes = porGrupoMes && porGrupoMes.length > 1;
+  if (grupoPorMes || porGrupo.some((g) => g.total > 0.005)) {
+    y = ensureSpace(doc, y, 60, M);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(30);
-    doc.text('Composição por grupo', M, y);
+    doc.text(`Composição por grupo${grupoPorMes ? ' (por mês)' : ''}`, M, y);
     y += 12;
-    y = barrasGrupo(doc, M, y, W, porGrupo) + 16;
+    y = grupoPorMes
+      ? tabelaGrupoMes(doc, y, M, porGrupoMes) + 18
+      : barrasGrupo(doc, M, y, W, porGrupo) + 16;
   }
 
-  // --- Gráfico: custos por categoria (barras horizontais) ---
-  if (porCategoria.length) {
+  // --- Custos por categoria ---
+  // Com período multi-mês, sai quebrado por mês (tabela); senão, barras do total.
+  const catPorMes = porCategoriaMes && porCategoriaMes.rows.length > 1;
+  if (catPorMes || porCategoria.length) {
+    y = ensureSpace(doc, y, 60, M);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(30);
-    doc.text('Custos por categoria', M, y);
-    y += 10;
-    y = barrasCategoria(doc, M, y, W, porCategoria) + 16;
+    doc.text(`Custos por categoria${catPorMes ? ' (por mês)' : ''}`, M, y);
+    y += catPorMes ? 12 : 10;
+    y = catPorMes
+      ? tabelaCategoriaMes(doc, y, M, porCategoriaMes) + 18
+      : barrasCategoria(doc, M, y, W, porCategoria) + 16;
   }
 
   // --- Tabelas ---
@@ -216,26 +290,41 @@ export function exportarRelatorioCustos({
     columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
     styles: { fontSize: 9, cellPadding: 4 },
     margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(1),
   });
   y = doc.lastAutoTable.finalY + 18;
 
+  y = ensureSpace(doc, y, 70, M);
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
+  doc.setTextColor(30);
   doc.text(`Top ${topN} itens por valor`, M, y);
+  if (periodoAnteriorLabel) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(110);
+    doc.text(`Coluna "Período anterior" refere-se a: ${periodoAnteriorLabel}`, M, y + 13);
+    y += 13;
+  }
   autoTable(doc, {
     startY: y + 6,
-    head: [['Item', 'Valor', '% total', 'Variação']],
+    head: [['Item', 'Valor', '% total', 'Período anterior', 'Variação']],
     body: topItens.map((r) => [
       r.item,
       brl(r.total),
       pct(r.share),
+      brl(r.anterior ?? 0),
       r.variacao === null || r.variacao === undefined
         ? 'novo'
         : `${r.variacao >= 0 ? '+' : ''}${pct(r.variacao)}`,
     ]),
     headStyles: { fillColor: VERDE, textColor: 255 },
-    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+    columnStyles: {
+      1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' },
+    },
     styles: { fontSize: 8, cellPadding: 3 },
     margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(1),
   });
 
   rodape(doc, M);
@@ -348,6 +437,7 @@ export function exportarRelatorioFolha({
       columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
       styles: { fontSize: 9, cellPadding: 4 },
       margin: { left: M, right: M },
+      didParseCell: rightAlignNumCols(1),
     });
     y = doc.lastAutoTable.finalY + 18;
   }
@@ -375,6 +465,7 @@ export function exportarRelatorioFolha({
       ),
       styles: { fontSize: 8, cellPadding: 3 },
       margin: { left: M, right: M },
+      didParseCell: rightAlignNumCols(1),
     });
   }
 
@@ -383,11 +474,70 @@ export function exportarRelatorioFolha({
 }
 
 /**
+ * Gera e baixa um PDF do Cruzamento Tag × Categoria da Folha QUEBRADO por mês:
+ * uma tabela por mês do período (respeitando os filtros ativos), cada uma com a
+ * linha de Subtotal por categoria e o Total do mês.
+ */
+export function exportarCruzamentoMensalFolha({
+  periodoLabel, filtrosLabel, tagsList = [], colsList = [], porMes = [],
+}) {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const M = 40;
+  let y = 46;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(...VERDE);
+  doc.text('KAMPEKI — Cruzamento Tag × Categoria (por mês)', M, y);
+  y += 20;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(110);
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, M, y); y += 13;
+  if (periodoLabel) { doc.text(`Período: ${periodoLabel}`, M, y); y += 13; }
+  if (filtrosLabel) { doc.text(`Filtros: ${filtrosLabel}`, M, y); y += 13; }
+  y += 6;
+
+  if (!porMes.length) {
+    doc.setTextColor(120);
+    doc.text('Sem dados no período.', M, y);
+  }
+
+  porMes.forEach((m) => {
+    y = ensureSpace(doc, y, 60, M);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text(`${m.label} — Total ${brl(m.grand)}`, M, y);
+    autoTable(doc, {
+      startY: y + 6,
+      head: [['Tag', ...colsList, 'Total']],
+      body: tagsList.map((tg) => {
+        const linhaTotal = colsList.reduce((s, cat) => s + (m.cell[`${tg}|||${cat}`] || 0), 0);
+        return [tg, ...colsList.map((cat) => brl(m.cell[`${tg}|||${cat}`] || 0)), brl(linhaTotal)];
+      }),
+      foot: [['Subtotal', ...colsList.map((cat) => brl(m.colTotais[cat] || 0)), brl(m.grand)]],
+      headStyles: { fillColor: VERDE, textColor: 255 },
+      footStyles: { fillColor: [230, 236, 233], textColor: 20, fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 3 },
+      margin: { left: M, right: M },
+      didParseCell: rightAlignNumCols(1),
+    });
+    y = doc.lastAutoTable.finalY + 16;
+  });
+
+  rodape(doc, M);
+  doc.save(`cruzamento-folha-mensal-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+/**
  * Gera e baixa um PDF da Análise por Período (Custos ou Folha), com um gráfico
  * de barras A × B e a tabela detalhada por seção.
  */
 export function exportarRelatorioPeriodo({
-  tipo = 'Custos', periodoALabel, periodoBLabel, totalA, totalB, secoes = [],
+  tipo = 'Custos', periodoALabel, periodoBLabel, filtrosLabel = null,
+  totalA, totalB, nLancA = null, nLancB = null, precoQtd = null, secoes = [],
 }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const M = 40;
@@ -406,6 +556,7 @@ export function exportarRelatorioPeriodo({
   doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, M, y); y += 13;
   doc.text(`Período A: ${periodoALabel || 'Todo o histórico'}`, M, y); y += 13;
   doc.text(`Período B: ${periodoBLabel || 'Todo o histórico'}`, M, y); y += 13;
+  if (filtrosLabel) { doc.text(`Filtros: ${filtrosLabel}`, M, y); y += 13; }
 
   y += 8;
   const delta = (totalB || 0) - (totalA || 0);
@@ -419,7 +570,14 @@ export function exportarRelatorioPeriodo({
     `Variação: ${delta >= 0 ? '+' : ''}${brl(delta)}${deltaPct === null ? '' : ` (${delta >= 0 ? '+' : ''}${pct(deltaPct)})`}`,
     M + 340, y,
   );
-  y += 20;
+  y += 16;
+  if (nLancA !== null || nLancB !== null) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(90);
+    doc.text(`Lançamentos — A: ${nLancA ?? 0} · B: ${nLancB ?? 0}`, M, y);
+    y += 16;
+  }
 
   secoes.forEach(({ titulo, labelCol, rows }) => {
     y = ensureSpace(doc, y, 60, M);
@@ -460,9 +618,42 @@ export function exportarRelatorioPeriodo({
       },
       styles: { fontSize: 8, cellPadding: 3 },
       margin: { left: M, right: M },
+      didParseCell: rightAlignNumCols(1),
     });
     y = doc.lastAutoTable.finalY + 20;
   });
+
+  // Preço médio × quantidade por subcategoria (A vs B) — com Δ de qtd e de preço.
+  if (precoQtd && precoQtd.length) {
+    y = ensureSpace(doc, y, 60, M);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text('Preço médio × quantidade (por subcategoria)', M, y);
+    const q = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    const dPctTxt = (base, novo) => {
+      if (base > 0) { const d = ((novo - base) / base) * 100; return `${d >= 0 ? '+' : ''}${pct(d)}`; }
+      return novo > 0 ? 'novo' : '0,0%';
+    };
+    autoTable(doc, {
+      startY: y + 6,
+      head: [['Subcategoria', 'Qtd A', 'Qtd B', 'Δ Qtd', 'Preço méd. A', 'Preço méd. B', 'Δ Preço']],
+      body: precoQtd.map((r) => [
+        r.key,
+        q(r.qtdA),
+        q(r.qtdB),
+        dPctTxt(r.qtdA, r.qtdB),
+        brl(r.precoA),
+        brl(r.precoB),
+        dPctTxt(r.precoA, r.precoB),
+      ]),
+      headStyles: { fillColor: VERDE, textColor: 255 },
+      styles: { fontSize: 8, cellPadding: 3 },
+      margin: { left: M, right: M },
+      didParseCell: rightAlignNumCols(1),
+    });
+    y = doc.lastAutoTable.finalY + 18;
+  }
 
   rodape(doc, M);
   doc.save(`analise-periodo-${tipo.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);

@@ -1,6 +1,7 @@
 // Wrapper de fetch com token JWT e tratamento de expiração.
 
 const TOKEN_KEY = 'kampeki_token';
+const LOGIN_KEY = 'kampeki_login';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -16,6 +17,29 @@ export function clearToken() {
 
 export function isAuthenticated() {
   return !!getToken();
+}
+
+// --- Credenciais salvas ("manter-me conectado") ---
+// Guardadas neste computador para reautenticar sem redigitar quando o token
+// expira. Codificadas em base64 apenas para não ficarem à vista — NÃO é
+// criptografia; coerente com o modelo (app desktop de 1 usuário de confiança,
+// que já carrega o .env em texto puro no disco).
+export function saveCredentials(email, password) {
+  try {
+    localStorage.setItem(LOGIN_KEY, btoa(encodeURIComponent(JSON.stringify({ email, password }))));
+  } catch { /* localStorage indisponível: ignora */ }
+}
+
+export function getCredentials() {
+  try {
+    const raw = localStorage.getItem(LOGIN_KEY);
+    if (!raw) return null;
+    return JSON.parse(decodeURIComponent(atob(raw)));
+  } catch { return null; }
+}
+
+export function clearCredentials() {
+  localStorage.removeItem(LOGIN_KEY);
 }
 
 async function request(method, path, body) {

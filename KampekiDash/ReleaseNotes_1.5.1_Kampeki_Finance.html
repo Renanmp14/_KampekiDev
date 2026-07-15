@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampeki Finance — Notas da versão 1.5.1</title>
+<style>html{background:#0e1b18}@media(prefers-color-scheme:light){html{background:#efe7dd}}body{margin:0}.page{min-height:100vh}</style>
+</head>
+<body>
+<style>
+  :root{
+    /* Tema claro (areia/verde) — padrão */
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de;
+    --text:#173229; --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --ring:rgba(224,106,84,.45);
+    --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+      --muted:#9bb0a7; --border:#2a4e44;
+      --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+      --primary-soft:rgba(255,139,124,.14);
+      --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+      --ring:rgba(255,139,124,.5);
+      --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de; --text:#173229;
+    --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --ring:rgba(224,106,84,.45); --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+    --muted:#9bb0a7; --border:#2a4e44;
+    --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(255,139,124,.14);
+    --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+    --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    padding:clamp(20px,5vw,64px) 20px 72px;
+  }
+  .wrap{max-width:940px; margin:0 auto}
+  .eyebrow{
+    font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--teal); margin:0 0 14px;
+  }
+  h1{
+    font-size:clamp(2.3rem,6.4vw,3.7rem); line-height:1.02; font-weight:800;
+    letter-spacing:-.028em; text-wrap:balance; margin:0 0 18px;
+  }
+  h1 .accent{color:var(--primary)}
+  .lede{
+    font-size:clamp(1.05rem,2.4vw,1.28rem); color:var(--muted); max-width:62ch;
+    margin:0 0 26px;
+  }
+  .meta{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  .pill{
+    display:inline-flex; align-items:center; gap:8px; font-weight:700;
+    font-size:.82rem; padding:7px 13px; border-radius:999px;
+    border:1px solid var(--border); background:var(--surface);
+  }
+  .pill.version{background:var(--primary-fill); color:var(--primary-ink); border-color:transparent}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--olive)}
+  .mono{font-family:var(--mono)}
+
+  /* Marca no topo */
+  .brandbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:clamp(34px,7vw,64px)}
+  .wordmark{font-weight:800; letter-spacing:.26em; font-size:.82rem; text-transform:uppercase; color:var(--text)}
+  .wordmark span{color:var(--primary)}
+  .stamp{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+
+  /* Resumo */
+  .summary{margin:clamp(40px,7vw,68px) 0}
+  .sec-label{
+    font-size:12px; font-weight:700; letter-spacing:.15em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 18px; display:flex; align-items:center; gap:12px;
+  }
+  .sec-label::after{content:""; flex:1; height:1px; background:var(--border)}
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px}
+  .tile{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:18px 18px 20px; box-shadow:var(--shadow);
+  }
+  .tile .k{font-size:1.5rem; line-height:1}
+  .tile h4{margin:12px 0 6px; font-size:1rem; font-weight:700; letter-spacing:-.01em}
+  .tile p{margin:0; font-size:.9rem; color:var(--muted)}
+
+  /* Cartões de novidade */
+  .feature{
+    display:grid; grid-template-columns:1fr 1fr; gap:clamp(20px,4vw,44px);
+    align-items:center;
+    background:var(--surface); border:1px solid var(--border); border-radius:20px;
+    padding:clamp(22px,3.4vw,38px); box-shadow:var(--shadow);
+    margin:20px 0;
+  }
+  .feature.flip .copy{order:2}
+  .feature .tag{
+    display:inline-flex; align-items:center; gap:7px; font-size:.72rem; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--teal);
+    border:1px solid var(--border); border-radius:999px; padding:5px 11px; margin-bottom:16px;
+  }
+  .feature h3{font-size:clamp(1.28rem,2.6vw,1.6rem); font-weight:800; letter-spacing:-.02em; margin:0 0 12px; text-wrap:balance}
+  .feature p{margin:0 0 12px; color:var(--text)}
+  .feature p.why{color:var(--muted); font-size:.94rem}
+  .feature .why b{color:var(--text); font-weight:700}
+
+  /* Passo a passo "como usar" dentro do cartão */
+  .use{list-style:none; margin:16px 0 0; padding:0; display:grid; gap:9px; counter-reset:u}
+  .use li{display:flex; gap:11px; align-items:flex-start; font-size:.92rem; color:var(--muted)}
+  .use li b{color:var(--text)}
+  .use li::before{
+    counter-increment:u; content:counter(u);
+    flex:none; width:22px; height:22px; border-radius:50%;
+    background:var(--teal); color:var(--surface);
+    display:grid; place-items:center; font-size:.72rem; font-weight:800; margin-top:2px;
+  }
+
+  /* Convite / chamada ao cliente */
+  .invite{
+    margin-top:16px; background:var(--primary-soft); border:1px solid var(--ring);
+    border-radius:12px; padding:14px 16px; font-size:.94rem; color:var(--text);
+  }
+  .invite b{color:var(--primary)}
+
+  /* Moldura de "screenshot" — sempre no visual escuro do app */
+  .shot{
+    border-radius:14px; overflow:hidden; border:1px solid #2a4e44;
+    background:#0f201c; box-shadow:0 20px 44px -26px rgba(0,0,0,.75);
+  }
+  .shot svg{display:block; width:100%; height:auto}
+  .shot .bar{
+    display:flex; align-items:center; gap:6px; padding:9px 12px;
+    background:#12251f; border-bottom:1px solid #23443b;
+  }
+  .shot .bar i{width:9px;height:9px;border-radius:50%;display:block;background:#2f5348}
+  .shot .bar i.c{background:#ff8b7c66}
+  .shot .bar b{margin-left:8px; font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:#7f958c; font-weight:700}
+
+  /* Seção menor */
+  .minor{margin-top:clamp(44px,7vw,72px)}
+  .minor-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:22px 22px 24px; box-shadow:var(--shadow);
+  }
+  .card h4{margin:12px 0 8px; font-size:1.12rem; font-weight:800; letter-spacing:-.015em}
+  .card p{margin:0; color:var(--muted); font-size:.94rem}
+  .card .tag{
+    display:inline-flex; align-items:center; gap:7px; font-size:.7rem; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--olive);
+    border:1px solid var(--border); border-radius:999px; padding:4px 10px;
+  }
+
+  /* Como atualizar */
+  .howto{
+    margin-top:clamp(44px,7vw,72px);
+    background:linear-gradient(180deg,var(--surface),var(--surface-2));
+    border:1px solid var(--border); border-radius:20px; padding:clamp(24px,4vw,40px);
+    box-shadow:var(--shadow);
+  }
+  .howto h3{font-size:1.4rem; font-weight:800; letter-spacing:-.02em; margin:0 0 8px}
+  .howto p.sub{margin:0 0 22px; color:var(--muted)}
+  .steps{list-style:none; margin:0; padding:0; display:grid; gap:14px; counter-reset:s}
+  .steps li{display:flex; gap:14px; align-items:flex-start}
+  .steps li::before{
+    counter-increment:s; content:counter(s);
+    flex:none; width:30px; height:30px; border-radius:50%;
+    display:grid; place-items:center; font-weight:800; font-size:.9rem;
+    background:var(--primary-fill); color:var(--primary-ink);
+  }
+  .steps li b{font-weight:700}
+  .steps li span{color:var(--muted)}
+  .callout{
+    margin-top:20px; font-size:.9rem; color:var(--muted);
+    border-left:3px solid var(--teal); padding:4px 0 4px 14px;
+  }
+
+  footer.foot{margin-top:56px; padding-top:26px; border-top:1px solid var(--border); color:var(--muted); font-size:.85rem;
+    display:flex; flex-wrap:wrap; gap:10px 20px; justify-content:space-between; align-items:center}
+
+  a{color:var(--primary); text-decoration:none}
+  a:focus-visible, .pill:focus-visible{outline:3px solid var(--ring); outline-offset:2px; border-radius:6px}
+
+  @media (max-width:760px){
+    .feature{grid-template-columns:1fr}
+    .feature.flip .copy{order:0}
+    .minor-grid{grid-template-columns:1fr}
+  }
+
+  /* Entrada suave */
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0; transform:translateY(14px); animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+    .summary{animation-delay:.05s}
+    .feature:nth-of-type(odd){animation-delay:.02s}
+    @keyframes rise{to{opacity:1; transform:none}}
+  }
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <div class="brandbar">
+      <div class="wordmark">KAM<span>P</span>EKI · FINANCE</div>
+      <div class="stamp">Notas da versão</div>
+    </div>
+
+    <header class="reveal">
+      <p class="eyebrow">Atualização de 14 de julho de 2026</p>
+      <h1>A rodada dos <span class="accent">dashboards</span>.</h1>
+      <p class="lede">
+        Esta versão é dedicada a <b>enxergar melhor o seu dinheiro</b>. Cada painel
+        ganhou uma história mais clara: o Custo passou a ser lido pelo olhar do
+        período, a Folha ganhou o cruzamento de Tag por Categoria, a Análise por
+        Período ficou mais rica em filtros e gráficos, e nasceu um novo espaço para
+        as suas <b>Visões Avançadas</b>. Tudo pensado para você tomar decisão olhando
+        para os números certos.
+      </p>
+      <div class="meta">
+        <span class="pill version"><span class="mono">v1.5.1</span></span>
+        <span class="pill"><span class="dot"></span>Dashboards &amp; Relatórios</span>
+        <span class="pill">Restaurante Kampeki</span>
+      </div>
+    </header>
+
+    <!-- RESUMO -->
+    <section class="summary reveal">
+      <p class="sec-label">Em resumo — 4 painéis, 4 histórias</p>
+      <div class="tiles">
+        <div class="tile">
+          <div class="k" style="color:var(--primary)">◷</div>
+          <h4>Dash de Custo</h4>
+          <p>O gasto lido pelo período — e o relatório sai mês a mês.</p>
+        </div>
+        <div class="tile">
+          <div class="k" style="color:var(--teal)">▦</div>
+          <h4>Dash da Folha</h4>
+          <p>Cruzamento Tag × Categoria e filtro por várias tags.</p>
+        </div>
+        <div class="tile">
+          <div class="k" style="color:var(--olive)">⇄</div>
+          <h4>Dash de Período</h4>
+          <p>Compare dois períodos com filtros e novos gráficos.</p>
+        </div>
+        <div class="tile">
+          <div class="k" style="color:var(--sand)">✦</div>
+          <h4>Visões Avançadas</h4>
+          <p>Novo espaço em construção — preço médio × quantidade.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= DASH CUSTOS ======================= -->
+    <p class="sec-label reveal">Dash de Custo · O gasto pelo olhar do período</p>
+
+    <!-- Custos: período -->
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Dash de Custo</span>
+        <h3>O custo faz mais sentido quando lido por período</h3>
+        <p>
+          A ideia central do Dash de Custo é simples: <b>você escolhe um intervalo</b>
+          — um mês, um trimestre, uma temporada — e todo o painel passa a falar sobre
+          aquele período. Total, número de lançamentos, comparativo mês a mês e a
+          composição por grupo (CMV, Despesas, Folha) respondem juntos ao recorte.
+        </p>
+        <p>
+          A grande novidade da 1.5.1 é o <b>relatório em PDF que respeita esse olhar</b>:
+          quando o período tem <b>dois ou mais meses</b> e você não fixou um mês
+          específico, a “Composição por grupo” e o “Custos por categoria” saem
+          <b>quebrados mês a mês</b> (mês nas linhas, grupos/categorias nas colunas,
+          com Subtotal e Total). Fixou um único mês? O relatório volta ao formato de
+          barras daquele mês. O que você vê é o que sai no papel.
+        </p>
+        <p class="why">
+          <b>Por que isso importa:</b> antes o relatório somava tudo num total único do
+          período e escondia a sazonalidade. Agora dá para enxergar o mês em que o CMV
+          subiu ou a folha pesou — sem exportar mês por mês na mão.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Dash de Custo — período</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <text x="24" y="36" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1.4">CUSTOS POR MÊS</text>
+          <rect x="360" y="20" width="176" height="26" rx="13" fill="#4f868f26" stroke="#4f868f66"/>
+          <text x="376" y="37" fill="#bfe0e5" font-family="system-ui" font-size="12" font-weight="700">Período: 02 – 07 / 2026</text>
+          <!-- baseline -->
+          <line x1="24" y1="250" x2="536" y2="250" stroke="#23443b"/>
+          <!-- bars -->
+          <g>
+            <rect x="40"  y="180" width="46" height="70"  rx="5" fill="#ff8b7c" fill-opacity=".5"/>
+            <rect x="124" y="140" width="46" height="110" rx="5" fill="#ff8b7c" fill-opacity=".5"/>
+            <rect x="208" y="156" width="46" height="94"  rx="5" fill="#ff8b7c" fill-opacity=".5"/>
+            <rect x="292" y="100" width="46" height="150" rx="5" fill="#ff8b7c" stroke="#ffffff" stroke-width="2"/>
+            <rect x="376" y="132" width="46" height="118" rx="5" fill="#ff8b7c" fill-opacity=".5"/>
+            <rect x="460" y="168" width="46" height="82"  rx="5" fill="#ff8b7c" fill-opacity=".5"/>
+          </g>
+          <g font-family="system-ui" font-size="12" fill="#7f958c" text-anchor="middle">
+            <text x="63"  y="270">02/26</text>
+            <text x="147" y="270">03/26</text>
+            <text x="231" y="270">04/26</text>
+            <text x="315" y="270" fill="#ffd9d0" font-weight="700">05/26</text>
+            <text x="399" y="270">06/26</text>
+            <text x="483" y="270">07/26</text>
+          </g>
+          <!-- selected pill -->
+          <rect x="278" y="76" width="74" height="20" rx="10" fill="#0f201c" stroke="#ffffff55"/>
+          <text x="315" y="90" fill="#ffffff" font-family="system-ui" font-size="11" font-weight="700" text-anchor="middle">R$ 246 mil</text>
+          <text x="24" y="292" fill="#7f958c" font-family="system-ui" font-size="11.5">Clique em qualquer ponto da coluna para fixar o mês e filtrar todo o painel.</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- Custos: notas do item -->
+    <article class="feature flip reveal">
+      <div class="copy">
+        <span class="tag">Dash de Custo · Top itens</span>
+        <h3>Do item até a nota que o originou</h3>
+        <p>
+          Na tabela <b>“Top N itens”</b> apareceu a coluna <b>Notas</b> com o botão
+          <b>📄 ver</b>. Clique e o Kampeki abre <b>todas as notas em que aquele item
+          aparece</b> — com data, número, fornecedor, total e chave da NF-e — e, dentro
+          de cada nota, <b>todos os itens</b> dela, com a linha do seu item destacada.
+        </p>
+        <p class="why">
+          É o caminho para responder “<b>de onde veio esse gasto?</b>” sem sair caçando
+          na planilha: partiu do número grande do dashboard e chegou até a nota de origem
+          em dois cliques.
+        </p>
+        <ul class="use">
+          <li><b>Abra o Dash de Custo</b> e ajuste o período.</li>
+          <li>Na tabela <b>Top N itens</b>, ache o item e clique em <b>📄 ver</b>.</li>
+          <li>Confira as notas e os itens de cada uma — a sua linha vem <b>realçada</b>.</li>
+        </ul>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Notas do item</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <text x="24" y="34" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1.4">NOTAS DE: SALMÃO FRESCO</text>
+          <!-- nota card -->
+          <rect x="20" y="48" width="520" height="70" rx="12" fill="#132824" stroke="#2a4e44"/>
+          <text x="36" y="74" fill="#e7ede9" font-family="system-ui" font-size="14" font-weight="700">NF 45.821 · Pescados Sul</text>
+          <text x="36" y="98" fill="#9bb0a7" font-family="system-ui" font-size="12.5">12/07/2026 · chave …4E29021</text>
+          <text x="524" y="82" fill="#ff8b7c" font-family="system-ui" font-size="18" font-weight="800" text-anchor="end">R$ 3.480,00</text>
+          <!-- itens header -->
+          <g font-family="system-ui" font-size="11.5" fill="#7f958c" letter-spacing=".5">
+            <text x="36"  y="142">ITEM</text>
+            <text x="330" y="142">QTD</text>
+            <text x="400" y="142">V. UNIT</text>
+            <text x="524" y="142" text-anchor="end">V. TOTAL</text>
+          </g>
+          <line x1="24" y1="150" x2="536" y2="150" stroke="#23443b"/>
+          <!-- item destacado -->
+          <rect x="20" y="158" width="520" height="30" rx="7" fill="#24443b"/>
+          <g font-family="system-ui" font-size="13">
+            <text x="36"  y="178" fill="#ffd9d0" font-weight="700">SALMÃO FRESCO</text>
+            <text x="330" y="178" fill="#dfe8e3">8 kg</text>
+            <text x="400" y="178" fill="#dfe8e3">R$ 145,00</text>
+            <text x="524" y="178" fill="#ffd9d0" font-weight="700" text-anchor="end">R$ 1.160,00</text>
+          </g>
+          <!-- outros itens -->
+          <g font-family="system-ui" font-size="13" fill="#cfe0da">
+            <text x="36"  y="212">ATUM</text>          <text x="330" y="212">5 kg</text>  <text x="400" y="212">R$ 210,00</text> <text x="524" y="212" text-anchor="end">R$ 1.050,00</text>
+            <text x="36"  y="242">CAMARÃO</text>       <text x="330" y="242">6 kg</text>  <text x="400" y="242">R$ 160,00</text> <text x="524" y="242" text-anchor="end">R$ 960,00</text>
+            <text x="36"  y="272">GELO</text>          <text x="330" y="272">30 kg</text> <text x="400" y="272">R$ 10,33</text>  <text x="524" y="272" text-anchor="end">R$ 310,00</text>
+          </g>
+        </svg>
+      </div>
+    </article>
+
+    <!-- ======================= DASH FOLHA ======================= -->
+    <p class="sec-label reveal">Dash da Folha · Quem custa o quê, por unidade</p>
+
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Dash da Folha · Cruzamento</span>
+        <h3>Cruzamento de Tag × Categoria</h3>
+        <p>
+          Lembre-se: no Kampeki, <b>a folha é lançada como custo</b> de categoria FOLHA
+          (Canoas, POA, Tele), e cada lançamento pode carregar uma <b>Tag</b> — o nome de
+          quem ou de qual frente aquele valor pertence. O novo relatório
+          <b>Cruzamento Tag × Categoria</b> junta as duas coisas numa tabela: <b>as tags
+          nas linhas</b> e <b>as unidades da folha nas colunas</b>, com Subtotal por
+          coluna e o Total geral no canto.
+        </p>
+        <p>
+          Assim você lê de bater o olho “<b>a Tag X custou tanto em Canoas e tanto em
+          POA</b>”. Todas as tags cadastradas aparecem sempre — mesmo as sem lançamento,
+          zeradas — e a folha ainda <b>sem tag</b> aparece na linha <b>“(sem tag)”</b>,
+          para você não perder valor de vista e ir etiquetando.
+        </p>
+        <p class="why">
+          <b>Novidade que ajuda a usar:</b> o botão <b>👁 Ver por mês</b> abre o mesmo
+          cruzamento <b>uma tabela para cada mês</b> do período (cada uma com Subtotal e
+          Total) e ainda <b>exporta um PDF próprio</b> — ideal para fechar o mês por
+          unidade.
+        </p>
+        <ul class="use">
+          <li>No <b>Dash da Folha</b>, role até <b>Cruzamento Tag × Categoria</b>.</li>
+          <li>Use o filtro de <b>Tag</b> (várias de uma vez) para focar só em quem interessa.</li>
+          <li>Clique em <b>👁 Ver por mês</b> para abrir a quebra mensal e <b>exportar o PDF</b>.</li>
+          <li>Marque <b>“Ocultar folha sem tag”</b> se quiser tirar a linha “(sem tag)” de todas as visões.</li>
+        </ul>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Cruzamento Tag × Categoria</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <!-- ver por mês button -->
+          <rect x="392" y="16" width="144" height="28" rx="8" fill="#1e3d34" stroke="#4f868f88"/>
+          <text x="464" y="35" fill="#bfe0e5" font-family="system-ui" font-size="12.5" font-weight="700" text-anchor="middle">👁 Ver por mês</text>
+          <!-- header -->
+          <g font-family="system-ui" font-size="11.5" fill="#7f958c" letter-spacing=".6">
+            <text x="24"  y="66">TAG</text>
+            <text x="250" y="66" text-anchor="middle">CANOAS</text>
+            <text x="345" y="66" text-anchor="middle">POA</text>
+            <text x="435" y="66" text-anchor="middle">TELE</text>
+            <text x="524" y="66" text-anchor="end">TOTAL</text>
+          </g>
+          <line x1="24" y1="74" x2="536" y2="74" stroke="#23443b"/>
+          <!-- rows -->
+          <g font-family="system-ui" font-size="13">
+            <text x="24" y="102" fill="#e7ede9">Cozinha</text>
+            <text x="250" y="102" fill="#dfe8e3" text-anchor="middle">R$ 18.200</text>
+            <text x="345" y="102" fill="#dfe8e3" text-anchor="middle">R$ 9.400</text>
+            <text x="435" y="102" fill="#7f958c" text-anchor="middle">R$ 0,00</text>
+            <text x="524" y="102" fill="#e7ede9" font-weight="700" text-anchor="end">R$ 27.600</text>
+
+            <text x="24" y="134" fill="#e7ede9">Salão</text>
+            <text x="250" y="134" fill="#dfe8e3" text-anchor="middle">R$ 12.050</text>
+            <text x="345" y="134" fill="#dfe8e3" text-anchor="middle">R$ 6.900</text>
+            <text x="435" y="134" fill="#dfe8e3" text-anchor="middle">R$ 3.100</text>
+            <text x="524" y="134" fill="#e7ede9" font-weight="700" text-anchor="end">R$ 22.050</text>
+
+            <text x="24" y="166" fill="#e7ede9">Gestão</text>
+            <text x="250" y="166" fill="#dfe8e3" text-anchor="middle">R$ 8.000</text>
+            <text x="345" y="166" fill="#7f958c" text-anchor="middle">R$ 0,00</text>
+            <text x="435" y="166" fill="#dfe8e3" text-anchor="middle">R$ 4.500</text>
+            <text x="524" y="166" fill="#e7ede9" font-weight="700" text-anchor="end">R$ 12.500</text>
+
+            <text x="24" y="198" fill="#c98080" font-style="italic">(sem tag)</text>
+            <text x="250" y="198" fill="#cbb0a8" text-anchor="middle">R$ 2.400</text>
+            <text x="345" y="198" fill="#cbb0a8" text-anchor="middle">R$ 1.100</text>
+            <text x="435" y="198" fill="#7f958c" text-anchor="middle">R$ 0,00</text>
+            <text x="524" y="198" fill="#cbb0a8" font-weight="700" text-anchor="end">R$ 3.500</text>
+          </g>
+          <!-- subtotal -->
+          <line x1="24" y1="214" x2="536" y2="214" stroke="#3a5f54"/>
+          <rect x="18" y="222" width="524" height="34" rx="8" fill="#17332b"/>
+          <g font-family="system-ui" font-size="13" font-weight="800">
+            <text x="24" y="244" fill="#bfcb7f">SUBTOTAL</text>
+            <text x="250" y="244" fill="#e7ede9" text-anchor="middle">R$ 40.650</text>
+            <text x="345" y="244" fill="#e7ede9" text-anchor="middle">R$ 17.400</text>
+            <text x="435" y="244" fill="#e7ede9" text-anchor="middle">R$ 7.600</text>
+            <text x="524" y="244" fill="#ff8b7c" text-anchor="end">R$ 65.650</text>
+          </g>
+          <text x="24" y="280" fill="#7f958c" font-family="system-ui" font-size="11.5">Todas as tags aparecem sempre; sem lançamento, entram zeradas.</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- ======================= DASH PERÍODO ======================= -->
+    <p class="sec-label reveal">Dash de Período · Dois momentos, lado a lado</p>
+
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Dash de Período</span>
+        <h3>Comparar períodos, agora com foco</h3>
+        <p>
+          O Dash de Período conta uma história de <b>“antes e depois”</b>: você define
+          um <b>Período A</b> e um <b>Período B</b> — por exemplo, Jan–Mar contra
+          Abr–Jun — e o Kampeki mostra a variação lado a lado, em valor e em percentual.
+        </p>
+        <p>
+          Nesta versão os <b>filtros passaram a valer para os dois períodos ao mesmo
+          tempo</b> e refletem nos gráficos, nas tabelas <b>e no PDF</b>: em Custos você
+          filtra por <b>Categoria</b> e por <b>Subcategoria (várias, em etiquetas)</b>;
+          na Folha, por <b>unidade</b> e por <b>Tag (várias)</b>. Há ainda o
+          <b>Nº de lançamentos A/B</b> nos indicadores e um <b>limitador de Top N itens</b>
+          — para o relatório não virar uma tabela quilométrica.
+        </p>
+        <ul class="use">
+          <li>Escolha as datas de <b>Período A</b> e <b>Período B</b> nos dois cartões.</li>
+          <li>Aplique os <b>filtros</b> (Categoria, Subcategoria/Tag) — valem para A e B juntos.</li>
+          <li>Ajuste o <b>Top N itens</b> e clique em <b>⬇ Exportar PDF</b> para levar o comparativo.</li>
+        </ul>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Comparar A × B</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <!-- legend -->
+          <rect x="24" y="22" width="14" height="14" rx="3" fill="#4f868f"/>
+          <text x="46" y="34" fill="#bfe0e5" font-family="system-ui" font-size="12.5">Período A · Jan–Mar</text>
+          <rect x="230" y="22" width="14" height="14" rx="3" fill="#ff8b7c"/>
+          <text x="252" y="34" fill="#ffd9d0" font-family="system-ui" font-size="12.5">Período B · Abr–Jun</text>
+          <!-- grouped horizontal bars -->
+          <g font-family="system-ui" font-size="13" fill="#cfe0da">
+            <text x="24" y="76">CMV</text>
+            <text x="24" y="150">Despesas</text>
+            <text x="24" y="224">Folha</text>
+          </g>
+          <!-- CMV -->
+          <rect x="150" y="62"  width="300" height="16" rx="4" fill="#4f868f"/>
+          <rect x="150" y="82"  width="356" height="16" rx="4" fill="#ff8b7c"/>
+          <text x="516" y="75"  fill="#bfe0e5" font-family="system-ui" font-size="11" text-anchor="end">158k</text>
+          <text x="516" y="95"  fill="#ffd9d0" font-family="system-ui" font-size="11" text-anchor="end">188k</text>
+          <!-- Despesas -->
+          <rect x="150" y="136" width="210" height="16" rx="4" fill="#4f868f"/>
+          <rect x="150" y="156" width="176" height="16" rx="4" fill="#ff8b7c"/>
+          <text x="372" y="149" fill="#bfe0e5" font-family="system-ui" font-size="11">111k</text>
+          <text x="338" y="169" fill="#ffd9d0" font-family="system-ui" font-size="11">93k</text>
+          <!-- Folha -->
+          <rect x="150" y="210" width="250" height="16" rx="4" fill="#4f868f"/>
+          <rect x="150" y="230" width="272" height="16" rx="4" fill="#ff8b7c"/>
+          <text x="416" y="223" fill="#bfe0e5" font-family="system-ui" font-size="11">132k</text>
+          <text x="438" y="243" fill="#ffd9d0" font-family="system-ui" font-size="11">143k</text>
+          <!-- top N chip -->
+          <rect x="360" y="16" width="176" height="0" />
+          <text x="24" y="284" fill="#7f958c" font-family="system-ui" font-size="11.5">Filtros e Top N valem para os dois períodos e para o relatório em PDF.</text>
+        </svg>
+      </div>
+    </article>
+
+    <article class="feature flip reveal">
+      <div class="copy">
+        <span class="tag">Dash de Período · Novos gráficos</span>
+        <h3>Onde a variação nasceu — e se foi preço ou volume</h3>
+        <p>
+          Dois gráficos novos ajudam a explicar o “porquê” da diferença entre os períodos:
+        </p>
+        <p>
+          <b>1. Contribuição para a variação (cascata):</b> parte do <b>Total do
+          Período A</b>, empilha as <b>subidas</b> (verde) e <b>quedas</b> (vinho) de cada
+          categoria (ou tag, na Folha) e fecha no <b>Total do Período B</b>. De relance
+          você vê <b>quem puxou o gasto para cima ou para baixo</b>.
+        </p>
+        <p>
+          <b>2. Preço médio × quantidade (Custos):</b> uma tabela por subcategoria com
+          <b>Qtd A/B</b> e <b>Preço médio A/B</b>, com os respectivos Δ — respondendo se
+          o gasto mudou porque você <b>comprou mais</b> ou porque o <b>preço subiu</b>.
+        </p>
+        <p class="why">
+          A cascata fica <b>só na tela</b> (é para leitura rápida); a tabela de preço ×
+          quantidade também <b>vai para o PDF</b>, com as colunas de variação.
+        </p>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Contribuição para a variação</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <text x="24" y="34" fill="#8ea59c" font-family="system-ui" font-size="12" letter-spacing="1.2">TOTAL A  →  CONTRIBUIÇÕES  →  TOTAL B</text>
+          <line x1="24" y1="250" x2="536" y2="250" stroke="#23443b"/>
+          <!-- Total A -->
+          <rect x="34" y="120" width="60" height="130" rx="4" fill="#4f868f"/>
+          <text x="64" y="270" fill="#bfe0e5" font-family="system-ui" font-size="11" text-anchor="middle">Total A</text>
+          <text x="64" y="112" fill="#bfe0e5" font-family="system-ui" font-size="11" text-anchor="middle">401k</text>
+          <!-- up CMV (olive) floating -->
+          <rect x="126" y="90" width="52" height="30" rx="4" fill="#bfcb7f"/>
+          <text x="152" y="270" fill="#7f958c" font-family="system-ui" font-size="10.5" text-anchor="middle">CMV</text>
+          <text x="152" y="82" fill="#bfcb7f" font-family="system-ui" font-size="10.5" text-anchor="middle">+30k</text>
+          <!-- down Despesas (wine) -->
+          <rect x="210" y="90" width="52" height="24" rx="4" fill="#c98080"/>
+          <text x="236" y="270" fill="#7f958c" font-family="system-ui" font-size="10.5" text-anchor="middle">Despesas</text>
+          <text x="236" y="82" fill="#c98080" font-family="system-ui" font-size="10.5" text-anchor="middle">−18k</text>
+          <!-- up Folha (olive) -->
+          <rect x="294" y="74" width="52" height="16" rx="4" fill="#bfcb7f"/>
+          <text x="320" y="270" fill="#7f958c" font-family="system-ui" font-size="10.5" text-anchor="middle">Folha</text>
+          <text x="320" y="66" fill="#bfcb7f" font-family="system-ui" font-size="10.5" text-anchor="middle">+11k</text>
+          <!-- connectors -->
+          <g stroke="#3a5f54" stroke-width="1.5" stroke-dasharray="3 3">
+            <line x1="94" y1="120" x2="126" y2="120"/>
+            <line x1="178" y1="90" x2="210" y2="90"/>
+            <line x1="262" y1="90" x2="294" y2="90"/>
+            <line x1="346" y1="74" x2="470" y2="74"/>
+          </g>
+          <!-- Total B -->
+          <rect x="470" y="74" width="60" height="176" rx="4" fill="#ff8b7c"/>
+          <text x="500" y="270" fill="#ffd9d0" font-family="system-ui" font-size="11" text-anchor="middle">Total B</text>
+          <text x="500" y="66" fill="#ffd9d0" font-family="system-ui" font-size="11" text-anchor="middle">424k</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- ======================= VISÕES AVANÇADAS ======================= -->
+    <p class="sec-label reveal">Visões Avançadas · Um espaço novo, ainda em construção</p>
+
+    <article class="feature reveal">
+      <div class="copy">
+        <span class="tag">Visões Avançadas · Em desenvolvimento</span>
+        <h3>Um lugar para as perguntas mais difíceis</h3>
+        <p>
+          Nasceu na sidebar uma página nova — <b>Visões Avançadas</b> — pensada como um
+          <b>laboratório</b> que vai crescer com o tempo. Ela não substitui os painéis do
+          dia a dia; é onde vamos colocar análises mais profundas, que cruzam mais
+          variáveis.
+        </p>
+        <p>
+          A primeira visão já disponível é a <b>Evolução de preço médio × quantidade</b>:
+          escolha <b>Categoria → Subcategoria</b> e veja, mês a mês, o <b>preço médio
+          ponderado</b> (o quanto, em média, você pagou por unidade) contra a
+          <b>quantidade pedida</b>. É o começo de responder “<b>estou pagando mais caro ou
+          comprando mais?</b>”.
+        </p>
+        <p class="why">
+          <b>Atenção honesta:</b> como itens de unidades diferentes são somados no recorte,
+          leia o preço como “<b>média por unidade pedida</b>”. Por isso a página está
+          marcada como <b>em desenvolvimento</b> — a estrutura está pronta para evoluir.
+        </p>
+        <div class="invite">
+          <b>Convite:</b> esta página vai virar o que <b>você</b> precisar. Pense nas
+          perguntas que hoje ficam sem resposta — “qual fornecedor subiu mais?”, “curva
+          ABC dos itens?”, “onde a folha cresce mais rápido?” — e nos mande. Cada visão
+          avançada que a operação pedir pode morar aqui.
+        </div>
+      </div>
+      <div class="shot" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i class="c"></i><b>Preço médio × quantidade</b></div>
+        <svg viewBox="0 0 560 300" role="img">
+          <rect width="560" height="300" fill="#0f201c"/>
+          <!-- em desenvolvimento badge -->
+          <rect x="360" y="16" width="176" height="26" rx="13" fill="#d7c4b622" stroke="#d7c4b666"/>
+          <text x="448" y="33" fill="#e6d3c4" font-family="system-ui" font-size="11.5" font-weight="700" text-anchor="middle">✦ em desenvolvimento</text>
+          <!-- legend -->
+          <line x1="24" y1="30" x2="52" y2="30" stroke="#ff8b7c" stroke-width="3"/>
+          <text x="60" y="34" fill="#ffd9d0" font-family="system-ui" font-size="12">Preço médio</text>
+          <line x1="180" y1="30" x2="208" y2="30" stroke="#6ba3ac" stroke-width="3"/>
+          <text x="216" y="34" fill="#bfe0e5" font-family="system-ui" font-size="12">Quantidade</text>
+          <!-- axes -->
+          <line x1="44" y1="60" x2="44" y2="250" stroke="#23443b"/>
+          <line x1="44" y1="250" x2="530" y2="250" stroke="#23443b"/>
+          <!-- price line (coral) -->
+          <polyline points="70,180 150,168 230,150 310,160 390,132 470,120"
+                    fill="none" stroke="#ff8b7c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#ff8b7c">
+            <circle cx="70" cy="180" r="4"/><circle cx="150" cy="168" r="4"/><circle cx="230" cy="150" r="4"/>
+            <circle cx="310" cy="160" r="4"/><circle cx="390" cy="132" r="4"/><circle cx="470" cy="120" r="4"/>
+          </g>
+          <!-- qty line (teal) -->
+          <polyline points="70,210 150,196 230,205 310,182 390,190 470,168"
+                    fill="none" stroke="#6ba3ac" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 0"/>
+          <g fill="#6ba3ac">
+            <circle cx="70" cy="210" r="4"/><circle cx="150" cy="196" r="4"/><circle cx="230" cy="205" r="4"/>
+            <circle cx="310" cy="182" r="4"/><circle cx="390" cy="190" r="4"/><circle cx="470" cy="168" r="4"/>
+          </g>
+          <!-- month labels -->
+          <g font-family="system-ui" font-size="11" fill="#7f958c" text-anchor="middle">
+            <text x="70" y="270">02</text><text x="150" y="270">03</text><text x="230" y="270">04</text>
+            <text x="310" y="270">05</text><text x="390" y="270">06</text><text x="470" y="270">07</text>
+          </g>
+          <text x="24" y="292" fill="#7f958c" font-family="system-ui" font-size="11.5">Cascata: Categoria → Subcategoria · eixo esquerdo = preço, direito = quantidade.</text>
+        </svg>
+      </div>
+    </article>
+
+    <!-- MENORES -->
+    <section class="minor reveal">
+      <p class="sec-label">Também nesta versão</p>
+      <div class="minor-grid">
+        <div class="card">
+          <span class="tag">Abertura do app</span>
+          <h4>Login que se lembra de você</h4>
+          <p>
+            No app instalado, marque <b>“Manter-me conectado neste computador”</b> e o
+            Kampeki entra sozinho na próxima vez — sem redigitar usuário e senha a cada
+            tanto. O botão <b>Sair</b> continua limpando tudo quando você quiser.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag">Legibilidade</span>
+          <h4>Gráficos mais fáceis de ler</h4>
+          <p>
+            As dicas que aparecem ao passar o mouse (tooltips) da Folha ganharam
+            <b>texto branco</b> sobre o fundo verde — sumiam antes. E as colunas de
+            valores nos relatórios em PDF agora ficam <b>alinhadas à direita</b>,
+            cabeçalho incluído.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMO ATUALIZAR -->
+    <section class="howto reveal">
+      <h3>Como atualizar</h3>
+      <p class="sub">É rápido e mantém todos os seus dados na planilha.</p>
+      <ol class="steps">
+        <li><span><b>Feche</b> o Kampeki Finance, se estiver aberto.</span></li>
+        <li><span><b>Rode o instalador</b> da nova versão (o arquivo enviado a você). Ele substitui a versão anterior.</span></li>
+        <li><span><b>Entre</b> com o mesmo login de sempre — ou deixe marcado “Manter-me conectado”.</span></li>
+        <li><span>Confira no <b>rodapé do app</b> se aparece <span class="mono">v1.5.1</span>.</span></li>
+      </ol>
+      <p class="callout">
+        Seus lançamentos, itens e configurações continuam na planilha — a atualização
+        não apaga nada. Todos os painéis desta versão apenas <b>leem</b> os dados de novas
+        formas; nada muda no que já está gravado.
+      </p>
+    </section>
+
+    <footer class="foot">
+      <span>Kampeki Finance — notas da versão <span class="mono">1.5.1</span></span>
+      <span>14 de julho de 2026</span>
+    </footer>
+
+  </div>
+</div>
+</body>
+</html>
