@@ -97,8 +97,9 @@ app.use((err, req, res, next) => {
 
 /**
  * Sobe o servidor HTTP. Usado tanto standalone (`node src/app.js`) quanto pelo
- * Electron, que passa `port: 0` (o SO escolhe uma porta livre) e o diretório do
- * build do frontend. Resolve com { server, port } (a porta efetiva).
+ * Electron, que passa a porta (fixa, para o localStorage sobreviver — ver
+ * desktop/main.js) e o diretório do build do frontend. Resolve com
+ * { server, port } (a porta efetiva) e rejeita se o bind falhar.
  */
 export async function startServer({ port, staticDir } = {}) {
   if (staticDir) process.env.FRONTEND_DIST = staticDir;
@@ -110,12 +111,16 @@ export async function startServer({ port, staticDir } = {}) {
     console.error('Verifique GOOGLE_SHEET_ID e GOOGLE_CREDENTIALS_JSON no .env.');
   }
   const listenPort = port !== undefined ? port : (process.env.PORT || 3001);
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const server = app.listen(listenPort, '127.0.0.1', () => {
+      server.removeListener('error', reject);
       const actual = server.address().port;
       console.log(`Kampeki Finance API (v${APP_VERSION}) em http://127.0.0.1:${actual}`);
       resolve({ server, port: actual });
     });
+    // Sem este listener, uma falha de bind (ex.: EADDRINUSE) seria um 'error' sem
+    // ouvinte = exceção não tratada. Com ele, quem chamou decide o que fazer.
+    server.once('error', reject);
   });
 }
 

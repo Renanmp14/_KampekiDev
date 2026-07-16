@@ -1557,3 +1557,71 @@ A análise **"Evolução de preço médio × quantidade"** nasceu como uma seç�
 - **Subir `desktop/package.json` → `1.5.1`** e gerar/validar o instalador (herda o fix da sidebar/rolagem @125% e o NFS-e em lote, ainda não empacotados num build entregue).
 - Rascunhos descartados nesta sessão (ranking por fornecedor, curva ABC, maiores variações, KPIs de comparação) — podem voltar como "Visões avançadas" se o gestor quiser.
 - Reflexo no PDF de análises da página "Visões avançadas" (hoje ela não exporta) — avaliar quando o layout estabilizar.
+
+---
+
+## Atualizações — 16/07/2026 — versão 1.5.2 (em preparação)
+
+> Sessão de **correção de bug**: o "Manter-me conectado" (entregue na 1.5.1) não funcionava no app instalado. A causa não era o login — era a **porta sorteada** a cada abertura. Diagnóstico com evidência, correção validada rodando o app real, e o registro de uma pendência de segurança que a correção expõe. Versão do `desktop/package.json` **ainda não foi subida** para `1.5.2` — só ao gerar o build (mesmo procedimento da 1.5.1).
+
+> **Atualização de estado (fecha pendência anterior):** a v1.5.1 foi **commitada** (`b0405eb`, 15/07), **empacotada** (`KampekiFinance-Setup-1.5.1.exe`, 16/07) e **instalada no cliente** — o que a seção anterior ainda listava como pendente.
+
+### Bug — "Manter-me conectado" não persistia no app instalado
+
+**Sintoma:** cliente instalou a 1.5.1 e relatou que o login salvo não funciona — redigita usuário/senha a cada abertura.
+
+**Causa:** o Electron subia o backend com `startServer({ port: 0 })` → **porta sorteada pelo SO a cada abertura** → a janela carregava `http://127.0.0.1:<porta>`. O `localStorage` do Chromium é **isolado por origem, e a origem inclui a porta** — então cada abertura era uma origem **nova e vazia**. As credenciais (`kampeki_login`), o token (`kampeki_token`) e o **zoom** (`kampeki_zoom`) eram gravados numa origem que nunca mais seria aberta. Nada estava errado no `Login.jsx`/`client.js`.
+
+**Evidência:** o `Local Storage` do app instalado (`%APPDATA%\kampeki-desktop\Local Storage\leveldb`) tinha **16 origens acumuladas**, uma por execução (`127.0.0.1:50578`, `:53325`, `:59939`, … — todas na faixa 49152–65535).
+
+**Por que passou na validação da 1.5.1:** no dev (`npm run dev`) o Vite usa a porta fixa 5173 — origem estável, auto-login funciona. O defeito só existe no app empacotado.
+
+**Correção — porta fixa com fallback:**
+- **`desktop/main.js`:** porta escolhida de `[43117, 43118, 43119]`, testada com um probe (`net.createServer`) **antes** de subir o backend — assim uma porta ocupada não custa um `initSheets` (lento) por tentativa; `0` (sorteio do SO) só como último recurso. **43117 fica fora da faixa dinâmica do Windows (49152–65535)** — confirmada com `netsh int ipv4 show dynamicport tcp` —, que é de onde o SO tira portas para outros programas: colisão é improvável **por construção**.
+- **`backend/src/app.js`:** `startServer` ganhou `server.once('error', reject)`. Sem isso, um `EADDRINUSE` seria um evento `'error'` **sem ouvinte** = exceção não tratada derrubando o app — ou seja, **o fallback não existiria**. O standalone segue em `PORT || 3001`.
+
+**Degradação suave (importante):** se a 43117 estiver ocupada, o app abre na 43118 e perde o login salvo **apenas daquela sessão** — nunca fica pior que o comportamento atual. Quando a porta libera, volta sozinho para a origem onde o login está.
+
+### Decisão registrada — por que **não** guardar as credenciais num arquivo local
+
+Alternativa levantada pelo gestor: gravar usuário/senha num arquivo e procurá-lo no boot. **Descartada por custar mais e resolver menos:**
+
+- **Custa mais:** a janela roda com `contextIsolation: true` / `nodeIntegration: false` e **não existe preload** — o React não tem acesso a `fs`. Exigiria um `preload.js` novo + `contextBridge` + 3 `ipcMain.handle`, tornar `getCredentials`/`saveCredentials` **assíncronas** no `client.js` (com fallback para `localStorage`, senão quebra o dev no navegador) e refazer o prefill **síncrono** do `Login.jsx` (`useRef(getCredentials()).current` → efeito + estado + loading). ~4 arquivos e um caminho duplo (Electron × navegador) para manter vivo. A porta fixa foram **2 arquivos**.
+- **Resolve menos:** o arquivo cobre **só as credenciais**; **token e zoom continuariam zerando** a cada abertura, e qualquer novo uso de `localStorage` quebraria silenciosamente. A porta é a **doença**; o arquivo é curativo num sintoma.
+- **Armadilha evitada:** fazer o **backend** guardar o arquivo (fugindo do preload) exigiria um endpoint **público** devolvendo usuário/senha em texto na porta fixa — trocaria um bug de usabilidade por um buraco de segurança.
+- **Onde a ideia está certa:** é imune à porta. Fica como **plano B**, aplicável **em cima** do que já foi feito (sem retrabalho), se o cliente relatar que o login sumiu de novo — o que indicaria colisão na 43117.
+
+### Pendência de segurança — CORS aberto + porta previsível (decisão pendente)
+
+Com a porta fixa, o endereço do app vira **previsível**, e o backend está com **`app.use(cors())` liberado com wildcard** (`backend/src/app.js:35`). Na prática, uma página maliciosa aberta no navegador do cliente poderia bater no `POST /api/auth/login` (rota **pública**, sem rate-limit) **e ler a resposta** — tentativa de senha contra o app local. O risco é baixo (exige atacar este alvo específico) e o delta é pequeno (a porta aleatória era obscuridade fraca — dá para varrer 16 mil portas em segundos), **mas é real e fica registrado**.
+
+Correção proposta (1 linha, **não aplicada — aguardando aval do gestor**): restringir/remover o `cors()`. Verificado que é seguro: o front **sempre** chama `/api` na **mesma origem** — no app empacotado o Express serve o build; no dev o proxy do Vite é server-side (`frontend/vite.config.js`). Nenhum dos dois depende de CORS.
+
+### Changelog técnico — 16/07/2026 (por arquivo)
+
+| Arquivo | O que mudou |
+|---|---|
+| `desktop/main.js` | Novos `PORTAS_PREFERIDAS = [43117, 43118, 43119]`, `portaLivre(porta)` (probe com `net`) e `escolherPorta()` (testa antes de subir o backend; `0` como último recurso). `startBackend` usa a porta escolhida e cai para `0` na corrida rara de a porta ser tomada entre o probe e o listen. Comentário explicando por que a porta precisa ser estável (origem do `localStorage`). |
+| `backend/src/app.js` | `startServer` agora **rejeita** em falha de bind (`server.once('error', reject)`, removido no listen bem-sucedido) — sem isso o `EADDRINUSE` era exceção não tratada. Docstring atualizada (o Electron não passa mais `port: 0`). |
+
+### Validação (desta vez rodando o app real — `desktop/build/.env` presente na máquina de dev)
+
+- **Mecanismo** (harness Electron com perfil descartável, mesmo Electron do projeto): mesma porta → credencial volta ✓; **porta diferente → vem vazia** (bug do cliente reproduzido) ✗; voltando à porta original → credencial **ainda lá** ✓. Prova que o dado nunca foi apagado, só ficava inalcançável.
+- **App real, 2 aberturas seguidas:** ambas em **43117**, com a planilha carregando (`[initSheets] Todas as abas já existem`).
+- **Fallback:** com a 43117 ocupada por outro processo, o app subiu na **43118 sem crash**; liberada a porta, voltou sozinho para a **43117**.
+- **Sem regressão no dev:** backend standalone sobe em **3001**; com a 3001 ocupada, a mensagem segue clara (`Error: listen EADDRINUSE: address already in use 127.0.0.1:3001`) e o processo encerra como antes. `npm run dev` (5173 + proxy) inalterado. O **frontend não foi tocado**.
+- `node --check` OK em `backend/src/app.js` e `desktop/main.js`.
+- Nota de campo: conexões em `TIME_WAIT` na 43117 **não** impedem o bind — reabrir o app em sequência funciona.
+
+### Efeito para o cliente
+
+- Precisa instalar o `.exe` novo (a correção está no build).
+- **Digita o login uma vez:** o que estava salvo ficou órfão numa origem antiga e **não é resgatável**. Daí em diante persiste (fechar/abrir → entra sozinho).
+- **Zoom** também volta ao padrão uma vez; reajusta e passa a persistir (hoje reseta a cada abertura — ele talvez não tenha reparado).
+- **Nada mais muda:** mesma tela, mesmos dados, **nenhuma escrita no Sheets**. Sem aviso de firewall (segue em loopback `127.0.0.1`, como já era).
+- As origens antigas acumuladas ficam como lixo inofensivo (alguns KB) no `%APPDATA%`.
+
+### Pendências em aberto
+- **Decidir o aperto do CORS** (recomendado) — ver seção acima.
+- **Subir `desktop/package.json` → `1.5.2`** e gerar/validar o instalador (hoje ainda em **1.5.1**); confirmar no cliente: login persiste ao fechar/reabrir e **`v1.5.2`** no rodapé.
+- Plano B do arquivo de credenciais (preload/IPC) — só se a 43117 colidir na máquina do cliente.

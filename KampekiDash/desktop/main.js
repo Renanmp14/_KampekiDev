@@ -1,14 +1,43 @@
 // Processo principal do Electron (CommonJS).
-// Sobe o backend Express embutido numa porta livre em 127.0.0.1 e abre a janela
+// Sobe o backend Express embutido numa porta fixa em 127.0.0.1 e abre a janela
 // apontando para ele (o Express serve o build do frontend + as rotas /api).
 const {
   app, BrowserWindow, shell, dialog,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const { pathToFileURL } = require('url');
 
 const isDev = !app.isPackaged;
+
+// A porta precisa ser ESTÁVEL entre aberturas: o localStorage do Chromium é
+// isolado por origem, e a origem inclui a porta. Com porta sorteada (o antigo
+// `port: 0`), cada abertura era uma origem nova e vazia — login salvo e zoom se
+// perdiam sempre. 43117 fica fora da faixa dinâmica do Windows (49152-65535),
+// que é de onde o SO tira portas para outros programas, então a colisão é
+// improvável. As alternativas cobrem o caso raro de a porta estar ocupada: o app
+// abre igual, só perde o login salvo daquela sessão.
+const PORTAS_PREFERIDAS = [43117, 43118, 43119];
+
+function portaLivre(porta) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(porta, '127.0.0.1');
+  });
+}
+
+// Escolhe a porta ANTES de subir o backend: assim uma porta ocupada não custa um
+// initSheets (lento) por tentativa. 0 = último recurso (o SO escolhe uma livre).
+async function escolherPorta() {
+  for (const porta of PORTAS_PREFERIDAS) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await portaLivre(porta)) return porta;
+  }
+  return 0;
+}
 
 // Caminhos dos recursos: em dev leem da árvore do repositório; empacotado, de
 // process.resourcesPath (definido pelo extraResources do electron-builder).
@@ -42,9 +71,17 @@ async function startBackend() {
   process.env.APP_VERSION = app.getVersion();
   process.env.FRONTEND_DIST = frontendDist;
 
-  // Import dinâmico do backend (ESM) por caminho absoluto. port: 0 = porta livre.
+  // Import dinâmico do backend (ESM) por caminho absoluto.
   const backend = await import(pathToFileURL(backendEntry).href);
-  serverInfo = await backend.startServer({ port: 0, staticDir: frontendDist });
+  const porta = await escolherPorta();
+  try {
+    serverInfo = await backend.startServer({ port: porta, staticDir: frontendDist });
+  } catch (e) {
+    // Corrida rara: alguém tomou a porta entre o teste e o listen. Vale mais
+    // abrir o app numa porta qualquer do que falhar.
+    if (e.code !== 'EADDRINUSE') throw e;
+    serverInfo = await backend.startServer({ port: 0, staticDir: frontendDist });
+  }
   return serverInfo;
 }
 
