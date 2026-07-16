@@ -1625,3 +1625,125 @@ Correção proposta (1 linha, **não aplicada — aguardando aval do gestor**): 
 - **Decidir o aperto do CORS** (recomendado) — ver seção acima.
 - **Subir `desktop/package.json` → `1.5.2`** e gerar/validar o instalador (hoje ainda em **1.5.1**); confirmar no cliente: login persiste ao fechar/reabrir e **`v1.5.2`** no rodapé.
 - Plano B do arquivo de credenciais (preload/IPC) — só se a 43117 colidir na máquina do cliente.
+
+---
+
+## Atualizações — 16/07/2026 — versão 1.5.3 (em preparação)
+
+> Melhorias de **drill-down nas dialogs de detalhe**, pedidas pelo cliente ainda para a linha 1.5: a dialog de item do Dash Custos passa a respeitar os filtros da tela e a mostrar o Fornecedor, e a **Análise por Período** ganha dialogs de detalhe A×B encadeadas, todas exportáveis em PDF. **Sem mudança de backend** (tudo frontend). Versão do `desktop/package.json` **ainda não subida** para `1.5.3` — só ao gerar o build.
+
+### 1. Dash Custos — a dialog de notas do item não respeitava os filtros
+
+**Sintoma:** a dialog aberta pelo "📄 ver" (coluna Notas do "Top N itens") mostrava notas de **qualquer data**, ignorando o filtro de período/mês da tela.
+
+**Causa:** `DashCustos.jsx` passava `custos={custos}` — a **lista completa vinda da API**, sem período, mês nem drill. As demais visões do dashboard usam a base recortada (`filtrado`); só a dialog escapava.
+
+**Correção:** a dialog passou a receber **`custos={filtrado}`** — a mesma base que alimenta a tabela "Top N itens" de onde o botão sai (período → mês → categoria → subcategoria). Ou seja, a dialog reflete exatamente o recorte da tela. Recebe também `periodoLabel`/`filtrosLabel` para exibir (e imprimir no PDF) qual recorte está em vista.
+
+### 2. Dash Custos — Fornecedor na dialog (e a virada de formato)
+
+**Decisão de modelagem (alinhada):** perguntado se a nota deveria aparecer **inteira** (todos os seus itens, como era) ou **só as linhas do filtro**, o gestor escolheu **só as linhas do filtro** — a visão é sobre o **item**, não sobre a nota.
+
+**Consequência (proposital):** o card por nota deixou de fazer sentido (quase sempre teria 1 linha), então a dialog virou uma **tabela plana de lançamentos do item**: `Data · Nº Nota · Fornecedor · Subcategoria · Qtd · V. Unit · V. Total` + linha de **TOTAL**. É nesse formato que o **Fornecedor** (item 2 do pedido) entra como coluna, e cada linha passa a ser autossuficiente — o que também vale para o PDF.
+
+- O **total exibido é o do ITEM no recorte** (não o total das notas) — coerente com a escolha acima; os itens vizinhos da mesma nota não entram.
+- A **chave NF-e** (44+ díg.) estouraria a coluna: fica no **tooltip** do Nº da nota, sinalizada por um 🔑.
+
+### 3. Análise por Período — dialogs de detalhe A×B (drill encadeado)
+
+Clicar numa linha das seções **"Composição por grupo"**, **"Comparativo por Categoria"**, **"Comparativo por Subcategoria"** e **"Comparativo por Item"** (aba **Custos**) abre o novo **`DrillPeriodoModal`**, que **desce de nível** a cada clique, com **breadcrumb** para voltar:
+
+```
+Grupo ─┐
+       ├─→ Subcategorias ─→ Itens ─→ Notas (A e B separados)
+Categoria ─┘
+```
+
+- **Decisão (alinhada):** drill **encadeado com breadcrumb**, em vez de uma dialog por seção que para no primeiro nível. Atende o "ver as notas de cada um" pedido na subcategoria e, de brinde, dá o mesmo caminho a partir de grupo/categoria.
+- **Navegação de volta (ajuste pedido logo em seguida):** o breadcrumb já permitia voltar clicando num nível anterior, mas era discreto demais — parecia só o texto do caminho. Ganhou um botão explícito **"← Voltar"** (volta **um** nível; some no primeiro, onde só resta Fechar), com o breadcrumb ao lado para **pular direto** para qualquer nível do caminho (com `title` "Voltar para …"). Como o CSS do breadcrumb estilizava *todos* os botões filhos (o que achataria o botão novo), a regra foi escopada para `.crumb`.
+- **Nível de notas:** para o item em foco, uma tabela **por período** (Período A e Período B, um abaixo do outro), cada uma com `Data · Nº · Fornecedor · Subcategoria · Qtd · V. Unit · V. Total` + TOTAL. Mesmo formato e mesma regra ("só as linhas do item") da dialog do Dash Custos.
+- **Respeita sempre os Períodos A e B** (e os filtros de Categoria/Subcategoria da tela): as bases `a`/`b` chegam prontas do dashboard e **todo** nível do caminho é aplicado às duas.
+- Cada nível mostra **Total A · Total B · variação** no topo, e a tabela tem **rodapé de TOTAL** — dá para conferir na hora que o detalhamento **fecha** com a linha que foi clicada.
+- **Aba Folha:** ficou **fora** (decisão alinhada). A folha não tem nota — `custoParaFolha` carrega só `TAG`/`ITEM_FOLHA`/`VALOR`/`CATEGORIA`, sem `NUM_NOTA`/`FORNECEDOR`/`DATA_NOTA`.
+
+**Detalhe que evitou um bug de reconciliação:** o `groupSum` **descarta chave vazia**, e o grupo **"Outros"** é justamente onde caem os custos **sem categoria/subcategoria** (itens "a classificar"). Um drill ingênuo em "Outros" mostraria uma tabela **que não fecharia** com o valor da linha clicada. Por isso o detalhamento usa o rótulo **`(sem subcategoria)`** (mesma solução que o `precoQtdPorSub` já adotava), e o total bate. *Nota: a tabela "Comparativo por Subcategoria" da página continua omitindo os sem-subcategoria (comportamento do `groupSum`); dentro da dialog eles aparecem, porque ali o total precisa fechar com o pai.*
+
+### 4. PDF de todas as dialogs (botão no topo)
+
+Toda dialog tem **"⬇ Exportar PDF"** no topo, exportando **exatamente o que está na tela** dela:
+- **`exportarNotasItem`** (Dash Custos): cabeçalho com item, **período e filtros ativos**, contagem e total; tabela dos lançamentos + TOTAL.
+- **`exportarDrillPeriodo`** (Análise por Período), dois modos:
+  - **detalhamento** → gráfico **A×B** (reusa `barrasAB`) + tabela com Δ absoluto/percentual e **rodapé de TOTAL**;
+  - **notas** → uma tabela de lançamentos **por período** (A e B), cada uma com seu total.
+  - Cabeçalho traz o **caminho do breadcrumb** (`CMV › SALMÃO › SALMÃO FRESCO 5KG`), os rótulos de A e B, os filtros e os KPIs A/B/variação.
+
+### Changelog técnico — 16/07/2026 (por arquivo, tudo frontend)
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/agg.js` | Ganhou `GRUPOS`/`grupoDe` e `comparar` (vindos do `DashPeriodo`, que tinha cópia local) — agora compartilhados com a dialog. *(O `DashCustos` mantém a cópia própria de `GRUPOS`, que carrega as cores dos gráficos.)* |
+| `src/utils/notas.js` | **Novo** — `dataOrdenavel`, `linhasDoItem(rows, item)` (normaliza + ordena por data desc; **só as linhas do item**), `somaLinhas`, `qtdFmt`. |
+| `src/utils/drillPeriodo.js` | **Novo** — lógica pura do drill fora do componente (para ser testável): `NIVEIS` (predicado + próximo nível + título), `KEY_FN`, `LABEL_COL`, `SEM_SUB`, `valCusto`, `aplicarCaminho(rows, stack)`. |
+| `src/components/NotasItemModal.jsx` | Reescrito: tabela plana do item (**com Fornecedor**), TOTAL, chave NF-e no tooltip, cabeçalho com período/filtros e botão **⬇ Exportar PDF** no topo. Base já filtrada via prop. |
+| `src/components/DrillPeriodoModal.jsx` | **Novo** — dialog encadeada (breadcrumb, Total A/B/variação, tabela com Δ e rodapé de TOTAL; nível de notas com A e B separados) + PDF no topo. |
+| `src/utils/exportPdf.js` | Novos `exportarNotasItem` e `exportarDrillPeriodo` (+ helpers `cabecalhoDialog`, `tabelaNotas`, `tituloSecao`, `semDados`, `slug`, `hoje`). Reusa `rodape`/`ensureSpace`/`barrasAB`/`rightAlignNumCols`. |
+| `src/pages/dash/DashCustos.jsx` | Dialog recebe **`filtrado`** (era `custos`) + `periodoLabel`/`filtrosLabel`; novos memos `periodoLabelAtual`/`drillLabel` (o `exportarPdf` passou a reusá-los em vez de recalcular). |
+| `src/pages/dash/DashPeriodo.jsx` | Importa `comparar`/`grupoDe` do `agg.js` (cópias locais removidas); `ComparativoSecao` ganhou `onRowClick` (linhas clicáveis + dica no título); estado `drill` e render do `DrillPeriodoModal` nas 4 seções da aba Custos. |
+| `src/styles.css` | Novas classes `.drill-crumbs` (breadcrumb da dialog). |
+
+### Validação
+
+- Frontend: `vite build` OK (único aviso é o de tamanho de chunk, pré-existente).
+- **Lógica do drill exercitada em Node contra os módulos reais** (`agg.js`/`notas.js`/`drillPeriodo.js`), com base sintética de 2 meses incluindo um custo **sem categoria** — **17/17**:
+  - detalhamento de **CMV fecha** com a linha clicada (A e B);
+  - detalhamento de **"Outros"** rotula `(sem subcategoria)` e **fecha** (o caso que quebraria);
+  - caminho encadeado **grupo → subcategoria → itens** correto, com `novo`/queda no Δ%;
+  - nível de notas: A e B separados, totais batendo com a linha do item e **sem vazar o item vizinho da mesma nota**;
+  - drill direto por categoria.
+- **PDFs gerados e conferidos por extração de texto** (pdfjs-dist sobre os arquivos reais) — **26/26**: os 5 cenários (notas do item, notas vazio, detalhamento A×B, notas A×B, sem dados) geram PDF válido; conferidos coluna **Fornecedor**, período/filtros no cabeçalho, caminho do breadcrumb, KPIs A/B/variação, linha de TOTAL, `novo`, seções Período A/B e o rodapé paginado. Casos vazios **não quebram**.
+- Backend: **inalterado**.
+- **Pendente de teste manual no navegador** (`npm run dev`): clicar nas linhas das 4 seções, navegar pelo breadcrumb e baixar os PDFs de cada nível.
+
+### Pendências em aberto
+- **Subir `desktop/package.json` → `1.5.3`** e gerar/validar o instalador (herda a correção do login persistente da 1.5.2 e o aperto de CORS, se aprovado).
+- Aba **Folha** da Análise por Período segue sem drill (sem dados de nota) — se o gestor quiser, dá para fazer Unidade → Tag → Item, parando no item.
+
+---
+
+## Registro da conversa — sessão 16/07/2026 (v1.5.2 + v1.5.3)
+
+> A pedido do gestor, o log da sessão, para não se perder o raciocínio e as decisões (mesmo padrão do registro da v1.1.0). As duas versões nasceram na mesma sessão: a **1.5.2** de um bug reportado pelo cliente, a **1.5.3** de melhorias pedidas em seguida.
+
+**1. Ponto de partida — "veja onde eu parei":** o brief estava **desatualizado em relação ao repositório**. A seção da 1.5.1 ainda listava "subir a versão e gerar o instalador" como pendente, mas a v1.5.1 já estava **commitada** (`b0405eb`, 15/07), **empacotada** (`KampekiFinance-Setup-1.5.1.exe`, gerado 16/07 às 10:37 — minutos após o último save do brief) e **instalada no cliente**. Registrado no topo da seção da 1.5.2.
+
+**2. Bug reportado:** cliente instalou a 1.5.1 e o **"Manter-me conectado" não funcionava** — redigitava a senha a cada abertura. Pedido: "pode validar o porquê".
+
+**3. Diagnóstico (com evidência, não dedução):** o Electron subia o backend com `port: 0` → **porta sorteada a cada abertura** → como o `localStorage` do Chromium é isolado **por origem, e a origem inclui a porta**, cada abertura era uma origem nova e vazia. Confirmado inspecionando o `Local Storage` do app instalado: **16 origens acumuladas**, uma por execução. O `Login.jsx`/`client.js` estavam corretos — por isso passou na validação da 1.5.1, feita no navegador (Vite = porta fixa 5173).
+
+**4. "Valide se fica bom e não afeta mais nada":** implementada a **porta fixa 43117 com fallback** e validada **rodando o app real** (o `desktop/build/.env` existe na máquina de dev):
+- Harness Electron com perfil descartável **reproduziu o bug** (porta diferente → credencial some) e provou a correção (mesma porta → volta; voltando à porta original → o dado **nunca tinha sido apagado**).
+- App real: **43117 nas duas aberturas**; com a porta ocupada → **43118 sem crash**; liberada → volta sozinho à 43117.
+- **Dois achados fora do pedido:** (a) o `startServer` **não tratava o evento `error`** — sem isso um `EADDRINUSE` derrubaria o app e **o fallback não existiria** (corrigido); (b) `app.use(cors())` **com wildcard** — com a porta previsível, uma página maliciosa poderia bater no `POST /api/auth/login` (público, sem rate-limit) **e ler a resposta**. Aperto do CORS **proposto e não aplicado — aguardando aval**; verificado que é seguro (front sempre chama `/api` na mesma origem; no dev o proxy do Vite é server-side).
+
+**5. Dúvida do gestor — "não seria mais simples guardar usuário/senha num arquivo local?"** Resposta: **não neste app**, e o motivo é concreto:
+- **Custa mais:** a janela roda com `contextIsolation: true`/`nodeIntegration: false` e **não há preload** — o React não tem `fs`. Exigiria preload + `contextBridge` + 3 `ipcMain.handle`, funções **assíncronas** no `client.js` (com fallback p/ o navegador) e refazer o prefill **síncrono** do `Login.jsx`. ~4 arquivos vs. 2 da porta fixa.
+- **Resolve menos:** cobre só as credenciais — **token e zoom continuariam zerando**. A porta é a doença; o arquivo é curativo num sintoma.
+- **Armadilha evitada:** fazer via **backend** (fugindo do preload) exigiria endpoint **público** devolvendo usuário/senha em texto na porta fixa.
+- **Onde a ideia está certa:** é imune à porta → fica como **plano B**, aplicável em cima do que já existe.
+
+**6. "Impacta o dev? E o cliente?"** — respondido **testando**: backend standalone sobe em **3001** (a porta fixa vive só no Electron); com a 3001 ocupada a mensagem de `EADDRINUSE` segue idêntica à de antes (sem regressão); `npm run dev` intacto. Ganho colateral: o `npm start` do desktop também fixa a porta, então **dá para testar o login persistente no dev** (antes era impossível). Para o cliente: instala o `.exe` novo, **digita o login uma vez** (o salvo antigo ficou órfão numa origem antiga, irrecuperável), reajusta o **zoom** uma vez, e nada mais muda — nenhuma escrita no Sheets, sem aviso de firewall.
+
+**7. Pedido da 1.5.3 (4 frentes):** (1) a dialog de item do Dash Custos não respeitava o filtro de data; (2) faltava o **Fornecedor** nas informações; (3) mesmas dialogs de detalhe na **Análise por Período** (Composição por grupo, Comparativo por Categoria/Subcategoria/Item), com A e B separados e "ver as notas de cada um"; (4) **exportar PDF** nessas dialogs, com o botão **no topo**.
+
+**8. Três decisões perguntadas antes de implementar (e as respostas do gestor):**
+- **Conteúdo da nota** — nota inteira × só as linhas do filtro → **"só as linhas do filtro"** (contra a recomendação inicial, que era manter a nota inteira). Consequência aceita: o total exibido é o **do item no recorte**, não o da nota. Isso **mudou o formato** da dialog (card por nota → **tabela plana**) e foi o que fez o **Fornecedor** encaixar naturalmente como coluna.
+- **Profundidade do drill** — **encadeado com breadcrumb** (Grupo/Categoria → Subcategoria → Item → Notas), em vez de parar no nível pedido.
+- **Aba Folha** — **só Custos**, porque a folha **não tem nota** (`custoParaFolha` carrega só Tag/Item/Valor/Categoria).
+
+**9. Bug de reconciliação evitado na implementação:** o `groupSum` **descarta chave vazia** e o grupo **"Outros"** é onde caem os custos **sem categoria** (itens "a classificar") — um drill ingênuo em "Outros" abriria uma tabela que **não fecharia** com a linha clicada. Resolvido com o rótulo `(sem subcategoria)` e coberto por teste.
+
+**10. Ajuste seguinte (feedback do gestor):** *"clico no item, vejo a separação por período, e não tenho um botão de voltar à dialog que iniciou"*. O breadcrumb **já** permitia voltar, mas estava discreto demais (lia como texto de caminho). Adicionado o **"← Voltar"** explícito (um nível por clique), mantendo o breadcrumb para **pular direto** a qualquer nível.
+
+**11. Validação da sessão:** `vite build` OK; **17/17** na lógica do drill exercitada em Node **contra os módulos reais** (incluindo o caso "Outros" e a garantia de que o item vizinho da mesma nota **não vaza**); **26/26** nos PDFs, gerados de verdade e conferidos por **extração de texto** (pdfjs) — coluna Fornecedor, breadcrumb, KPIs A/B, TOTAL e casos vazios. Backend inalterado na 1.5.3.
+
+**Estado ao fim da sessão:** `desktop/package.json` **ainda em 1.5.1** (a versão sobe ao gerar o build, como na 1.5.1). Pendentes: **decidir o aperto do CORS**, **subir para 1.5.3 + gerar/validar o instalador** (que leva junto a correção do login da 1.5.2) e o **teste manual no navegador** das dialogs novas.

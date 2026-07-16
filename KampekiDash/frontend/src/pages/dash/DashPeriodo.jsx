@@ -4,10 +4,11 @@ import {
 } from 'recharts';
 import { custosApi, folhaApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import DrillPeriodoModal from '../../components/DrillPeriodoModal.jsx';
 import { exportarRelatorioPeriodo } from '../../utils/exportPdf.js';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import {
-  groupSum, filterByPeriod, toNum, keyToLabel,
+  filterByPeriod, toNum, keyToLabel, comparar, grupoDe,
 } from '../../utils/agg.js';
 
 // Rótulo de período a partir de { de, ate } (chaves 'YYYY-MM' do month input).
@@ -22,18 +23,6 @@ const B_COLOR = '#ff8b7c'; // Período B (coral)
 const UP_COLOR = '#bfcb7f'; // contribuição positiva (oliva)
 const DOWN_COLOR = '#9c6b6b'; // contribuição negativa (vinho)
 const TOTAL_COLOR = '#93a39b'; // barras de total no bridge
-
-// Agrupamento macro das categorias de Custos (espelha o Dash Custos).
-const GRUPOS = [
-  { key: 'CMV', cats: ['CMV'] },
-  { key: 'Despesas', cats: ['DESPESA ADMINISTRATIVA', 'DISTRIBUIÇÃO DE LUCRO'] },
-  { key: 'Folha', cats: ['FOLHA CANOAS', 'FOLHA POA', 'FOLHA TELE'] },
-];
-function grupoDe(categoria) {
-  const c = String(categoria || '').trim().toUpperCase();
-  for (const g of GRUPOS) if (g.cats.includes(c)) return g.key;
-  return 'Outros';
-}
 
 const fmtQtd = (n) => toNum(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
@@ -124,26 +113,11 @@ function BridgeChart({
   );
 }
 
-// Compara duas agregações por chave e calcula variação absoluta e percentual.
-function comparar(rowsA, rowsB, keyFn, valFn) {
-  const a = Object.fromEntries(groupSum(rowsA, keyFn, valFn).map((x) => [x.key, x.total]));
-  const b = Object.fromEntries(groupSum(rowsB, keyFn, valFn).map((x) => [x.key, x.total]));
-  const chaves = [...new Set([...Object.keys(a), ...Object.keys(b)])];
-  return chaves
-    .map((key) => {
-      const va = a[key] || 0;
-      const vb = b[key] || 0;
-      const deltaAbs = vb - va;
-      const deltaPct = va > 0 ? (deltaAbs / va) * 100 : (vb > 0 ? null : 0);
-      return { key, va, vb, deltaAbs, deltaPct };
-    })
-    .sort((x, y) => y.vb - x.vb);
-}
-
 // Seção comparativa: gráfico de barras horizontais (A vs B, top N) + tabela
-// detalhada com todas as chaves e a variação.
+// detalhada com todas as chaves e a variação. Com `onRowClick`, cada linha da
+// tabela abre a dialog de detalhe daquela chave.
 function ComparativoSecao({
-  titulo, labelCol, rows, topN = 8, maxRows = null,
+  titulo, labelCol, rows, topN = 8, maxRows = null, onRowClick = null,
 }) {
   const chartData = rows.slice(0, topN).map((r) => ({
     nome: r.key, 'Período A': r.va, 'Período B': r.vb,
@@ -151,7 +125,12 @@ function ComparativoSecao({
   const tableRows = maxRows ? rows.slice(0, maxRows) : rows;
   return (
     <div className="card">
-      <h3 className="card-title">{titulo}</h3>
+      <h3 className="card-title">
+        {titulo}
+        {onRowClick && (
+          <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (clique numa linha para detalhar)</span>
+        )}
+      </h3>
       {rows.length === 0 ? <div className="empty">Sem dados.</div> : (
         <>
           <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 46)}>
@@ -193,7 +172,11 @@ function ComparativoSecao({
               </thead>
               <tbody>
                 {tableRows.map((r) => (
-                  <tr key={r.key}>
+                  <tr
+                    key={r.key}
+                    style={onRowClick ? { cursor: 'pointer' } : undefined}
+                    onClick={onRowClick ? () => onRowClick(r) : undefined}
+                  >
                     <td>{r.key}</td>
                     <td className="num">{brl(r.va)}</td>
                     <td className="num">{brl(r.vb)}</td>
@@ -275,6 +258,8 @@ function AnaliseCustos({ custos }) {
   const [fSubs, setFSubs] = useState([]);
   const [topItens, setTopItens] = useState(15);
   const [exportando, setExportando] = useState(false);
+  // Nível inicial da dialog de detalhe: { tipo: 'grupo'|'categoria'|'subcategoria'|'item', valor }
+  const [drill, setDrill] = useState(null);
   const val = (r) => toNum(r.VALOR_TOTAL);
 
   const categorias = useMemo(
@@ -384,10 +369,34 @@ function AnaliseCustos({ custos }) {
         )}
       </div>
 
-      <ComparativoSecao titulo="Composição por grupo" labelCol="Grupo" rows={porGrupo} />
-      <ComparativoSecao titulo="Comparativo por Categoria" labelCol="Categoria" rows={porCategoria} />
-      <ComparativoSecao titulo="Comparativo por Subcategoria" labelCol="Subcategoria" rows={porSubcategoria} />
-      <ComparativoSecao titulo="Comparativo por Item" labelCol="Item" rows={porItem} maxRows={nItens} />
+      {/* Clicar numa linha abre a dialog de detalhe, que desce de nível a partir
+          dali (grupo/categoria → subcategoria → item → notas), sempre sobre as
+          mesmas bases `a`/`b` (Períodos A e B + filtros da tela). */}
+      <ComparativoSecao
+        titulo="Composição por grupo"
+        labelCol="Grupo"
+        rows={porGrupo}
+        onRowClick={(r) => setDrill({ tipo: 'grupo', valor: r.key })}
+      />
+      <ComparativoSecao
+        titulo="Comparativo por Categoria"
+        labelCol="Categoria"
+        rows={porCategoria}
+        onRowClick={(r) => setDrill({ tipo: 'categoria', valor: r.key })}
+      />
+      <ComparativoSecao
+        titulo="Comparativo por Subcategoria"
+        labelCol="Subcategoria"
+        rows={porSubcategoria}
+        onRowClick={(r) => setDrill({ tipo: 'subcategoria', valor: r.key })}
+      />
+      <ComparativoSecao
+        titulo="Comparativo por Item"
+        labelCol="Item"
+        rows={porItem}
+        maxRows={nItens}
+        onRowClick={(r) => setDrill({ tipo: 'item', valor: r.key })}
+      />
 
       <div className="card">
         <h3 className="card-title">
@@ -435,6 +444,18 @@ function AnaliseCustos({ custos }) {
           </div>
         )}
       </div>
+
+      {drill && (
+        <DrillPeriodoModal
+          inicial={drill}
+          rowsA={a}
+          rowsB={b}
+          periodoALabel={periodLabel(periodoA)}
+          periodoBLabel={periodLabel(periodoB)}
+          filtrosLabel={filtrosLabel}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </div>
   );
 }

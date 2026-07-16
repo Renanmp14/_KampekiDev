@@ -14,6 +14,37 @@ export function groupSum(rows, keyFn, valFn) {
     .sort((a, b) => b.total - a.total);
 }
 
+// Agrupamento macro das categorias de Custos (CMV / Despesas / Folha / Outros).
+// "Outros" recolhe o que está fora dos três grupos — inclusive custos SEM
+// categoria (itens "a classificar") —, o que mantém o Total honesto.
+export const GRUPOS = [
+  { key: 'CMV', cats: ['CMV'] },
+  { key: 'Despesas', cats: ['DESPESA ADMINISTRATIVA', 'DISTRIBUIÇÃO DE LUCRO'] },
+  { key: 'Folha', cats: ['FOLHA CANOAS', 'FOLHA POA', 'FOLHA TELE'] },
+];
+export function grupoDe(categoria) {
+  const c = String(categoria || '').trim().toUpperCase();
+  for (const g of GRUPOS) if (g.cats.includes(c)) return g.key;
+  return 'Outros';
+}
+
+// Compara duas agregações por chave e calcula variação absoluta e percentual.
+// `deltaPct` vem null quando a chave só existe em B ("novo").
+export function comparar(rowsA, rowsB, keyFn, valFn) {
+  const a = Object.fromEntries(groupSum(rowsA, keyFn, valFn).map((x) => [x.key, x.total]));
+  const b = Object.fromEntries(groupSum(rowsB, keyFn, valFn).map((x) => [x.key, x.total]));
+  const chaves = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+  return chaves
+    .map((key) => {
+      const va = a[key] || 0;
+      const vb = b[key] || 0;
+      const deltaAbs = vb - va;
+      const deltaPct = va > 0 ? (deltaAbs / va) * 100 : (vb > 0 ? null : 0);
+      return { key, va, vb, deltaAbs, deltaPct };
+    })
+    .sort((x, y) => y.vb - x.vb);
+}
+
 // "YYYY-MM" -> rótulo "MM/YYYY"
 export function keyToLabel(key) {
   const [y, m] = key.split('-');

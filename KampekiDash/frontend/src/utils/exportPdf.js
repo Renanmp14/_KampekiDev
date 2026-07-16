@@ -13,6 +13,14 @@ const PALETA = [
 
 const trunc = (s, n) => { const t = String(s || ''); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
+// Nome de arquivo seguro a partir de um rótulo livre (item, categoria, ...).
+const slug = (s) => String(s || 'export')
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '')
+  .toLowerCase().slice(0, 40) || 'export';
+
+const hoje = () => new Date().toISOString().slice(0, 10);
+
 // Alinha à direita o CABEÇALHO + corpo + rodapé das colunas numéricas (col >= from).
 // Necessário porque no autoTable o `halign` de columnStyles alinha só as células do
 // corpo — o cabeçalho fica à esquerda por padrão, desalinhando título × valor.
@@ -657,4 +665,163 @@ export function exportarRelatorioPeriodo({
 
   rodape(doc, M);
   doc.save(`analise-periodo-${tipo.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// --- Dialogs de detalhe (Dash Custos e Análise por Período) -----------------
+// Exportam exatamente o que está na tela da dialog: a base já vem recortada pelo
+// período/mês/drill (Custos) ou pelos períodos A e B (Análise).
+
+const qtdPdf = (n) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+// Cabeçalho comum: título da marca + data de geração + linhas de contexto.
+function cabecalhoDialog(doc, M, titulo, linhas = []) {
+  let y = 46;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(...VERDE);
+  doc.text(`KAMPEKI — ${trunc(titulo, 60)}`, M, y);
+  y += 18;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(110);
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, M, y);
+  y += 13;
+  for (const l of linhas.filter(Boolean)) {
+    doc.text(trunc(l, 110), M, y);
+    y += 13;
+  }
+  return y + 6;
+}
+
+function tituloSecao(doc, y, M, texto) {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30);
+  doc.text(texto, M, y);
+  return y + 12;
+}
+
+function semDados(doc, y, M) {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text('Sem dados.', M, y);
+  return y + 16;
+}
+
+// Tabela de lançamentos de um item (Data · Nº · Fornecedor · ... ) + TOTAL.
+function tabelaNotas(doc, y, M, linhas, total) {
+  autoTable(doc, {
+    startY: y,
+    head: [['Data', 'Nº Nota', 'Fornecedor', 'Subcategoria', 'Qtd', 'V. Unit', 'V. Total']],
+    body: linhas.map((l) => [
+      l.data, trunc(l.numNota, 14), trunc(l.fornecedor, 30), trunc(l.subcategoria, 22),
+      qtdPdf(l.qtd), brl(l.valorUnit), brl(l.valorTotal),
+    ]),
+    foot: [['TOTAL', '', '', '', '', '', brl(total)]],
+    headStyles: { fillColor: VERDE, textColor: 255 },
+    footStyles: { fillColor: [232, 232, 232], textColor: 20, fontStyle: 'bold' },
+    styles: { fontSize: 8, cellPadding: 3 },
+    margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(4),
+  });
+  return doc.lastAutoTable.finalY + 18;
+}
+
+/**
+ * PDF da dialog "Notas do item" do Dash Custos (um período só).
+ * `linhas` vem de utils/notas.js → linhasDoItem(base já filtrada, item).
+ */
+export function exportarNotasItem({
+  item, periodoLabel, filtrosLabel = null, linhas = [], total = 0,
+}) {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const M = 40;
+  let y = cabecalhoDialog(doc, M, `Notas do item — ${item}`, [
+    `Período: ${periodoLabel || 'Todo o período'}`,
+    filtrosLabel ? `Filtros: ${filtrosLabel}` : null,
+    `${linhas.length} lançamento(s) · Total ${brl(total)}`,
+  ]);
+  if (!linhas.length) semDados(doc, y, M);
+  else tabelaNotas(doc, y, M, linhas, total);
+  rodape(doc, M);
+  doc.save(`notas-item-${slug(item)}-${hoje()}.pdf`);
+}
+
+/**
+ * PDF da dialog de drill da Análise por Período. Dois modos:
+ *  - detalhamento (rows de `comparar`): gráfico A×B + tabela com Δ;
+ *  - notas (notasA/notasB): uma tabela de lançamentos por período.
+ */
+export function exportarDrillPeriodo({
+  titulo, caminho = null, periodoALabel, periodoBLabel, filtrosLabel = null,
+  totalA = 0, totalB = 0, labelCol = 'Chave', rows = null, notasA = null, notasB = null,
+}) {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const M = 40;
+  const W = doc.internal.pageSize.getWidth() - 2 * M;
+  let y = cabecalhoDialog(doc, M, titulo, [
+    caminho ? `Caminho: ${caminho}` : null,
+    `Período A: ${periodoALabel || 'Todo o histórico'}`,
+    `Período B: ${periodoBLabel || 'Todo o histórico'}`,
+    filtrosLabel ? `Filtros: ${filtrosLabel}` : null,
+  ]);
+
+  // KPIs A / B / variação (mesmo formato do relatório de período).
+  const delta = totalB - totalA;
+  const deltaPct = totalA > 0 ? (delta / totalA) * 100 : null;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(20);
+  doc.text(`Total A: ${brl(totalA)}`, M, y);
+  doc.text(`Total B: ${brl(totalB)}`, M + 170, y);
+  doc.text(
+    `Variação: ${delta >= 0 ? '+' : ''}${brl(delta)}${deltaPct === null ? '' : ` (${delta >= 0 ? '+' : ''}${pct(deltaPct)})`}`,
+    M + 340, y,
+  );
+  y += 20;
+
+  if (notasA || notasB) {
+    const secoes = [
+      { label: `Período A — ${periodoALabel || 'Todo o histórico'}`, linhas: notasA || [] },
+      { label: `Período B — ${periodoBLabel || 'Todo o histórico'}`, linhas: notasB || [] },
+    ];
+    for (const s of secoes) {
+      const totalSecao = s.linhas.reduce((acc, l) => acc + l.valorTotal, 0);
+      y = ensureSpace(doc, y, 70, M);
+      y = tituloSecao(doc, y, M, `${s.label} · ${s.linhas.length} lançamento(s)`);
+      y = s.linhas.length ? tabelaNotas(doc, y + 4, M, s.linhas, totalSecao) : semDados(doc, y + 4, M) + 6;
+    }
+  } else {
+    const lista = rows || [];
+    if (!lista.length) {
+      semDados(doc, y, M);
+    } else {
+      const topN = 8;
+      y = ensureSpace(doc, y, Math.min(lista.length, topN) * 30 + 24, M);
+      y = barrasAB(doc, M, y, W, lista, topN) + 12;
+      autoTable(doc, {
+        startY: y,
+        head: [[labelCol, 'Período A', 'Período B', 'Δ Absoluto', 'Δ %']],
+        body: lista.map((r) => [
+          r.key,
+          brl(r.va),
+          brl(r.vb),
+          `${r.deltaAbs >= 0 ? '+' : ''}${brl(r.deltaAbs)}`,
+          r.deltaPct === null || r.deltaPct === undefined
+            ? 'novo'
+            : `${r.deltaPct >= 0 ? '+' : ''}${pct(r.deltaPct)}`,
+        ]),
+        foot: [['TOTAL', brl(totalA), brl(totalB), `${delta >= 0 ? '+' : ''}${brl(delta)}`, deltaPct === null ? '—' : `${delta >= 0 ? '+' : ''}${pct(deltaPct)}`]],
+        headStyles: { fillColor: VERDE, textColor: 255 },
+        footStyles: { fillColor: [232, 232, 232], textColor: 20, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 3 },
+        margin: { left: M, right: M },
+        didParseCell: rightAlignNumCols(1),
+      });
+    }
+  }
+
+  rodape(doc, M);
+  doc.save(`detalhe-periodo-${slug(titulo)}-${hoje()}.pdf`);
 }

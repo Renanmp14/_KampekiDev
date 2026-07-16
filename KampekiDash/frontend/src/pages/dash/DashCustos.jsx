@@ -189,6 +189,19 @@ export default function DashCustos() {
   const effDe = selMes || deKey;
   const effAte = selMes || ateKey;
 
+  // Rótulos do recorte ativo — usados no PDF do dashboard e na dialog de notas.
+  const periodoLabelAtual = useMemo(() => (selMes
+    ? keyToLabel(selMes)
+    : (deKey ? `${keyToLabel(deKey)} – ${keyToLabel(ateKey)}` : 'Todo o período')),
+  [selMes, deKey, ateKey]);
+  const drillLabel = useMemo(() => {
+    const parts = [];
+    if (selMes) parts.push(`Mês: ${keyToLabel(selMes)}`);
+    if (selCategoria) parts.push(`Categoria: ${selCategoria}`);
+    if (selSubcategoria) parts.push(`Subcategoria: ${selSubcategoria}`);
+    return parts.join(' · ') || null;
+  }, [selMes, selCategoria, selSubcategoria]);
+
   // Rótulo da janela "período anterior" (reusado na UI dos KPIs e no PDF).
   const periodoAnteriorLabel = useMemo(() => {
     const p = previousWindow(effDe, effAte);
@@ -223,13 +236,7 @@ export default function DashCustos() {
   function exportarPdf() {
     setExportando(true);
     try {
-      const periodoLabel = selMes
-        ? keyToLabel(selMes)
-        : (deKey ? `${keyToLabel(deKey)} – ${keyToLabel(ateKey)}` : 'Todo o período');
-      const drillParts = [];
-      if (selMes) drillParts.push(`Mês: ${keyToLabel(selMes)}`);
-      if (selCategoria) drillParts.push(`Categoria: ${selCategoria}`);
-      if (selSubcategoria) drillParts.push(`Subcategoria: ${selSubcategoria}`);
+      const periodoLabel = periodoLabelAtual;
 
       // Exportação adaptável aos filtros/drill: mostra no PDF exatamente o recorte
       // ativo. Mês selecionado → só aquele mês nos gráficos mensais; categoria
@@ -290,7 +297,7 @@ export default function DashCustos() {
 
       exportarRelatorioCustos({
         periodoLabel,
-        drillLabel: drillParts.join(' · ') || null,
+        drillLabel,
         subLabel: selCategoria || null,
         totalGeral,
         nLanc: filtrado.length,
@@ -610,8 +617,15 @@ export default function DashCustos() {
         </div>
       </div>
 
+      {/* Base já recortada (período + mês + drill) — a dialog reflete a tela. */}
       {notaItem && (
-        <NotasItemModal item={notaItem} custos={custos} onClose={() => setNotaItem('')} />
+        <NotasItemModal
+          item={notaItem}
+          custos={filtrado}
+          periodoLabel={periodoLabelAtual}
+          filtrosLabel={drillLabel}
+          onClose={() => setNotaItem('')}
+        />
       )}
     </div>
   );

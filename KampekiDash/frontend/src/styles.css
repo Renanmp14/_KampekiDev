@@ -195,6 +195,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .ss-more { border-top: 1px solid var(--border); margin-top: 2px; }
 
 /* Chips de filtro multi-seleção (ex.: subcategorias no filtro de Custos). */
+/* Voltar + breadcrumb da dialog de detalhe da Análise por Período (drill). */
+.drill-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 10px; }
+.drill-crumbs .drill-voltar { margin-right: 8px; }
+.drill-crumbs .crumb {
+  background: none; border: none; color: var(--primary); cursor: pointer;
+  padding: 2px 4px; font-size: 12px; font-weight: 600;
+}
+.drill-crumbs .crumb:hover:not(:disabled) { text-decoration: underline; }
+.drill-crumbs .crumb:disabled { color: var(--muted); cursor: default; }
+.drill-crumbs .sep { color: var(--muted); font-size: 12px; }
+
 .filtro-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .filtro-chip {
   display: inline-flex;
