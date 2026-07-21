@@ -206,6 +206,39 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .drill-crumbs .crumb:disabled { color: var(--muted); cursor: default; }
 .drill-crumbs .sep { color: var(--muted); font-size: 12px; }
 
+/* Faixa de KPIs das dialogs de notas (item único e recorte inteiro). */
+.resumo-notas {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media (max-width: 900px) {
+  .resumo-notas { grid-template-columns: repeat(2, 1fr); }
+}
+.resumo-kpi {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.resumo-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.resumo-value { font-size: 18px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.resumo-value-sm { font-size: 14px; }
+.resumo-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.resumo-trunc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tabela agrupada por item (dialog do recorte): linha-resumo clicável + detalhe. */
+.grp-row { cursor: pointer; }
+.grp-row-open { background: var(--surface-2); }
+.grp-caret { color: var(--primary); font-size: 10px; }
+.grp-detalhe > td { padding: 0 0 0 24px; background: var(--surface-2); }
+.grp-inner { font-size: 12px; }
+.grp-inner th { font-size: 10px; }
+.grp-inner th, .grp-inner td { padding: 6px 10px; }
+.grp-inner tbody tr:hover { background: transparent; }
+
 .filtro-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .filtro-chip {
   display: inline-flex;

@@ -1,6 +1,6 @@
 {
   "name": "kampeki-desktop",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Kampeki Finance — aplicativo desktop (Windows)",
   "author": "Kampeki",
   "main": "main.js",

@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { brl } from '../utils/format.js';
-import { linhasDoItem, somaLinhas, qtdFmt } from '../utils/notas.js';
+import { linhasDoItem, somaLinhas, qtdFmt, resumoNotas } from '../utils/notas.js';
 import { exportarNotasItem } from '../utils/exportPdf.js';
+import ResumoNotas from './ResumoNotas.jsx';
 
 /**
  * Notas em que um item aparece. A base (`custos`) chega JÁ FILTRADA pelo
@@ -17,13 +18,14 @@ export default function NotasItemModal({
 }) {
   const linhas = useMemo(() => linhasDoItem(custos, item), [custos, item]);
   const total = useMemo(() => somaLinhas(linhas), [linhas]);
+  const resumo = useMemo(() => resumoNotas(linhas), [linhas]);
   const [exportando, setExportando] = useState(false);
 
   function exportarPdf() {
     setExportando(true);
     try {
       exportarNotasItem({
-        item, periodoLabel, filtrosLabel, linhas, total,
+        item, periodoLabel, filtrosLabel, linhas, total, resumo,
       });
     } finally {
       setExportando(false);
@@ -43,19 +45,16 @@ export default function NotasItemModal({
           justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 12,
         }}
       >
-        <div className="muted">
-          <div>
-            {linhas.length} lançamento(s) · Total <strong>{brl(total)}</strong>
-          </div>
-          <div style={{ fontSize: 11, marginTop: 2 }}>
-            Período: {periodoLabel || 'Todo o período'}
-            {filtrosLabel && <> · {filtrosLabel}</>}
-          </div>
+        <div className="muted" style={{ fontSize: 11 }}>
+          Período: {periodoLabel || 'Todo o período'}
+          {filtrosLabel && <> · {filtrosLabel}</>}
         </div>
         <button className="btn btn-ghost btn-sm" onClick={exportarPdf} disabled={exportando || !linhas.length}>
           {exportando ? 'Gerando PDF...' : '⬇ Exportar PDF'}
         </button>
       </div>
+
+      <ResumoNotas resumo={resumo} />
 
       <div className="table-wrap" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
         <table>

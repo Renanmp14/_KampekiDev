@@ -728,12 +728,44 @@ function tabelaNotas(doc, y, M, linhas, total) {
   return doc.lastAutoTable.finalY + 18;
 }
 
+// Faixa de resumo das dialogs de notas (mesmos KPIs do componente ResumoNotas):
+// Notas · Subcategoria(s) · Qtd · V. Unit médio · V. Total.
+function tabelaResumoNotas(doc, y, M, resumo) {
+  const subs = resumo.subcategorias || [];
+  const subLabel = subs.length === 1 ? subs[0] : String(subs.length);
+  autoTable(doc, {
+    startY: y,
+    head: [['Notas', 'Lançamentos', 'Subcategorias', 'Qtd', 'V. Unit médio', 'V. Total']],
+    body: [[
+      String(resumo.nNotas), String(resumo.nLancamentos), trunc(subLabel, 28),
+      qtdPdf(resumo.qtd),
+      resumo.precoMedio === null ? '—' : brl(resumo.precoMedio),
+      brl(resumo.total),
+    ]],
+    headStyles: { fillColor: VERDE, textColor: 255 },
+    styles: { fontSize: 8, cellPadding: 3, fontStyle: 'bold' },
+    margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(3),
+  });
+  let yy = doc.lastAutoTable.finalY + 8;
+  // Com várias subcategorias, o nome de todas não cabe na célula: vai abaixo
+  // (na tela isso é o tooltip).
+  if (subs.length > 1) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(110);
+    doc.text(trunc(`Subcategorias: ${subs.join(' · ')}`, 130), M, yy);
+    yy += 12;
+  }
+  return yy + 6;
+}
+
 /**
  * PDF da dialog "Notas do item" do Dash Custos (um período só).
  * `linhas` vem de utils/notas.js → linhasDoItem(base já filtrada, item).
  */
 export function exportarNotasItem({
-  item, periodoLabel, filtrosLabel = null, linhas = [], total = 0,
+  item, periodoLabel, filtrosLabel = null, linhas = [], total = 0, resumo = null,
 }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const M = 40;
@@ -742,10 +774,70 @@ export function exportarNotasItem({
     filtrosLabel ? `Filtros: ${filtrosLabel}` : null,
     `${linhas.length} lançamento(s) · Total ${brl(total)}`,
   ]);
+  if (resumo) y = tabelaResumoNotas(doc, y, M, resumo);
   if (!linhas.length) semDados(doc, y, M);
   else tabelaNotas(doc, y, M, linhas, total);
   rodape(doc, M);
   doc.save(`notas-item-${slug(item)}-${hoje()}.pdf`);
+}
+
+/**
+ * PDF da dialog "Notas do recorte — todos os itens" (Dash Custos).
+ * Sai fiel à tela: resumo + tabela por item e, abaixo, os lançamentos apenas
+ * dos itens EXPANDIDOS na dialog (detalhar tudo geraria um PDF gigante).
+ */
+export function exportarNotasFiltro({
+  periodoLabel, filtrosLabel = null, resumo, grupos = [], expandidos = [],
+}) {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const M = 40;
+  let y = cabecalhoDialog(doc, M, 'Notas do recorte — todos os itens', [
+    `Período: ${periodoLabel || 'Todo o período'}`,
+    filtrosLabel ? `Filtros: ${filtrosLabel}` : null,
+    `${grupos.length} item(ns) · ${resumo.nLancamentos} lançamento(s) · Total ${brl(resumo.total)}`,
+    grupos.length > 1 ? 'Qtd e V. Unit médio somam unidades diferentes — leia como "por unidade pedida".' : null,
+  ]);
+  y = tabelaResumoNotas(doc, y, M, resumo);
+
+  if (!grupos.length) {
+    semDados(doc, y, M);
+    rodape(doc, M);
+    doc.save(`notas-recorte-${hoje()}.pdf`);
+    return;
+  }
+
+  y = tituloSecao(doc, y, M, 'Por item');
+  autoTable(doc, {
+    startY: y,
+    head: [['Item', 'Notas', 'Qtd', 'V. Unit médio', 'V. Total', '% do total']],
+    body: grupos.map((g) => [
+      trunc(g.item, 42), String(g.resumo.nNotas), qtdPdf(g.resumo.qtd),
+      g.resumo.precoMedio === null ? '—' : brl(g.resumo.precoMedio),
+      brl(g.resumo.total),
+      pct(resumo.total > 0 ? (g.resumo.total / resumo.total) * 100 : 0),
+    ]),
+    foot: [[
+      'TOTAL', String(resumo.nNotas), qtdPdf(resumo.qtd),
+      resumo.precoMedio === null ? '—' : brl(resumo.precoMedio),
+      brl(resumo.total), pct(resumo.total > 0 ? 100 : 0),
+    ]],
+    headStyles: { fillColor: VERDE, textColor: 255 },
+    footStyles: { fillColor: [232, 232, 232], textColor: 20, fontStyle: 'bold' },
+    styles: { fontSize: 8, cellPadding: 3 },
+    margin: { left: M, right: M },
+    didParseCell: rightAlignNumCols(1),
+  });
+  y = doc.lastAutoTable.finalY + 18;
+
+  const detalhar = grupos.filter((g) => expandidos.includes(g.item));
+  for (const g of detalhar) {
+    y = ensureSpace(doc, y, 90, M);
+    y = tituloSecao(doc, y, M, `Lançamentos — ${trunc(g.item, 60)}`);
+    y = tabelaNotas(doc, y, M, g.linhas, g.resumo.total);
+  }
+
+  rodape(doc, M);
+  doc.save(`notas-recorte-${hoje()}.pdf`);
 }
 
 /**

@@ -6,6 +6,7 @@ import {
 import { custosApi, getConfig } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
 import NotasItemModal from '../../components/NotasItemModal.jsx';
+import NotasFiltroModal from '../../components/NotasFiltroModal.jsx';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import { exportarRelatorioCustos } from '../../utils/exportPdf.js';
 import {
@@ -46,6 +47,8 @@ export default function DashCustos() {
   const [exportando, setExportando] = useState(false);
   // Item cujas notas estão sendo visualizadas (modal).
   const [notaItem, setNotaItem] = useState('');
+  // Notas de TODOS os itens do recorte (modal do card "Top N itens").
+  const [verNotasFiltro, setVerNotasFiltro] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -578,7 +581,20 @@ export default function DashCustos() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">Top {topN} itens por valor — variação vs. período anterior</h3>
+        <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h3 className="card-title" style={{ margin: 0 }}>
+            Top {topN} itens por valor — variação vs. período anterior
+          </h3>
+          {/* Mesma análise do "📄 ver" da linha, porém de TODOS os itens do recorte. */}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setVerNotasFiltro(true)}
+            disabled={!filtrado.length}
+            title="Ver as notas de todos os itens do recorte atual"
+          >
+            📄 ver notas de todos os itens
+          </button>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -617,7 +633,7 @@ export default function DashCustos() {
         </div>
       </div>
 
-      {/* Base já recortada (período + mês + drill) — a dialog reflete a tela. */}
+      {/* Base já recortada (período + mês + drill) — as dialogs refletem a tela. */}
       {notaItem && (
         <NotasItemModal
           item={notaItem}
@@ -625,6 +641,14 @@ export default function DashCustos() {
           periodoLabel={periodoLabelAtual}
           filtrosLabel={drillLabel}
           onClose={() => setNotaItem('')}
+        />
+      )}
+      {verNotasFiltro && (
+        <NotasFiltroModal
+          custos={filtrado}
+          periodoLabel={periodoLabelAtual}
+          filtrosLabel={drillLabel}
+          onClose={() => setVerNotasFiltro(false)}
         />
       )}
     </div>

@@ -1710,6 +1710,71 @@ Toda dialog tem **"⬇ Exportar PDF"** no topo, exportando **exatamente o que es
 
 ---
 
+## Atualizações — 20/07/2026 — versão 1.5.4 (em preparação)
+
+> Sessão de **melhoria das dialogs de notas do Dash Custos**, pedida pelo gestor: uma faixa de resumo no topo e a mesma análise estendida do item único para **todos os itens do recorte**. **Sem mudança de backend** (tudo frontend).
+
+> **Atualização de estado (fecha pendências anteriores):** a v1.5.3 foi **commitada** (`6f23c1f`, 16/07 18:08), teve o `desktop/package.json` **subido para 1.5.3** e foi **empacotada** (`KampekiFinance-Setup-1.5.3.exe`, 16/07 16:54) — o que a seção da 1.5.3 ainda listava como pendente. Segue pendente apenas a **decisão do aperto do CORS**.
+
+### 1. Faixa de resumo nas dialogs de notas
+
+A dialog de notas mostrava só "N lançamento(s) · Total". Ganhou uma **faixa de KPIs** no topo (componente novo `ResumoNotas.jsx`, compartilhado pelas duas dialogs):
+
+| Notas | Subcategoria(s) | Qtd | V. Unit médio | V. Total |
+|---|---|---|---|---|
+
+- **Notas × lançamentos:** são números diferentes e **ambos aparecem** (o de notas em destaque, o de lançamentos abaixo). Uma nota que traz 3 itens conta **1 nota / 3 lançamentos**; o mesmo item lançado 2x na mesma nota conta **1 nota / 2 lançamentos**. Identidade da nota: `CHAVE_NFE` quando existe, senão `fornecedor + nº + data` (o mesmo critério desde a 1.5.1).
+- **Subcategorias:** com uma, mostra o **nome**; com várias, mostra **quantas** e lista todas no tooltip (o "pode ser N aqui" do pedido — os nomes de todas estourariam a faixa).
+- **V. Unit médio é PONDERADO** (`Σ V.Total ÷ Σ QTD`), não a média simples dos `VALOR_UNIT`: é o único que **fecha com o total** (`preço médio × qtd = total`). Mesmo critério do "preço médio ponderado" da página Visões avançadas. Fica `—` quando não há quantidade (sem QTD não existe preço unitário representável, e evita divisão por zero).
+
+### 2. Nova dialog — notas de **todos** os itens do recorte
+
+A análise existia só item a item (botão "📄 ver" da linha). Agora o card **"Top N itens"** tem no cabeçalho **"📄 ver notas de todos os itens"**, que abre a `NotasFiltroModal` com a **mesma faixa de resumo**, agora sobre **todo o recorte ativo** (período → mês → drill de categoria/subcategoria — a mesma base `filtrado` das demais visões).
+
+- **Tabela agrupada por item** (maior total primeiro): `Item · Notas · Qtd · V. Unit médio · V. Total · % do total`, com **TOTAL** no rodapé. Clicar na linha **expande** os lançamentos daquele item (`Data · Nº · Fornecedor · Subcategoria · Qtd · V. Unit · V. Total`), mais "Expandir/Recolher todos".
+- **Por que agrupado e não plano:** um recorte amplo tem milhares de linhas; a lista plana seria ilegível. O agrupamento dá o panorama e o detalhe sob demanda.
+- **"Notas" do TOTAL é a contagem DISTINTA do recorte, não a soma da coluna** — uma nota com 3 itens conta 1 no total e 1 em cada item, então a soma da coluna é naturalmente maior. Coberto por teste.
+- **Caveat na tela:** com 2+ itens, `Qtd` e `V. Unit médio` somam **unidades diferentes** (kg + un + cx) — a dialog exibe o aviso "leia como *por unidade pedida*" (mesmo caveat da Visões avançadas). Na dialog de item único o aviso não aparece (um item, uma unidade).
+
+### 3. Itens "a classificar" não inflam mais a contagem de subcategorias
+
+**Achado durante os testes** (não era do pedido): a normalização das linhas troca `SUB_CATEGORIA` vazia pelo placeholder de exibição `—`, e o resumo contava esse `—` **como se fosse uma subcategoria**. Num recorte com itens a classificar, a faixa diria "3 subcategorias" havendo 2 reais.
+
+**Correção:** o resumo rotula essas linhas como **`(sem subcategoria)`** — a **mesma convenção** que o drill da Análise por Período já adotava (`SEM_SUB` em `drillPeriodo.js`), agora reusada em vez de duplicada. O usuário vê que parte do recorte está a classificar, em vez de um número inflado.
+
+### 4. PDF das duas dialogs
+
+- **`exportarNotasItem`** ganhou a faixa de resumo (mesmos KPIs da tela).
+- **`exportarNotasFiltro`** (novo): resumo + tabela por item com TOTAL e, abaixo, os lançamentos **apenas dos itens expandidos** na dialog — mantém a regra "o PDF sai exatamente como a tela" e evita um PDF gigante. Com várias subcategorias, os nomes vão numa linha abaixo da faixa (na tela isso é o tooltip).
+
+### Changelog técnico — 20/07/2026 (por arquivo, tudo frontend)
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/notas.js` | `normalizarLinhas` extraída (mapeia todas as linhas, com `item`); `linhasDoItem` agora é filtro + normalização. Novos `chaveNota` (identidade da nota), `resumoNotas` (KPIs, preço médio ponderado, `(sem subcategoria)` via `SEM_SUB`) e `agruparPorItem`. |
+| `src/components/ResumoNotas.jsx` | **Novo** — faixa de KPIs compartilhada pelas duas dialogs (+ aviso opcional de unidades misturadas). |
+| `src/components/NotasFiltroModal.jsx` | **Novo** — notas de todos os itens do recorte: tabela agrupada por item, expansível, com TOTAL e PDF. |
+| `src/components/NotasItemModal.jsx` | Faixa de resumo no topo (substitui a linha "N lançamento(s) · Total"); passa `resumo` ao PDF. |
+| `src/utils/exportPdf.js` | Novo `tabelaResumoNotas` (faixa no PDF), `exportarNotasItem` com resumo, e **`exportarNotasFiltro`** (novo). |
+| `src/pages/dash/DashCustos.jsx` | Botão "📄 ver notas de todos os itens" no cabeçalho do card Top N + estado `verNotasFiltro` + render da dialog nova (base `filtrado`, como a de item). |
+| `src/styles.css` | Novas `.resumo-notas`/`.resumo-kpi` (faixa, responsiva em 900px) e `.grp-row`/`.grp-detalhe`/`.grp-inner` (tabela agrupada). |
+
+### Validação
+
+- Frontend: `vite build` OK (único aviso é o de tamanho de chunk, pré-existente).
+- **Lógica exercitada em Node contra o módulo real** (`notas.js`), com base sintética que inclui uma nota com 2 itens, o mesmo item 2x na mesma nota, uma nota sem chave NF-e, um item sem quantidade e um item sem subcategoria — **27/27**: contagem notas × lançamentos, identidade da nota (chave e fallback), preço médio ponderado **reconciliando com o total**, `null` em qtd 0, `(sem subcategoria)`, agrupamento ordenado e **fechando** com o total do recorte, soma das notas por item > distintas, e recorte vazio sem quebrar.
+- **PDFs gerados de verdade e conferidos por extração de texto** (pdfjs) — **28/28**: faixa de resumo nos dois relatórios, coluna Fornecedor, período/filtros, aviso de unidades, rótulo `(sem subcategoria)`, total geral, e a garantia de que **só o item expandido** é detalhado (o não expandido não vaza). Caso vazio não quebra.
+- Backend: **inalterado**.
+- **Pendente de teste manual no navegador** (`npm run dev`): abrir as duas dialogs, expandir/recolher itens e baixar os PDFs.
+
+### Pendências em aberto
+
+- **Decidir o aperto do CORS** (herdada da 1.5.2, recomendado) — ver a seção da 1.5.2.
+- **Subir `desktop/package.json` → `1.5.4`** e gerar/validar o instalador.
+- Avaliar a mesma faixa de resumo nas dialogs de notas da **Análise por Período** (`DrillPeriodoModal`), que hoje mostram só Total A/B — ficaria consistente, mas exige decidir como exibir os KPIs em dois períodos.
+
+---
+
 ## Registro da conversa — sessão 16/07/2026 (v1.5.2 + v1.5.3)
 
 > A pedido do gestor, o log da sessão, para não se perder o raciocínio e as decisões (mesmo padrão do registro da v1.1.0). As duas versões nasceram na mesma sessão: a **1.5.2** de um bug reportado pelo cliente, a **1.5.3** de melhorias pedidas em seguida.
