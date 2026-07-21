@@ -1876,3 +1876,31 @@ O `.dmg` sai **sem assinatura de código** (mesma escolha do Windows), via `mac.
 - **Gerar o `.dmg` real** no Mac (`npm install` + `npm run dist Apple`) e validar a instalação/execução.
 - Herdadas: **decidir o aperto do CORS** (desde a 1.5.2) e **subir `desktop/package.json` → versão do próximo build** ao empacotar (Windows e/ou macOS).
 - Assinatura/notarização Apple (opcional) — hoje o `.dmg` é não assinado (Gatekeeper avisa na 1ª abertura), espelhando o Windows sem code signing.
+
+### Correção — `npm run dist Windows` / `npm start Windows` falhavam de volta no Windows (`EINVAL`)
+
+**Sintoma:** feita a alteração de multiplataforma no Mac (onde `npm run dist Apple` / `npm start Apple` funcionam), ao trazer o projeto de volta ao **Windows** os comandos `npm run dist Windows` e `npm start Windows` **pararam de funcionar**. O erro:
+
+```
+[dist] Falha ao executar "Build do frontend (vite)": spawnSync npm.cmd EINVAL
+```
+
+**Causa (com evidência, não dedução):** confirmado que **não** era o repasse do argumento — um probe provou que o npm 11 no Windows entrega `ARGV: ["Windows"]` tanto em `npm run dist Windows` quanto em `npm start Windows` (sem precisar de `--`). O problema é uma **mudança de segurança do Node** (CVE-2024-27980, a partir do Node 18.20 / 20.12 / 21; a máquina está no **Node 24**): no Windows, `spawnSync` de arquivos **`.cmd`/`.bat`** agora **falha com `EINVAL`** a menos que se passe `shell: true`.
+- No **macOS** os binários locais são `npm`, `electron`, `electron-builder` (sem extensão) → `spawnSync` roda direto. Por isso **sempre funcionou no Apple**.
+- No **Windows** os `scripts/` chamam `npm.cmd`, `electron-builder.cmd` e `electron.cmd` (arquivos batch) → **EINVAL**. Atingia as **3** chamadas: build do frontend e empacotamento (`dist.js`) e build + abertura do app (`start.js`).
+
+**Correção (só na camada `desktop/`, app intacto):** em `scripts/dist.js` e `scripts/start.js`, quando `process.platform === 'win32'` (`IS_WIN`), os `spawnSync` passam `shell: true` e citam com aspas os tokens que contêm espaço (helper `q()` — necessário porque o caminho do `.bin` fica sob `…\Renan Milech Pereira\…`). Com o `/s /c` do `cmd.exe`, as aspas internas no executável convivem com o wrapper do Node.
+
+> **Apple inalterado (por construção):** todo o ajuste é condicionado a `IS_WIN`. No macOS `IS_WIN` é `false` → `shell: false` (o default de antes), sem aspas e sem alteração de comando/args; a `q()` devolve a string intacta fora do Windows. O caminho de código no Mac é **idêntico** ao anterior — `.dmg` e `npm start Apple` seguem iguais.
+
+**Validação:**
+- **Windows:** `npm run dist Windows` roda de ponta a ponta (check-env → `vite build` → `electron-builder --win`) e **gera o `KampekiFinance-Setup-1.5.4.exe`** (87,4 MB, 21/07 12:09). `node --check` OK nos dois scripts.
+- **Ressalva benigna:** aparece um aviso `DEP0190` ("passing args … with shell option true") — inofensivo aqui, pois os argumentos são **constantes internas** (`--win`, `--prefix ../frontend run build`), não entrada de usuário; não afeta o build.
+- `npm start Windows` **não** foi exercitado no ambiente headless (abre a janela do Electron), mas recebe a mesma correção do `dist` e o frontend é buildado no fluxo.
+
+**Changelog técnico — correção Windows (por arquivo, tudo em `desktop/`)**
+
+| Arquivo | O que mudou |
+|---|---|
+| `scripts/dist.js` | `IS_WIN` + helper `q()` (cita tokens com espaço no Windows); `run()` passa `shell: IS_WIN` e cita `cmd`/`args`. |
+| `scripts/start.js` | Mesmo `IS_WIN`/`q()` no `run()`; a abertura direta do Electron (`spawnSync`) também passa `shell: IS_WIN` e cita o binário. |

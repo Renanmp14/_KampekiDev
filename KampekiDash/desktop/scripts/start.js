@@ -18,9 +18,17 @@ const { spawnSync } = require('child_process');
 const { resolvePlatform } = require('./platform');
 
 const DESKTOP_DIR = path.join(__dirname, '..');
+const IS_WIN = process.platform === 'win32';
+
+// No Windows, `spawnSync` de arquivos .cmd/.bat (npm.cmd, electron.cmd) exige
+// `shell: true` — sem isso o Node ≥18.20/20.12/21 falha com EINVAL (mudança de
+// segurança CVE-2024-27980). Com shell, tokens com espaço precisam de aspas.
+function q(s) {
+  return IS_WIN && /\s/.test(s) ? `"${s}"` : s;
+}
 
 function localBin(name) {
-  const bin = process.platform === 'win32' ? `${name}.cmd` : name;
+  const bin = IS_WIN ? `${name}.cmd` : name;
   const full = path.join(DESKTOP_DIR, 'node_modules', '.bin', bin);
   if (!fs.existsSync(full)) {
     console.error(`\n[start] "${name}" não encontrado. Rode "npm install" dentro de desktop/ primeiro.`);
@@ -32,7 +40,9 @@ function localBin(name) {
 // Roda um passo herdando o stdio; encerra tudo se o passo retornar erro.
 function run(label, cmd, args) {
   console.log(`\n▶ ${label}`);
-  const res = spawnSync(cmd, args, { stdio: 'inherit', cwd: DESKTOP_DIR });
+  const finalCmd = IS_WIN ? q(cmd) : cmd;
+  const finalArgs = IS_WIN ? args.map(q) : args;
+  const res = spawnSync(finalCmd, finalArgs, { stdio: 'inherit', cwd: DESKTOP_DIR, shell: IS_WIN });
   if (res.error) {
     console.error(`\n[start] Falha ao executar "${label}": ${res.error.message}`);
     process.exit(1);
@@ -59,7 +69,12 @@ run('Build do frontend (vite)', npmCmd, ['--prefix', '../frontend', 'run', 'buil
 
 // 2) abre o app
 console.log(`\n▶ Iniciando Kampeki Finance (teste local — ${plat.label})...`);
-const res = spawnSync(localBin('electron'), ['.'], { stdio: 'inherit', cwd: DESKTOP_DIR });
+const electronBin = localBin('electron');
+const res = spawnSync(IS_WIN ? q(electronBin) : electronBin, ['.'], {
+  stdio: 'inherit',
+  cwd: DESKTOP_DIR,
+  shell: IS_WIN,
+});
 if (res.error) {
   console.error(`\n[start] Falha ao iniciar o Electron: ${res.error.message}`);
   process.exit(1);

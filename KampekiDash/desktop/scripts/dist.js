@@ -12,11 +12,20 @@ const { spawnSync } = require('child_process');
 const { resolvePlatform } = require('./platform');
 
 const DESKTOP_DIR = path.join(__dirname, '..');
+const IS_WIN = process.platform === 'win32';
+
+// No Windows, `spawnSync` de arquivos .cmd/.bat (npm.cmd, electron-builder.cmd)
+// exige `shell: true` — sem isso o Node ≥18.20/20.12/21 falha com EINVAL
+// (mudança de segurança CVE-2024-27980). Com shell, os tokens que tenham espaço
+// precisam ser citados na mão (o caminho do .bin pode conter espaços).
+function q(s) {
+  return IS_WIN && /\s/.test(s) ? `"${s}"` : s;
+}
 
 // Caminho do binário local (evita depender de `npx`/PATH). No Windows o bin tem
 // sufixo .cmd; nas demais plataformas é um shell script sem extensão.
 function localBin(name) {
-  const bin = process.platform === 'win32' ? `${name}.cmd` : name;
+  const bin = IS_WIN ? `${name}.cmd` : name;
   const full = path.join(DESKTOP_DIR, 'node_modules', '.bin', bin);
   if (!fs.existsSync(full)) {
     console.error(`\n[dist] "${name}" não encontrado. Rode "npm install" dentro de desktop/ primeiro.`);
@@ -28,7 +37,9 @@ function localBin(name) {
 // Roda um passo herdando o stdio; encerra tudo se o passo retornar erro.
 function run(label, cmd, args, opts = {}) {
   console.log(`\n▶ ${label}`);
-  const res = spawnSync(cmd, args, { stdio: 'inherit', cwd: DESKTOP_DIR, ...opts });
+  const finalCmd = IS_WIN ? q(cmd) : cmd;
+  const finalArgs = IS_WIN ? args.map(q) : args;
+  const res = spawnSync(finalCmd, finalArgs, { stdio: 'inherit', cwd: DESKTOP_DIR, shell: IS_WIN, ...opts });
   if (res.error) {
     console.error(`\n[dist] Falha ao executar "${label}": ${res.error.message}`);
     process.exit(1);
