@@ -1,7 +1,19 @@
-# Kampeki Finance — Instalador Windows (Electron)
+# Kampeki Finance — Instalador Desktop (Electron): Windows e macOS
 
 App desktop que empacota o backend (Express + Google Sheets) e o frontend (React)
-num único instalador `.exe`. O usuário Beta **não precisa instalar Node** nem nada.
+num único instalador. O usuário Beta **não precisa instalar Node** nem nada.
+
+- **Windows** → instalador `.exe` (NSIS).
+- **macOS** → imagem `.dmg` (arrasta o app para a pasta Aplicativos).
+
+> **Você escolhe o sistema no próprio comando** (ver abaixo):
+> `npm run dist Apple` / `npm run dist Windows` para gerar, e
+> `npm start Apple` / `npm start Windows` para testar. Sem argumento, ambos
+> assumem o sistema do computador atual.
+>
+> ⚠️ **Cada instalador é gerado na sua própria máquina:** o `.dmg` só é gerado
+> rodando `npm run dist Apple` **num Mac**; o `.exe`, rodando
+> `npm run dist Windows` **no Windows**. Não há cross-build.
 
 ## Como funciona
 
@@ -56,36 +68,75 @@ Edite `desktop/package.json` e altere o campo `version` (segue SemVer, ex.:
 > que aparece no canto inferior direito do app e (quando ligar o auto-update) é
 > ela que o updater compara para decidir se baixa a atualização.
 
-## 2) Gerar o instalador (build)
+## 2) Testar localmente antes de empacotar (opcional)
+
+Dentro de `desktop/`, roda o app direto (sem gerar instalador):
+
+```bash
+npm start Apple       # testar no Mac
+npm start Windows     # testar no Windows
+npm start             # usa o sistema deste computador
+```
+
+O Electron sempre executa no sistema da máquina atual — o argumento serve para
+manter o comando simétrico e avisar caso você peça um alvo diferente do host.
+
+## 3) Gerar o instalador (build)
 
 Dentro de `desktop/`:
 
-```powershell
-cd desktop
-npm run dist
+```bash
+npm run dist Apple       # gera o .dmg (rode NUM MAC)
+npm run dist Windows     # gera o .exe (rode NO WINDOWS)
+npm run dist             # usa o sistema deste computador
 ```
 
-Isso faz, em ordem: `vite build` do frontend → empacota backend + frontend +
-`.env` → gera o instalador NSIS.
+Isso faz, em ordem: valida o `build/.env` (`check-env`) → `vite build` do
+frontend → empacota backend + frontend + `.env` → gera o instalador do sistema
+escolhido. Qualquer passo que falhe aborta o processo.
 
-## 3) Onde o instalador fica
+> Também existem os atalhos crus `npm run pack:mac` / `npm run pack:win` (só o
+> `electron-builder`, sem check-env nem build do frontend) — úteis para depurar o
+> empacotamento.
 
+## 4) Onde o instalador fica
+
+**Windows:**
 ```
-desktop/dist/KampekiFinance-Setup-<versao>.exe      ← este é o arquivo que você entrega
-desktop/dist/latest.yml                             ← manifesto (usado só no auto-update)
-desktop/dist/win-unpacked/                          ← app "cru" (para testar sem instalar)
+desktop/dist/KampekiFinance-Setup-<versao>.exe      ← arquivo que você entrega
+desktop/dist/latest.yml                             ← manifesto (só auto-update)
+desktop/dist/win-unpacked/                          ← app "cru" (testar sem instalar)
 ```
 
-Entregue o **`KampekiFinance-Setup-<versao>.exe`** ao cliente (Drive, WeTransfer,
-etc.). Ele dá dois cliques, instala, e ganha um atalho **"Kampeki Finance"**.
+**macOS:**
+```
+desktop/dist/KampekiFinance-<versao>.dmg            ← arquivo que você entrega
+desktop/dist/mac/ (ou mac-arm64/)                   ← o .app "cru" (testar sem instalar)
+```
+
+Entregue o instalador ao cliente (Drive, WeTransfer, etc.). No Windows ele dá
+dois cliques e ganha o atalho **"Kampeki Finance"**; no Mac ele abre o `.dmg` e
+arrasta o **Kampeki Finance** para a pasta **Aplicativos**.
+
+### macOS — app não assinado (Gatekeeper)
+
+O build não é assinado com certificado Apple (mesma escolha do Windows, que
+também vai sem assinatura). Na 1ª abertura o macOS pode dizer que "não é possível
+verificar o desenvolvedor". Para abrir mesmo assim: **clique com o botão direito
+no app → Abrir → Abrir**. (Só na primeira vez; depois abre normal.) Se ainda
+recusar, rode uma vez no Terminal: `xattr -cr "/Applications/Kampeki Finance.app"`.
+
+> A arquitetura do `.dmg` acompanha o Mac onde o build roda: Apple Silicon (M1+)
+> gera `arm64`; Mac Intel gera `x64`. Gere no mesmo tipo de Mac do cliente.
 
 ## Atualizar o cliente (handoff manual)
 
 1. Suba a `version` no `desktop/package.json`.
-2. `npm run dist`.
-3. Envie o novo `KampekiFinance-Setup-<versao>.exe`.
-4. O cliente executa; o instalador **sobrescreve** a versão anterior e passa a
-   rodar a nova. O número novo aparece no rodapé do app.
+2. `npm run dist Windows` (no Windows) e/ou `npm run dist Apple` (no Mac).
+3. Envie o novo instalador (`.exe` para Windows, `.dmg` para Mac).
+4. O cliente executa; **sobrescreve** a versão anterior e passa a rodar a nova
+   (no Mac, arrasta de novo para Aplicativos substituindo). O número novo aparece
+   no rodapé do app.
 
 ---
 
@@ -105,8 +156,21 @@ Quando quiser que o app se atualize **sozinho**, sem enviar o `.exe` manualmente
 Com a URL definida, a cada abertura o app checa o feed, baixa a versão nova e a
 instala ao fechar. Sem a URL (vazio), continua em handoff manual — nada muda.
 
-## Ícone (opcional)
+## Ícone
 
-Sem ícone customizado o app usa o ícone padrão do Electron. Para usar a marca,
-coloque um `build/icon.ico` (256×256) — o electron-builder o adota
-automaticamente (a pasta `build` já é o `buildResources`).
+Os ícones da marca já vêm versionados em `build/`:
+
+- `build/icon.ico` — Windows
+- `build/icon.icns` — macOS
+- `build/icon.png` — master 1024×1024 (fonte / fallback)
+
+Só precisa **regerar se a logo mudar** (fonte: `frontend/public/favicon.svg`).
+Dentro de `desktop/`:
+
+```bash
+npm i -D sharp png-to-ico
+npm run icon
+```
+
+O `npm run icon` gera `.ico` e `.png` em qualquer sistema; o `.icns` só é gerado
+rodando **num Mac** (usa o `iconutil`, nativo do macOS).

@@ -96,10 +96,16 @@ function createWindow(url) {
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   };
-  // Em dev o ícone da janela vem do build/icon.ico; empacotado, a janela herda
-  // o ícone do próprio .exe (build/ fica fora do asar).
-  const iconPath = path.join(__dirname, 'build', 'icon.ico');
-  if (fs.existsSync(iconPath)) opts.icon = iconPath;
+  // Em dev o ícone vem do build/; empacotado, cada plataforma herda o ícone do
+  // próprio pacote (.exe no Windows, .app/.icns no macOS — build/ fica fora do
+  // asar). No Windows a janela usa o .ico; no macOS a janela não tem ícone (só o
+  // dock), então usamos o .png e setamos o dock abaixo.
+  const iconFile = process.platform === 'darwin' ? 'icon.png' : 'icon.ico';
+  const iconPath = path.join(__dirname, 'build', iconFile);
+  if (fs.existsSync(iconPath)) {
+    opts.icon = iconPath;
+    if (isDev && process.platform === 'darwin' && app.dock) app.dock.setIcon(iconPath);
+  }
   // Abre maximizado (show: false evita o "flash" do tamanho restaurado antes de
   // maximizar): sob escala 125% do Windows, dá o máximo de largura útil à tela,
   // mantendo a sidebar visível. O tamanho de opts vale ao restaurar a janela.

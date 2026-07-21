@@ -1812,3 +1812,67 @@ A análise existia só item a item (botão "📄 ver" da linha). Agora o card **
 **11. Validação da sessão:** `vite build` OK; **17/17** na lógica do drill exercitada em Node **contra os módulos reais** (incluindo o caso "Outros" e a garantia de que o item vizinho da mesma nota **não vaza**); **26/26** nos PDFs, gerados de verdade e conferidos por **extração de texto** (pdfjs) — coluna Fornecedor, breadcrumb, KPIs A/B, TOTAL e casos vazios. Backend inalterado na 1.5.3.
 
 **Estado ao fim da sessão:** `desktop/package.json` **ainda em 1.5.1** (a versão sobe ao gerar o build, como na 1.5.1). Pendentes: **decidir o aperto do CORS**, **subir para 1.5.3 + gerar/validar o instalador** (que leva junto a correção do login da 1.5.2) e o **teste manual no navegador** das dialogs novas.
+
+---
+
+## Atualizações — 21/07/2026 — Builder e teste multiplataforma (Windows + macOS)
+
+> Sessão de **empacotamento**: o app desktop passou a poder ser **gerado e testado também no macOS** (`.dmg`), além do Windows (`.exe`), e os comandos `dist`/`start` ganharam um **argumento de sistema** (`Apple` | `Windows`). Gestor tem um **Mac físico** e roda o gerador de instalador nele. **Sem mudança no app** (backend/frontend intactos) — só na camada `desktop/` e na documentação. A `version` do `desktop/package.json` **não** foi subida (continua **1.5.4**).
+
+### Comandos com sistema no próprio comando
+
+Antes: `npm run dist` e `npm start` (`electron .`) eram fixos em Windows. Agora ambos aceitam o sistema como argumento posicional:
+
+```bash
+npm run dist Apple      # gera o .dmg  (rodar num Mac)
+npm run dist Windows    # gera o .exe  (rodar no Windows)
+npm run dist            # usa o sistema deste computador
+
+npm start Apple         # testa no Mac
+npm start Windows       # testa no Windows
+npm start               # usa o sistema deste computador
+```
+
+- Confirmado que o npm (11.3.0) **repassa o argumento posicional sem precisar de `--`** (`npm run dist Apple` → `process.argv[2] === 'Apple'`). Os wrappers leem esse argumento.
+- Aceita apelidos amigáveis (`Apple`/`Windows`) e técnicos (`mac`/`win`/`darwin`/`win32`), **case-insensitive**. Valor inválido é recusado com mensagem de uso; sem argumento, assume o SO do host.
+
+### Não há cross-build (por construção)
+Gerar `.dmg` exige macOS; NSIS `.exe` exige Windows. O `dist` **avisa** se você pedir um alvo diferente do computador atual (e o electron-builder falharia mesmo), mas não tenta emular. Cada instalador sai na sua própria máquina — o `.dmg` no Mac, o `.exe` no Windows. O `start` idem: o Electron sempre roda no binário do host; o argumento é simetria + aviso.
+
+### Ícone do macOS (`.icns`)
+O macOS não usa `.ico`. Gerado `desktop/build/icon.icns` (e um `build/icon.png` 1024 master/fallback) a partir do mesmo `frontend/public/favicon.svg`, **nativamente** no Mac (`rsvg-convert` → `sips` → `iconutil`). Versionados junto do `icon.ico` — só regerar se a logo mudar. O `build-icon.js` foi estendido para, ao rodar `npm run icon`, emitir `.ico` + `.png` (qualquer SO) e `.icns` (só no macOS, via `iconutil` nativo).
+
+### Correção — `npm start` mostrava "Cannot GET /"
+**Sintoma:** ao rodar `npm start` (Mac), a janela do Electron abria com **"Cannot GET /"** em vez do login.
+
+**Causa:** o app desktop serve o React pelo **próprio Express** (lendo `frontend/dist`); esse diretório **não existia** (o front nunca fora buildado), então o Express não tinha `index.html` para servir. Não era específico do Mac nem do novo wrapper — o antigo `electron .` no Windows daria o mesmo. **O builder nunca teve esse problema** porque o `dist` já builda o frontend antes de empacotar.
+
+**Correção:** o `scripts/start.js` passou a **buildar o frontend (vite) antes de abrir o Electron** — o mesmo passo do `dist`. Assim `npm start` reflete fielmente o que vai no instalador e "só funciona".
+
+### macOS — app não assinado (Gatekeeper)
+O `.dmg` sai **sem assinatura de código** (mesma escolha do Windows), via `mac.identity: null` no electron-builder — evita falha de build por falta de certificado Apple. Na 1ª abertura o cliente usa **botão direito → Abrir → Abrir** (ou `xattr -cr` uma vez). A arquitetura acompanha o Mac de build (Apple Silicon → `arm64`; Intel → `x64`): gerar no mesmo tipo de Mac do cliente.
+
+### Changelog técnico — 21/07/2026 (por arquivo, tudo em `desktop/`)
+
+| Arquivo | O que mudou |
+|---|---|
+| `scripts/platform.js` | **Novo** — resolve o argumento de sistema (`Apple`/`Windows` + apelidos, case-insensitive) → `{ key, label, ebFlag, isHost }`; sem argumento assume o host; valor inválido encerra com uso. |
+| `scripts/dist.js` | **Novo** — orquestra o build: `check-env` → `vite build` do frontend → `electron-builder --mac`/`--win` conforme o alvo. Aborta em qualquer passo com erro; avisa em cross-build; valida a presença do bin local (senão pede `npm install`). |
+| `scripts/start.js` | **Novo** — **builda o frontend** e abre o app (`electron .`); avisa se o alvo diferir do host. (Corrige o "Cannot GET /".) |
+| `package.json` | `start` → `node scripts/start.js`; `dist` → `node scripts/dist.js`; novos `pack:mac`/`pack:win`. Novo bloco **`build.mac`** (target `dmg`, `icon.icns`, `category`, `identity: null`, `artifactName`) e **`build.dmg`** (title). Descrição atualizada (Windows e macOS). |
+| `main.js` | Ícone da janela/dock por plataforma: `.png` + `app.dock.setIcon` no macOS (dev), `.ico` no Windows. Ciclo de vida já era mac-friendly (`window-all-closed` não sai no darwin). |
+| `build-icon.js` | Reescrito: gera `.ico` + `.png` (1024) em qualquer SO e `.icns` no macOS (iconset via `sips` implícito no fluxo + `iconutil`). Documentado que o `.icns` só é gerado no Mac. |
+| `build/icon.icns`, `build/icon.png` | **Novos** — ícones do Mac versionados (gerados do `favicon.svg`). |
+| `README-INSTALADOR.md`, `../README.md` | Documentam os dois sistemas, os comandos com argumento, os artefatos (`.exe`/`.dmg`), a nota do Gatekeeper e a regeração de ícones. |
+
+### Validação
+- `node --check` OK em `main.js`, `build-icon.js`, `scripts/platform.js`, `scripts/dist.js`, `scripts/start.js`.
+- **Resolução de plataforma** exercitada via arquivo real (como o npm invoca): `Apple`→mac/`--mac`, `Windows`/`win32`→win/`--win`, vazio→host, `Banana`→erro (exit 1).
+- **Encadeamento npm→wrapper** provado com `npm run dist Banana` e `npm start Banana` (argumento chega e é recusado).
+- **`.icns`** gerado e validado (`file` → "Mac OS X icon"); **frontend** builda OK (`vite build`, `dist/index.html` presente) — comprovando o fim do "Cannot GET /".
+- **Pendente (só o gestor consegue, no Mac dele):** rodar `npm install` em `desktop/` e `npm run dist Apple` de fato para gerar/abrir o `.dmg`; conferir login e `v<versão>` no rodapé; abrir com o contorno do Gatekeeper.
+
+### Pendências em aberto
+- **Gerar o `.dmg` real** no Mac (`npm install` + `npm run dist Apple`) e validar a instalação/execução.
+- Herdadas: **decidir o aperto do CORS** (desde a 1.5.2) e **subir `desktop/package.json` → versão do próximo build** ao empacotar (Windows e/ou macOS).
+- Assinatura/notarização Apple (opcional) — hoje o `.dmg` é não assinado (Gatekeeper avisa na 1ª abertura), espelhando o Windows sem code signing.

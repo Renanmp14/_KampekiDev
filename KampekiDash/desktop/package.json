@@ -1,17 +1,19 @@
 {
   "name": "kampeki-desktop",
   "version": "1.5.4",
-  "description": "Kampeki Finance — aplicativo desktop (Windows)",
+  "description": "Kampeki Finance — aplicativo desktop (Windows e macOS)",
   "author": "Kampeki",
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/start.js",
     "icon": "node build-icon.js",
     "check-env": "node check-env.js",
     "build:frontend": "npm --prefix ../frontend run build",
     "pack": "electron-builder",
-    "dist": "node check-env.js && npm run build:frontend && electron-builder"
+    "pack:mac": "electron-builder --mac",
+    "pack:win": "electron-builder --win",
+    "dist": "node scripts/dist.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -61,6 +63,16 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Kampeki Finance"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.finance",
+      "identity": null,
+      "artifactName": "KampekiFinance-${version}.${ext}"
+    },
+    "dmg": {
+      "title": "Kampeki Finance ${version}"
     }
   }
 }

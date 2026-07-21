@@ -81,25 +81,31 @@ Preencha e salve: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `GOOGLE_SHEET_I
 **3. Definir a versão:** edite `desktop/package.json` → campo `"version"` (SemVer, ex.:
 `1.0.0` → `1.0.1`). É o número exibido no rodapé do app.
 
-**4. Gerar o instalador:**
+**4. Gerar o instalador** (escolha o sistema no comando — rode cada um na sua máquina):
 
-```powershell
+```bash
 cd desktop
-npm run dist
+npm run dist Windows     # .exe (NSIS) — rode no Windows
+npm run dist Apple       # .dmg        — rode num Mac
+npm run dist             # usa o sistema deste computador
 ```
 
-(`npm run dist` = `vite build` do frontend → empacota tudo → gera o instalador NSIS.)
+(`npm run dist` = valida o `.env` → `vite build` do frontend → empacota tudo →
+gera o instalador do sistema escolhido. Para testar sem empacotar: `npm start
+Apple` / `npm start Windows`.)
 
 **5. Onde fica o executável:**
 
 ```
-desktop\dist\KampekiFinance-Setup-<versao>.exe   ← entregue este ao cliente
-desktop\dist\latest.yml                          ← manifesto (só usado no auto-update)
-desktop\dist\win-unpacked\                        ← app "cru" p/ testar sem instalar
+desktop/dist/KampekiFinance-Setup-<versao>.exe   ← Windows: entregue este
+desktop/dist/KampekiFinance-<versao>.dmg         ← macOS:   entregue este
+desktop/dist/win-unpacked/  |  mac/ (mac-arm64/) ← app "cru" p/ testar sem instalar
 ```
 
-**Atualizar o cliente:** suba a `version` no `desktop/package.json` → `npm run dist` →
-envie o novo `.exe`; ao rodar, o instalador **sobrescreve** a versão anterior.
+**Atualizar o cliente:** suba a `version` no `desktop/package.json` →
+`npm run dist Windows`/`npm run dist Apple` → envie o novo instalador; ao rodar,
+**sobrescreve** a versão anterior. (Detalhes e nota do Gatekeeper do macOS em
+`desktop/README-INSTALADOR.md`.)
 
 ## Endpoints
 
