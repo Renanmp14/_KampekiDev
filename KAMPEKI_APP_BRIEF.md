@@ -2016,3 +2016,75 @@ Raiz do repositório: `_KampekiDev/` (público no GitHub: `Renanmp14/_KampekiDev
 | **Máquina do cliente** — `userData/.env` | O `.env` depositado uma vez. Windows: `%APPDATA%\Kampeki Finance\.env`; macOS: `~/Library/Application Support/Kampeki Finance/.env`. Sobrevive às atualizações. |
 | **Google Sheets** | O **banco de dados** do app (Fornecedor, Tag, Itens, Custos, Folha). |
 | **Google Cloud** (IAM / Service Account) | A chave que autentica o app no Sheets — onde a chave é **rotacionada**. |
+
+---
+
+## Atualizações — 25/07/2026 — versão 1.6.1 (em preparação) — Configurações + verificação manual de update; e o muro do macOS não assinado
+
+> Sessão que estende a 1.6.0: nasce a aba **Configurações** com verificação manual de atualização, e prepara-se a **notarização do macOS** (dormente). Mas o assunto que **não fechou** foi o **bloqueio do macOS em app não assinado** — documentado abaixo em detalhe para retomar. **Nada foi commitado nem a versão subida** (o gestor faz o release); as mudanças estão no working tree.
+
+### Aba Configurações + botão "Verificar atualizações" (com o app aberto)
+Nova seção **Sistema → Configurações** na sidebar. Botão **"🔄 Verificar atualizações"** que procura versão nova na hora (a checagem automática só roda na abertura):
+- **Windows:** acha → baixa → oferece **"Reiniciar e atualizar agora"** (cancelável; se cancelar, instala ao fechar o app).
+- **macOS:** acha → mostra a versão e botão **Baixar** (link do `.dmg`).
+- Sem update: **"Você já está na versão mais recente"**. Em dev: desativado.
+- **Arquitetura:** como o front (React/renderer) não tinha ponte com o processo principal (decisão de 16/07 de não usar preload), criou-se um **`preload.js` mínimo** que expõe só `window.kampekiUpdater` (`verificar`/`aplicar`) via `contextBridge` — sem `fs`/rede. `main.js` ganhou os handlers IPC `updates:check`/`updates:apply` (Windows via `electron-updater`; macOS via GitHub API), reusando a lógica da 1.6.0.
+
+### Notarização do macOS — PREPARADA e DORMENTE
+Tudo pronto para assinar/notarizar quando o gestor quiser; **enquanto não houver secrets, sai ad-hoc como hoje** (nenhuma mudança de comportamento):
+- `desktop/package.json`: **removido `identity: null`** (agora a assinatura é decidida por secret).
+- `.github/workflows/release.yml`: passo condicional — **Windows** normal; **macOS sem `MAC_CSC_LINK` → ad-hoc** (`--config.mac.identity=null`); **macOS com certificado → assina + notariza** (usa `entitlements` + `hardenedRuntime`). Secrets wireados e inertes.
+- `desktop/build/entitlements.mac.plist` (**novo**) — usado só no build assinado.
+- `desktop/scripts/dist.js`: mantém o build **local** do Mac ad-hoc quando não há `CSC_LINK` (senão sairia sem assinatura, que não abre no Apple Silicon).
+- **`desktop/NOTARIZACAO.md`** (**novo**) — passo a passo: conta Apple Developer (US$ 99/ano), certificado Developer ID → `.p12` → base64, senha de app, Team ID, e os **5 secrets** do GitHub (`MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`). Cadastrou os 5 → próximo build sai notarizado, sem tocar em código.
+
+### 🔴 O muro do macOS não assinado — status (ONDE PARAMOS)
+
+**Sintoma:** ao instalar o `.dmg` no Mac, o macOS mostra **"Malware Bloqueado e Movido para o Lixo — O app Kampeki Finance.app não foi aberto porque contém malware."** e joga o app no Lixo. **Não** é a tela do Gatekeeper "desenvolvedor não identificado" (essa teria "Abrir Mesmo Assim") — é o **XProtect**, o antivírus do próprio macOS. É **falso positivo** (app Electron não assinado), mas o macOS não deixa abrir.
+
+**O que foi tentado (em ordem):**
+1. `xattr -cr` / `sudo xattr -rd com.apple.quarantine` — remover a quarentena. Sozinho **não** resolve.
+2. `sudo codesign --force --deep --sign -` — re-assinatura **ad-hoc** local. `spctl` segue `rejected` (não notarizado).
+3. Empacotado no helper **`ReleaseNotes/Liberar-Kampeki-Mac.command`** (dequarantine + re-sign + open).
+4. **"Abrir Mesmo Assim"** em Ajustes → Privacidade e Segurança: **não aparece** (XProtect não oferece essa opção).
+5. `spctl --master-disable`: **não** ajuda (controla o Gatekeeper, não o XProtect).
+
+**Resultado (o dado decisivo):**
+- **No Mac do desenvolvedor** (`renanpereira@PC-MAC-RENAN`): o ad-hoc re-sign + dequarantine **FUNCIONOU** — o app abriu e rodou.
+- **No Mac do cliente** (`nataliavolpato`, macOS Sequoia, FileVault on): **FALHOU** — mesmo com o `.command` rodando com **sucesso** (logs OK), o XProtect re-escaneou na abertura, re-flagou como malware e **jogou no Lixo de novo**.
+- **Conclusão:** a re-assinatura ad-hoc **não vence o XProtect** (veredito por **conteúdo**, não por assinatura). O contorno grátis é **não confiável entre máquinas** — funciona em umas, não em outras, e piora a cada macOS mais novo.
+- **Atrito extra do helper:** o `.command` **perde o bit de executável** ao passar por Windows/download → precisa `chmod +x` (ou ser zipado num Mac para preservar o bit). Mais um passo de Terminal, o que anula o "1 clique" para um cliente não técnico.
+
+**Última tentativa grátis pendente (não confirmada):** rodar o binário direto (`"/Applications/Kampeki Finance.app/Contents/MacOS/Kampeki Finance"`), que às vezes escapa da checagem de abertura. Se falhar, o caminho grátis está **esgotado** nessa máquina.
+
+### DECISÃO EM ABERTO (o que falta o gestor escolher)
+Sem notarização, **não roda** num Mac que o XProtect bloqueia — comprovado num Mac de cliente real. Dois caminhos:
+- **A) Notarização Apple (US$ 99/ano)** — fim definitivo; instala/atualiza limpo em qualquer Mac. **Tudo pronto** (`NOTARIZACAO.md` + workflow dormente); falta só o gestor abrir a conta e plugar os 5 secrets. **Recomendado** (há cliente no Mac).
+- **B) Versão web para o Mac** — o app já é web por dentro; hospedar e o cliente do Mac abre um **link no navegador** (sem instalar, sem Gatekeeper/XProtect). Windows segue com o desktop. Elimina o problema de raiz; custo = montar a **hospedagem** (backend na nuvem com as credenciais — reabre a discussão de segredos do "Nível 3").
+
+> **Estado:** aguardando o gestor decidir A ou B. O Windows **não** é afetado por nada disso (auto-update funciona; SmartScreen só avisa na 1ª instalação).
+
+### Changelog técnico — 25/07/2026 (1.6.1, por arquivo)
+| Arquivo | O que mudou |
+|---|---|
+| `desktop/preload.js` | **Novo** — ponte `window.kampekiUpdater` (`verificar`/`aplicar`) via contextBridge. |
+| `desktop/main.js` | Preload na janela; handlers IPC `updates:check`/`updates:apply`; `fetchLatestRelease`, `verificarWindows`, `verificarMac`; `checkMacUpdate` refatorado. |
+| `desktop/package.json` | Removido `mac.identity: null` (assinatura por secret); `!NOTARIZACAO.md` no `files`. |
+| `.github/workflows/release.yml` | Passo de empacotamento **condicional** (win / mac ad-hoc / mac assinado+notarizado); 5 secrets de assinatura wireados (inertes). |
+| `desktop/scripts/dist.js` | Build local do Mac força ad-hoc quando não há `CSC_LINK`. |
+| `desktop/build/entitlements.mac.plist` | **Novo** — entitlements p/ hardened runtime (build assinado). |
+| `desktop/NOTARIZACAO.md` | **Novo** — como ativar assinatura+notarização (5 secrets). |
+| `frontend/src/pages/Configuracoes.jsx` | **Novo** — aba Configurações com "Verificar atualizações". |
+| `frontend/src/App.jsx`, `components/Layout.jsx` | Rota `/configuracoes` + seção "Sistema" na sidebar. |
+| `ReleaseNotes/Liberar-Kampeki-Mac.command` | **Novo** — helper de liberação do Mac (paliativo; ver limites acima). |
+| `ReleaseNotes/ReleaseNotes_1.6.1_Kampeki_Finance.html` | **Novo** — notas da 1.6.1 (modelo de update, passo a passo Win/Mac, onde fica o `.env`). |
+
+### Validação
+- `node --check` (main.js, preload.js, dist.js), `vite build` (1265 módulos), workflow **YAML válido** (js-yaml), `package.json` válido. Build **Windows** da 1.6.0 conferido (sem segredos no pacote, `latest.yml`/`app-update.yml` corretos).
+- **Não testável aqui:** build do **macOS** (exige Mac/CI) — validar o ad-hoc local com `npm run dist Apple`; o assinado só com a conta Apple.
+
+### Pendências
+- **Decidir A (notarizar) ou B (web) para o Mac** — bloqueador do cliente do Mac.
+- Subir `desktop/package.json` → **1.6.1**, commit e release (gestor).
+- Reorganização feita pelo gestor: docs/PDFs/manuais movidos para `KampekiDash/ReleaseNotes/` — **atenção:** repo é público, então o **PDF da marca (24 MB)** e manuais ali ficam visíveis; tirar da pasta o que não deve ser público antes do commit.
+- Herdadas: rotação da chave (crítico), aperto do CORS.

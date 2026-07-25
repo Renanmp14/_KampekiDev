@@ -2,7 +2,7 @@
 // Sobe o backend Express embutido numa porta fixa em 127.0.0.1 e abre a janela
 // apontando para ele (o Express serve o build do frontend + as rotas /api).
 const {
-  app, BrowserWindow, shell, dialog,
+  app, BrowserWindow, shell, dialog, ipcMain,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -110,7 +110,12 @@ function createWindow(url) {
     title: `Kampeki Finance v${app.getVersion()}`,
     backgroundColor: '#0e1b18',
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      // Ponte para a verificação manual de atualizações (window.kampekiUpdater).
+      preload: path.join(__dirname, 'preload.js'),
+    },
   };
   // Em dev o ícone vem do build/; empacotado, cada plataforma herda o ícone do
   // próprio pacote (.exe no Windows, .app/.icns no macOS — build/ fica fora do
@@ -164,42 +169,52 @@ function versaoMaisNova(a, b) {
   return false;
 }
 
-// macOS: como o app NÃO é assinado (sem custo de certificado Apple), o sistema
-// proíbe a auto-atualização silenciosa. Então aqui só CHECAMOS a última release
-// no GitHub e, se houver versão nova, avisamos com um link para baixar o .dmg —
-// o cliente instala por cima manualmente. Sem dependências externas (https nativo).
+// Busca a última release publicada no GitHub (sem dependências externas — https
+// nativo). Resolve com o JSON da release ou rejeita. Usado nas checagens do macOS
+// (automática e manual), onde não há update silencioso por falta de assinatura.
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    const opts = {
+      hostname: 'api.github.com',
+      path: `/repos/${GH_OWNER}/${GH_REPO}/releases/latest`,
+      headers: { 'User-Agent': 'KampekiFinance', Accept: 'application/vnd.github+json' },
+    };
+    https.get(opts, (res) => {
+      let body = '';
+      res.on('data', (d) => { body += d; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      });
+    }).on('error', reject);
+  });
+}
+
+// Guarda a URL do .dmg da última versão detectada no macOS, para o "aplicar"
+// (abrir o download) não precisar consultar o GitHub de novo.
+let ultimaMacUrl = '';
+
+// macOS (checagem AUTOMÁTICA na abertura): sem assinatura não há update silencioso,
+// então avisamos com um diálogo nativo e link para baixar o .dmg (instala por cima).
 function checkMacUpdate() {
-  const https = require('https');
-  const opts = {
-    hostname: 'api.github.com',
-    path: `/repos/${GH_OWNER}/${GH_REPO}/releases/latest`,
-    headers: { 'User-Agent': 'KampekiFinance', Accept: 'application/vnd.github+json' },
-  };
-  https.get(opts, (res) => {
-    let body = '';
-    res.on('data', (d) => { body += d; });
-    res.on('end', () => {
-      try {
-        const rel = JSON.parse(body);
-        const tag = String(rel.tag_name || '').replace(/^v/i, '');
-        if (!tag || !versaoMaisNova(tag, app.getVersion())) return;
-        const asset = (rel.assets || []).find((a) => /\.dmg$/i.test(a.name));
-        const url = asset ? asset.browser_download_url : (rel.html_url || '');
-        const r = dialog.showMessageBoxSync(mainWindow, {
-          type: 'info',
-          title: 'Kampeki Finance — atualização disponível',
-          message: `Nova versão disponível: v${tag} (você está na v${app.getVersion()}).`,
-          detail: 'No macOS a atualização é manual. Clique em "Baixar" para pegar a nova versão e instalar por cima da atual.',
-          buttons: ['Baixar', 'Agora não'],
-          defaultId: 0,
-          cancelId: 1,
-        });
-        if (r === 0 && url) shell.openExternal(url);
-      } catch (e) {
-        console.error('[updater mac]', e.message);
-      }
-    });
-  }).on('error', (e) => console.error('[updater mac]', e.message));
+  fetchLatestRelease()
+    .then((rel) => {
+      const tag = String(rel.tag_name || '').replace(/^v/i, '');
+      if (!tag || !versaoMaisNova(tag, app.getVersion())) return;
+      const asset = (rel.assets || []).find((a) => /\.dmg$/i.test(a.name));
+      const url = asset ? asset.browser_download_url : (rel.html_url || '');
+      const r = dialog.showMessageBoxSync(mainWindow, {
+        type: 'info',
+        title: 'Kampeki Finance — atualização disponível',
+        message: `Nova versão disponível: v${tag} (você está na v${app.getVersion()}).`,
+        detail: 'No macOS a atualização é manual. Clique em "Baixar" para pegar a nova versão e instalar por cima da atual.',
+        buttons: ['Baixar', 'Agora não'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (r === 0 && url) shell.openExternal(url);
+    })
+    .catch((e) => console.error('[updater mac]', e.message));
 }
 
 // Auto-update. Windows: o electron-updater lê o app-update.yml embutido (gerado
@@ -225,6 +240,75 @@ function setupAutoUpdate() {
     console.error('[updater]', e.message);
   }
 }
+
+// --- Verificação MANUAL (botão na tela de Configurações) -------------------
+// Windows: checa e, se houver versão nova, BAIXA (autoDownload) e resolve
+// 'baixada' — a tela então oferece "Reiniciar e atualizar agora" (updates:apply
+// → quitAndInstall). Se não houver, resolve 'atual'.
+function verificarWindows() {
+  return new Promise((resolve) => {
+    let autoUpdater;
+    try {
+      // eslint-disable-next-line global-require
+      ({ autoUpdater } = require('electron-updater'));
+    } catch (e) {
+      resolve({ status: 'erro', mensagem: e.message });
+      return;
+    }
+    let feito = false;
+    const limpar = () => {
+      autoUpdater.removeListener('update-not-available', onNot);
+      autoUpdater.removeListener('update-downloaded', onOk);
+      autoUpdater.removeListener('error', onErr);
+    };
+    const terminar = (r) => { if (!feito) { feito = true; limpar(); resolve(r); } };
+    const onNot = () => terminar({ status: 'atual', versao: app.getVersion() });
+    const onOk = (info) => terminar({ status: 'baixada', versao: info && info.version });
+    const onErr = (e) => terminar({ status: 'erro', mensagem: (e && e.message) || String(e) });
+    autoUpdater.on('update-not-available', onNot);
+    autoUpdater.on('update-downloaded', onOk);
+    autoUpdater.on('error', onErr);
+    autoUpdater.autoDownload = true;
+    autoUpdater.checkForUpdates().catch(onErr);
+  });
+}
+
+// macOS: sem update silencioso — resolve 'disponivel' (guardando a URL do .dmg
+// para o updates:apply abrir) ou 'atual'.
+function verificarMac() {
+  return fetchLatestRelease()
+    .then((rel) => {
+      const tag = String(rel.tag_name || '').replace(/^v/i, '');
+      if (!tag) return { status: 'erro', mensagem: 'Release sem versão' };
+      if (!versaoMaisNova(tag, app.getVersion())) return { status: 'atual', versao: app.getVersion() };
+      const asset = (rel.assets || []).find((a) => /\.dmg$/i.test(a.name));
+      ultimaMacUrl = asset ? asset.browser_download_url : (rel.html_url || '');
+      return { status: 'disponivel', versao: tag };
+    })
+    .catch((e) => ({ status: 'erro', mensagem: e.message }));
+}
+
+ipcMain.handle('updates:check', async () => {
+  if (isDev) return { status: 'desativado', versao: app.getVersion() };
+  return process.platform === 'darwin' ? verificarMac() : verificarWindows();
+});
+
+ipcMain.handle('updates:apply', async () => {
+  if (isDev) return { ok: false };
+  if (process.platform === 'darwin') {
+    if (ultimaMacUrl) shell.openExternal(ultimaMacUrl);
+    return { ok: true };
+  }
+  try {
+    // eslint-disable-next-line global-require
+    const { autoUpdater } = require('electron-updater');
+    // Deixa o handler responder antes de encerrar o app para instalar.
+    setImmediate(() => autoUpdater.quitAndInstall());
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, mensagem: e.message };
+  }
+});
 
 // Instância única: evita subir dois backends/janelas.
 const gotLock = app.requestSingleInstanceLock();

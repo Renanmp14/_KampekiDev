@@ -73,7 +73,15 @@ console.log(`\n=== Gerando instalador Kampeki Finance para ${plat.label} ===`);
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 run('Build do frontend (vite)', npmCmd, ['--prefix', '../frontend', 'run', 'build']);
 
-// 2) empacotamento com o alvo escolhido
-run(`Empacotando (electron-builder ${plat.ebFlag})`, localBin('electron-builder'), [plat.ebFlag]);
+// 2) empacotamento com o alvo escolhido.
+// macOS sem certificado Apple (CSC_LINK ausente): força build ad-hoc
+// (identity=null), como era o padrão — sem isso o electron-builder geraria um app
+// sem assinatura, que nem abre no Apple Silicon. Com CSC_LINK definido, assina.
+const ebArgs = [plat.ebFlag];
+if (plat.key === 'mac' && !process.env.CSC_LINK) {
+  process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
+  ebArgs.push('--config.mac.identity=null');
+}
+run(`Empacotando (electron-builder ${plat.ebFlag})`, localBin('electron-builder'), ebArgs);
 
 console.log(`\n✅ Build de ${plat.label} concluído. Veja os artefatos em desktop/dist/.`);

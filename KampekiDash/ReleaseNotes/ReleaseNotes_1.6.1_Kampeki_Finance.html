@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampeki Finance — Notas da versão 1.6.1</title>
+<style>html{background:#0e1b18}@media(prefers-color-scheme:light){html{background:#efe7dd}}body{margin:0}</style>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de;
+    --text:#173229; --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --ring:rgba(224,106,84,.45);
+    --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+      --muted:#9bb0a7; --border:#2a4e44;
+      --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+      --primary-soft:rgba(255,139,124,.14);
+      --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+      --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de; --text:#173229;
+    --muted:#5c7168; --border:#e2d6c7; --primary:#e06a54; --primary-ink:#173229;
+    --primary-fill:#ff8b7c; --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --ring:rgba(224,106,84,.45); --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+    --muted:#9bb0a7; --border:#2a4e44; --primary:#ff8b7c; --primary-ink:#123029;
+    --primary-fill:#ff8b7c; --primary-soft:rgba(255,139,124,.14);
+    --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+    --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    padding:clamp(20px,5vw,64px) 20px 72px;
+  }
+  .wrap{max-width:940px; margin:0 auto}
+  .brandbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:clamp(30px,6vw,56px)}
+  .wordmark{font-weight:800; letter-spacing:.26em; font-size:.82rem; text-transform:uppercase; color:var(--text)}
+  .wordmark span{color:var(--primary)}
+  .stamp{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .eyebrow{font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); margin:0 0 14px}
+  h1{font-size:clamp(2.1rem,6vw,3.4rem); line-height:1.03; font-weight:800; letter-spacing:-.028em; text-wrap:balance; margin:0 0 18px}
+  h1 .accent{color:var(--primary)}
+  .lede{font-size:clamp(1.02rem,2.3vw,1.24rem); color:var(--muted); max-width:64ch; margin:0 0 24px}
+  .meta{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:8px}
+  .pill{display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:.82rem; padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface)}
+  .pill.version{background:var(--primary-fill); color:var(--primary-ink); border-color:transparent}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--olive)}
+
+  .sec-label{font-size:12px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin:0 0 18px; display:flex; align-items:center; gap:12px}
+  .sec-label::after{content:""; flex:1; height:1px; background:var(--border)}
+  section{margin:clamp(40px,7vw,64px) 0}
+
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px}
+  .tile{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 18px 20px; box-shadow:var(--shadow)}
+  .tile .k{font-size:1.5rem; line-height:1}
+  .tile h4{margin:12px 0 6px; font-size:1rem; font-weight:700; letter-spacing:-.01em}
+  .tile p{margin:0; font-size:.9rem; color:var(--muted)}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:clamp(22px,3.4vw,34px); box-shadow:var(--shadow); margin:18px 0}
+  .card h3{font-size:clamp(1.2rem,2.5vw,1.5rem); font-weight:800; letter-spacing:-.02em; margin:0 0 10px}
+  .card p{margin:0 0 12px}
+  .card .os-head{display:flex; align-items:center; gap:12px; margin:0 0 16px}
+  .os-badge{display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:11px; background:var(--primary-soft); font-size:1.3rem}
+
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:760px){ .cols{grid-template-columns:1fr} }
+
+  ol.steps{margin:0; padding:0; list-style:none; counter-reset:s}
+  ol.steps li{position:relative; padding:0 0 16px 44px; counter-increment:s}
+  ol.steps li::before{content:counter(s); position:absolute; left:0; top:-2px; width:30px; height:30px; border-radius:50%; background:var(--primary-fill); color:var(--primary-ink); font-weight:800; font-size:.9rem; display:flex; align-items:center; justify-content:center}
+  ol.steps li::after{content:""; position:absolute; left:14px; top:30px; bottom:2px; width:2px; background:var(--border)}
+  ol.steps li:last-child{padding-bottom:0}
+  ol.steps li:last-child::after{display:none}
+  ol.steps b{font-weight:700}
+
+  code,.mono{font-family:var(--mono); font-size:.9em}
+  .path{display:block; font-family:var(--mono); font-size:.86rem; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin:8px 0; overflow-x:auto; white-space:nowrap}
+  .callout{border-left:4px solid var(--teal); background:var(--surface-2); border-radius:0 12px 12px 0; padding:14px 16px; margin:16px 0; font-size:.94rem}
+  .callout.warn{border-left-color:var(--primary)}
+  .callout b{font-weight:700}
+  .kbd{font-family:var(--mono); font-size:.82rem; background:var(--surface); border:1px solid var(--border); border-bottom-width:2px; border-radius:6px; padding:1px 7px}
+  .foot{margin-top:56px; padding-top:22px; border-top:1px solid var(--border); color:var(--muted); font-size:.85rem}
+</style>
+
+<div class="page">
+<div class="wrap">
+
+  <div class="brandbar">
+    <div class="wordmark">KAM<span>PEKI</span> · FINANCE</div>
+    <div class="stamp">Notas da versão · 25 / 07 / 2026</div>
+  </div>
+
+  <p class="eyebrow">Notas da versão</p>
+  <h1>Versão 1.6.1 — <span class="accent">o app se atualiza sozinho</span></h1>
+  <p class="lede">
+    A partir desta versão, o Kampeki Finance passa a receber as atualizações
+    automaticamente — chega de reinstalar do zero a cada novidade. Esta página
+    explica o novo modelo, o que mudou na 1.6.1 e o passo a passo de instalação
+    no Windows e no Mac, incluindo onde colocar o arquivo de configuração.
+  </p>
+  <div class="meta">
+    <span class="pill version"><span class="dot"></span> v1.6.1</span>
+    <span class="pill">🪟 Windows</span>
+    <span class="pill">🍎 macOS</span>
+  </div>
+
+  <!-- ===== O que muda ===== -->
+  <section>
+    <p class="sec-label">O que muda</p>
+    <div class="tiles">
+      <div class="tile"><div class="k">🔄</div><h4>Atualização automática</h4><p>No Windows, o app baixa e instala as novas versões sozinho.</p></div>
+      <div class="tile"><div class="k">🍎</div><h4>Aviso no Mac</h4><p>No macOS, o app avisa quando há versão nova, com um botão para baixar.</p></div>
+      <div class="tile"><div class="k">⚙️</div><h4>Aba Configurações</h4><p>Novo menu com o botão “Verificar atualizações” a qualquer momento.</p></div>
+      <div class="tile"><div class="k">🔐</div><h4>Configuração separada</h4><p>O arquivo <code>.env</code> agora fica guardado na máquina — colocado uma vez só.</p></div>
+    </div>
+  </section>
+
+  <!-- ===== Novo modelo de atualização ===== -->
+  <section>
+    <p class="sec-label">O novo modelo de atualização</p>
+    <div class="card">
+      <p>Antes, cada nova versão exigia reinstalar o programa manualmente. Agora,
+      o app verifica sozinho se há uma versão mais recente <b>toda vez que é aberto</b>
+      e cuida da atualização. Como funciona em cada sistema:</p>
+      <div class="cols">
+        <div>
+          <div class="os-head"><span class="os-badge">🪟</span><h3 style="margin:0">Windows</h3></div>
+          <p style="color:var(--muted); margin:0"><b>Totalmente automático.</b> Ao abrir o app,
+          ele baixa a versão nova em segundo plano e a instala quando você fecha.
+          Na próxima abertura, já está atualizado — sem cliques, sem senha de
+          administrador. Seu login e seus dados permanecem.</p>
+        </div>
+        <div>
+          <div class="os-head"><span class="os-badge">🍎</span><h3 style="margin:0">macOS</h3></div>
+          <p style="color:var(--muted); margin:0"><b>Um clique.</b> Ao abrir, aparece um aviso
+          “Atualização disponível” com o botão <b>Baixar</b>. Você abre o arquivo
+          baixado e arrasta o app novo por cima do atual. Rápido, e o login e os
+          dados permanecem.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Novidade 1.6.1 ===== -->
+  <section>
+    <p class="sec-label">Novidade da 1.6.1 — aba Configurações</p>
+    <div class="card">
+      <h3>⚙️ Verificar atualizações quando quiser</h3>
+      <p>Foi criada uma nova seção <b>Sistema → Configurações</b> na barra lateral.
+      Nela há o botão <b>“🔄 Verificar atualizações”</b>, que procura uma versão
+      nova na hora — mesmo com o app já aberto:</p>
+      <ul style="margin:0; padding-left:20px; color:var(--muted)">
+        <li>Se você já está na última versão, ele confirma: <i>“Você já está na versão mais recente”</i>.</li>
+        <li>No <b>Windows</b>, se houver versão nova, ele baixa e oferece <b>“Reiniciar e atualizar agora”</b> (você pode cancelar e deixar para depois).</li>
+        <li>No <b>Mac</b>, ele mostra a versão nova e um botão para <b>baixar</b>.</li>
+      </ul>
+      <p style="margin-top:14px; color:var(--muted)">Essa área foi pensada para crescer — por
+      ora, cuida das atualizações.</p>
+    </div>
+  </section>
+
+  <!-- ===== Instalação Windows ===== -->
+  <section>
+    <p class="sec-label">Instalar / atualizar — Windows</p>
+    <div class="card">
+      <div class="os-head"><span class="os-badge">🪟</span><h3 style="margin:0">Passo a passo — Windows</h3></div>
+      <ol class="steps">
+        <li>Execute o instalador <code>KampekiFinance-Setup-1.6.1.exe</code>.
+          Se o Windows exibir um aviso azul, clique em <b>Mais informações → Executar assim mesmo</b> (só na 1ª vez).</li>
+        <li>Abra o <b>Kampeki Finance</b>. Como ainda falta a configuração, ele mostra uma janela com o caminho e o botão <b>“Abrir a pasta”</b>.</li>
+        <li>Clique em <b>“Abrir a pasta”</b>, copie o arquivo <code>.env</code> (que você recebeu) para dentro dela e feche a pasta.</li>
+        <li>Abra o app de novo, faça seu <b>login</b>. Pronto — daqui em diante ele se atualiza sozinho.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===== Instalação Mac ===== -->
+  <section>
+    <p class="sec-label">Instalar / atualizar — macOS</p>
+    <div class="card">
+      <div class="os-head"><span class="os-badge">🍎</span><h3 style="margin:0">Passo a passo — macOS</h3></div>
+      <ol class="steps">
+        <li>Abra o arquivo <code>KampekiFinance-1.6.1.dmg</code> e arraste o <b>Kampeki Finance</b> para a pasta <b>Aplicativos</b>.</li>
+        <li>O macOS pode bloquear o app com um aviso de “malware” e mandá-lo para o Lixo. <b>Isto é um falso positivo</b> (o app não é assinado pela Apple) — recupere-o do Lixo, se preciso (botão direito → <b>Colocar de volta</b>).</li>
+        <li>Rode o liberador que acompanha esta entrega: dê um <b>duplo clique</b> em <code>Liberar-Kampeki-Mac.command</code>. Se o Mac reclamar, clique com o <b>botão direito → Abrir → Abrir</b>. Digite a <b>senha do Mac</b> quando pedir (é para liberar o app).</li>
+        <li>O app abre e mostra a janela de configuração ausente → clique em <b>“Abrir a pasta”</b> e copie o arquivo <code>.env</code> para dentro dela.</li>
+        <li>Abra o app de novo e faça seu <b>login</b>.</li>
+      </ol>
+      <div class="callout warn">
+        <b>Nas próximas atualizações do Mac:</b> ao baixar um <code>.dmg</code> novo e substituir o app,
+        o bloqueio pode reaparecer. Se isso acontecer, basta rodar de novo o
+        <code>Liberar-Kampeki-Mac.command</code>. (Esse atrito só desaparece de vez com a
+        assinatura oficial da Apple.)
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== .env ===== -->
+  <section>
+    <p class="sec-label">Onde fica o arquivo de configuração (.env)</p>
+    <div class="card">
+      <p>O <code>.env</code> guarda a conexão com a planilha. Ele é enviado a você
+      <b>uma única vez</b> e depositado na pasta abaixo — que <b>sobrevive às
+      atualizações</b> (você não precisa recolocá-lo a cada versão nova).</p>
+
+      <div class="cols">
+        <div>
+          <div class="os-head"><span class="os-badge">🪟</span><b>Windows</b></div>
+          <span class="path">%APPDATA%\Kampeki Finance\.env</span>
+          <p style="font-size:.88rem; color:var(--muted); margin:0">
+            Atalho: abra o <b>Executar</b> (<span class="kbd">Win</span> + <span class="kbd">R</span>),
+            cole <code>%APPDATA%\Kampeki Finance</code> e Enter. Ou use o botão
+            <b>“Abrir a pasta”</b> que o app mostra.</p>
+        </div>
+        <div>
+          <div class="os-head"><span class="os-badge">🍎</span><b>macOS</b></div>
+          <span class="path">~/Library/Application Support/Kampeki Finance/.env</span>
+          <p style="font-size:.88rem; color:var(--muted); margin:0">
+            Atalho: no Finder, menu <b>Ir → Ir para a Pasta…</b>
+            (<span class="kbd">⌘</span> <span class="kbd">⇧</span> <span class="kbd">G</span>), cole
+            <code>~/Library/Application Support/Kampeki Finance/</code>. Ou use o botão
+            <b>“Abrir a pasta”</b> do app.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <b>Importante:</b> guarde o <code>.env</code> com cuidado e não o compartilhe —
+        ele contém a chave de acesso à planilha. Se um <code>.env</code> novo for
+        enviado (por exemplo, após troca de senha), substitua o antigo na mesma pasta.
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    Kampeki Finance · versão 1.6.1 · documento de apoio à instalação.<br>
+    Em caso de dúvida na instalação, entre em contato com o responsável pelo sistema.
+  </div>
+
+</div>
+</div>
+</body>
+</html>

@@ -23,6 +23,10 @@ const saidas = [
   { to: '/saida', label: 'Saída (Backup mensal)' },
 ];
 
+const sistema = [
+  { to: '/configuracoes', label: 'Configurações' },
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -66,6 +70,13 @@ export default function Layout() {
 
         <div className="nav-section">Saída</div>
         {saidas.map((s) => (
+          <NavLink key={s.to} to={s.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            {s.label}
+          </NavLink>
+        ))}
+
+        <div className="nav-section">Sistema</div>
+        {sistema.map((s) => (
           <NavLink key={s.to} to={s.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             {s.label}
           </NavLink>

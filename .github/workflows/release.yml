@@ -72,9 +72,29 @@ jobs:
 
       - name: Empacotar e publicar (electron-builder)
         working-directory: KampekiDash/desktop
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # App não assinado (sem custo de certificado): impede o electron-builder
-          # de procurar um certificado e falhar no macOS.
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder ${{ matrix.ebflag }} --publish always
+          # Assinatura/notarização do macOS — DORMENTE por padrão. Ficam vazios
+          # até você cadastrar os secrets (ver desktop/NOTARIZACAO.md). Sem eles,
+          # o macOS sai ad-hoc (como hoje); com eles, sai assinado + notarizado.
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "${{ matrix.ebflag }}" = "--win" ]; then
+            npx electron-builder --win --publish always
+          elif [ -z "$CSC_LINK" ]; then
+            echo "macOS sem certificado Apple (MAC_CSC_LINK ausente) -> build ad-hoc, como hoje."
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            npx electron-builder --mac --config.mac.identity=null --publish always
+          else
+            echo "macOS COM certificado Developer ID -> assinando + notarizando."
+            npx electron-builder --mac \
+              --config.mac.hardenedRuntime=true \
+              --config.mac.entitlements=build/entitlements.mac.plist \
+              --config.mac.entitlementsInherit=build/entitlements.mac.plist \
+              --publish always
+          fi

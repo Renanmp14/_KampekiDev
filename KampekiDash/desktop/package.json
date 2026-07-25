@@ -1,6 +1,6 @@
 {
   "name": "kampeki-desktop",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Kampeki Finance — aplicativo desktop (Windows e macOS)",
   "author": "Kampeki",
   "main": "main.js",
@@ -42,7 +42,8 @@
       "!build/**",
       "!dist/**",
       "!README-INSTALADOR.md",
-      "!GUIA-CLIENTE.md"
+      "!GUIA-CLIENTE.md",
+      "!NOTARIZACAO.md"
     ],
     "extraResources": [
       {
@@ -72,7 +73,6 @@
       "target": ["dmg"],
       "icon": "build/icon.icns",
       "category": "public.app-category.finance",
-      "identity": null,
       "artifactName": "KampekiFinance-${version}.${ext}"
     },
     "dmg": {
