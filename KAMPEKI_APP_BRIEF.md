@@ -1904,3 +1904,58 @@ O `.dmg` sai **sem assinatura de código** (mesma escolha do Windows), via `mac.
 |---|---|
 | `scripts/dist.js` | `IS_WIN` + helper `q()` (cita tokens com espaço no Windows); `run()` passa `shell: IS_WIN` e cita `cmd`/`args`. |
 | `scripts/start.js` | Mesmo `IS_WIN`/`q()` no `run()`; a abertura direta do Electron (`spawnSync`) também passa `shell: IS_WIN` e cita o binário. |
+
+---
+
+## Atualizações — 25/07/2026 — versão 1.6.0 (em preparação) — Auto-update + build na nuvem (CI/CD)
+
+> Virada de **entrega**: o app deixa de ser gerado e instalado à mão a cada versão. Agora os instaladores (Windows **e** macOS) são **buildados na nuvem** (GitHub Actions) e **publicados no GitHub Releases**, de onde os clientes se **atualizam sozinhos**. Objetivo do gestor: melhorar a entrega ao cliente e poder gerar os executáveis **sem depender de máquina local** (em especial, sem possuir um Mac). **Sem mudança no app** (backend/frontend intactos) — tudo na camada `desktop/` + CI + modelo de distribuição de segredos.
+
+### Contexto e as três verdades que guiaram o desenho
+1. **Windows atualiza sozinho, mesmo sem assinatura** — auto-update via `electron-updater` (que já era dependência e estava **dormente** no `main.js`) funciona sem certificado.
+2. **macOS só auto-atualiza se for assinado** (certificado Apple pago). Como a decisão foi **custo zero**, no Mac a atualização vira **semiautomática**: o app **detecta** a versão nova e mostra um aviso com link para baixar o `.dmg` (instala por cima). O `.dmg` **continua sendo gerado na nuvem**, de graça.
+3. **`.dmg` só se builda em macOS** — logo, gerar Mac sem ter um Mac exige um **runner `macos-latest`** na nuvem. O `.exe` pode ser buildado em qualquer lugar.
+
+### Modelo de segredos — o `.env` sai do instalador (Nível 2)
+Antes, o `build/.env` (chave da Service Account + senha admin + JWT) era **empacotado em texto puro** no instalador (`extraResources`). Isso impedia distribuir o instalador abertamente (auto-update num feed público vazaria os segredos) e obrigava o CI a ter os segredos.
+
+**Agora:** o instalador **não empacota mais o `.env`**. O cliente recebe o `.env` **uma vez** e o deposita na pasta de configuração do app (`userData`), que **sobrevive às atualizações** (a pasta de instalação é substituída a cada update; `userData` não). Consequências:
+- O instalador vira **seguro para distribuir publicamente** → GitHub Releases + auto-update ficam triviais.
+- O **CI não precisa de nenhum segredo** — o único token é o `GITHUB_TOKEN` que o Actions fornece sozinho.
+- `main.js`: novo `clientEnvFile()` (`userData/.env`, com override `KAMPEKI_ENV_FILE`); no app empacotado, se o `.env` faltar, um **diálogo** mostra o caminho exato e abre a pasta ("Abrir a pasta"), encerrando em vez de subir pela metade.
+
+### 🔴 Achado de segurança crítico — chave real versionada em `backend/.env.example`
+Durante o estudo, descobriu-se que **`KampekiDash/backend/.env.example` estava versionado com credenciais REAIS** (não placeholders): a `private_key` completa da Service Account, o `GOOGLE_SHEET_ID` real e a senha admin — presente no histórico desde o `first commit` (`844b883`) e no `c9db1d4`. Com o repositório **tornado público** (decisão desta sessão), a chave ficou **exposta publicamente**.
+- **Correção de código (feita):** `backend/.env.example` reescrito **só com placeholders**.
+- **Ação obrigatória do gestor (fora do código):** **rotacionar a chave** no Google Cloud (excluir a `private_key_id` `806c084d…`, gerar nova), **trocar `ADMIN_PASSWORD` e `JWT_SECRET`**. Como os valores já estão no histórico público, rotacionar é o que de fato neutraliza o vazamento (a faxina de histórico é opcional/bônus). **Enquanto não rotacionar, a chave antiga segue válida e exposta.**
+
+### CI/CD — GitHub Actions (`.github/workflows/release.yml`)
+- Dispara em **tag `v*`** (push) ou pelo botão **"Run workflow"**.
+- **Matriz** `windows-latest` + `macos-latest`: em cada um, instala deps (frontend/backend/desktop), builda o frontend (vite), e roda `electron-builder --win`/`--mac --publish always`.
+- **Guard de versão:** em release por tag, um passo confere que a tag (`vX.Y.Z`) bate com a `version` do `desktop/package.json` (o electron-builder nomeia o Release por essa versão) — aborta se divergirem.
+- `permissions: contents: write` + `GH_TOKEN: secrets.GITHUB_TOKEN` (automático) para publicar. `CSC_IDENTITY_AUTO_DISCOVERY: false` no Mac (app não assinado, sem procurar certificado).
+
+### `build.publish` = GitHub Releases
+`desktop/package.json` ganhou `build.publish: [{ provider: github, owner: Renanmp14, repo: _KampekiDev }]`. Isso faz o electron-builder gerar o `app-update.yml` (embutido no app, lido pelo `electron-updater` no Windows) e o `latest.yml` (manifesto), e publicar os artefatos no Release da versão.
+
+### Changelog técnico — 25/07/2026 (por arquivo)
+| Arquivo | O que mudou |
+|---|---|
+| `desktop/package.json` | `version` → **1.6.0**; novo `build.publish` (github); **removido** o `build/.env` do `extraResources` (segredo sai do pacote); `files` exclui `GUIA-CLIENTE.md`. |
+| `desktop/main.js` | Novo `clientEnvFile()` (`.env` em `userData`, override `KAMPEKI_ENV_FILE`); `resourcePaths()` empacotado lê o `.env` do cliente, não do pacote; diálogo "configuração ausente" (abre a pasta); `setupAutoUpdate()` reescrito — Windows via `electron-updater` (app-update.yml), macOS via `checkMacUpdate()` (checa GitHub API + aviso com link); helper `versaoMaisNova()`. |
+| `desktop/scripts/dist.js` | Removido o passo `check-env` do pipeline (o instalador não empacota mais segredos). |
+| `desktop/check-env.js` | Mantido; deixou de ser gate do build — agora só um validador manual do `build/.env` em dev (`npm run check-env`). |
+| `backend/.env.example` | Reescrito **só com placeholders** (removidas as credenciais reais que estavam versionadas). |
+| `desktop/build/.env.example` | **Novo** — modelo do `.env` (dev e cliente), com os caminhos de `userData` por SO. |
+| `desktop/GUIA-CLIENTE.md` | **Novo** — guia de instalação e atualização para o cliente (Windows automático; macOS por 1 clique; onde colocar o `.env`). |
+| `.github/workflows/release.yml` | **Novo** — build+publish na nuvem (Windows + macOS) no GitHub Releases. |
+
+### Validação
+- `node --check` OK em `main.js`, `scripts/dist.js`, `check-env.js`.
+- **Build real do Windows** (`electron-builder --win --publish never`) gerou `KampekiFinance-Setup-1.6.0.exe` + `latest.yml` + `app-update.yml` (owner/repo corretos).
+- **Conferido que nenhum segredo real vazou** para o pacote: `.env` ausente em `resources/`; busca pelo fragmento único da chave privada, pelo e-mail da Service Account e pelo `GOOGLE_SHEET_ID` real em `dist/win-unpacked` — **tudo vazio**.
+- **Não exercitado localmente:** o build do **macOS** (exige runner mac — será validado no primeiro run do Actions) e o ciclo de auto-update ponta a ponta (exige um Release publicado).
+
+### Transição (primeira vez) e pendências
+- **Primeira troca é manual:** o app instalado hoje tem o updater dormente e lê o `.env` embutido; ele **não** se auto-atualiza para a 1.6.0. O cliente instala a **1.6.0 manualmente uma vez** e, **antes**, deposita o `.env` na pasta de `userData` (o app mostra o caminho). Do 1.6.0 em diante, o Windows atualiza sozinho.
+- **Pendências:** (1) **rotacionar a chave/senha/JWT** (crítico, ver acima); (2) primeiro release de fato (`git push` da tag `v1.6.0`) e validação do build macOS no Actions; (3) enviar ao cliente o instalador + `.env` da 1.6.0. Herdada: aperto do CORS (desde a 1.5.2).

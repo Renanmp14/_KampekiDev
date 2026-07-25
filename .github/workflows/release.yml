@@ -1,0 +1,80 @@
+name: Release Kampeki Finance
+
+# Gera os instaladores na nuvem (Windows + macOS) e publica no GitHub Releases,
+# de onde os clientes se atualizam. Dispara ao empurrar uma tag "vX.Y.Z" ou pelo
+# botão "Run workflow" (Actions → Release Kampeki Finance → Run workflow).
+#
+# Não precisa de NENHUM segredo seu: o instalador não empacota o .env (o cliente
+# guarda o dele localmente), e o upload para o Release usa o GITHUB_TOKEN que o
+# próprio Actions fornece automaticamente.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ebflag: '--win'
+          - os: macos-latest
+            ebflag: '--mac'
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Numa release por tag, garante que a tag (vX.Y.Z) bate com a versão do
+      # desktop/package.json — o electron-builder nomeia o Release por essa
+      # versão, então elas precisam ser iguais para não publicar no lugar errado.
+      - name: Conferir versão x tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        working-directory: KampekiDash/desktop
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          echo "tag=$TAG  package.json=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::A tag ($TAG) difere da versão do package.json ($PKG). Faça o bump da versão antes de taggear."
+            exit 1
+          fi
+
+      - name: Instalar dependências (frontend)
+        working-directory: KampekiDash/frontend
+        run: npm install
+
+      - name: Build do frontend (vite)
+        working-directory: KampekiDash/frontend
+        run: npm run build
+
+      - name: Instalar dependências (backend, produção)
+        working-directory: KampekiDash/backend
+        run: npm install --omit=dev
+
+      - name: Instalar dependências (desktop)
+        working-directory: KampekiDash/desktop
+        run: npm install
+
+      - name: Empacotar e publicar (electron-builder)
+        working-directory: KampekiDash/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App não assinado (sem custo de certificado): impede o electron-builder
+          # de procurar um certificado e falhar no macOS.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder ${{ matrix.ebflag }} --publish always

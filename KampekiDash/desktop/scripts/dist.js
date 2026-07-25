@@ -64,14 +64,16 @@ if (!plat.isHost) {
 
 console.log(`\n=== Gerando instalador Kampeki Finance para ${plat.label} ===`);
 
-// 1) credenciais reais presentes no build/.env
-run('Validando credenciais (check-env)', process.execPath, [path.join(DESKTOP_DIR, 'check-env.js')]);
+// O instalador NÃO empacota mais segredos: o .env fica no computador do cliente
+// (userData), fora do pacote. Por isso o antigo passo "check-env" foi removido —
+// não há credencial a validar no build. (Para conferir seu build/.env local antes
+// de rodar o app em dev, use `npm run check-env`.)
 
-// 2) build do frontend (vite) — usa o npm que invocou este script
+// 1) build do frontend (vite) — usa o npm que invocou este script
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 run('Build do frontend (vite)', npmCmd, ['--prefix', '../frontend', 'run', 'build']);
 
-// 3) empacotamento com o alvo escolhido
+// 2) empacotamento com o alvo escolhido
 run(`Empacotando (electron-builder ${plat.ebFlag})`, localBin('electron-builder'), [plat.ebFlag]);
 
 console.log(`\n✅ Build de ${plat.label} concluído. Veja os artefatos em desktop/dist/.`);

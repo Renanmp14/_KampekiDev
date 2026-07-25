@@ -1,6 +1,6 @@
 {
   "name": "kampeki-desktop",
-  "version": "1.5.4",
+  "version": "1.6.0",
   "description": "Kampeki Finance — aplicativo desktop (Windows e macOS)",
   "author": "Kampeki",
   "main": "main.js",
@@ -30,11 +30,19 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Renanmp14",
+        "repo": "_KampekiDev"
+      }
+    ],
     "files": [
       "**/*",
       "!build/**",
       "!dist/**",
-      "!README-INSTALADOR.md"
+      "!README-INSTALADOR.md",
+      "!GUIA-CLIENTE.md"
     ],
     "extraResources": [
       {
@@ -45,10 +53,6 @@
       {
         "from": "../frontend/dist",
         "to": "frontend-dist"
-      },
-      {
-        "from": "build/.env",
-        "to": ".env"
       }
     ],
     "win": {

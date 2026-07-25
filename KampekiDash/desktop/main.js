@@ -11,6 +11,10 @@ const { pathToFileURL } = require('url');
 
 const isDev = !app.isPackaged;
 
+// Repositório de releases (usado no aviso de atualização do macOS).
+const GH_OWNER = 'Renanmp14';
+const GH_REPO = '_KampekiDev';
+
 // A porta precisa ser ESTÁVEL entre aberturas: o localStorage do Chromium é
 // isolado por origem, e a origem inclui a porta. Com porta sorteada (o antigo
 // `port: 0`), cada abertura era uma origem nova e vazia — login salvo e zoom se
@@ -39,8 +43,20 @@ async function escolherPorta() {
   return 0;
 }
 
+// Local do arquivo de configuração (.env) no computador do cliente. Fica em
+// userData (Windows: %APPDATA%\Kampeki Finance; macOS: ~/Library/Application
+// Support/Kampeki Finance), NÃO na pasta de instalação: a instalação é
+// substituída a cada atualização, mas userData sobrevive — então o .env que o
+// cliente colocou uma vez continua valendo depois dos updates. O segredo NÃO é
+// mais empacotado no instalador (o cliente recebe o .env separadamente e o
+// deposita aqui). KAMPEKI_ENV_FILE permite apontar para outro caminho, se preciso.
+function clientEnvFile() {
+  return process.env.KAMPEKI_ENV_FILE || path.join(app.getPath('userData'), '.env');
+}
+
 // Caminhos dos recursos: em dev leem da árvore do repositório; empacotado, de
-// process.resourcesPath (definido pelo extraResources do electron-builder).
+// process.resourcesPath (definido pelo extraResources do electron-builder). O
+// .env, porém, vem sempre do local do cliente (clientEnvFile), nunca do pacote.
 function resourcePaths() {
   if (isDev) {
     return {
@@ -53,7 +69,7 @@ function resourcePaths() {
   return {
     backendEntry: path.join(res, 'backend', 'src', 'app.js'),
     frontendDist: path.join(res, 'frontend-dist'),
-    envFile: path.join(res, '.env'),
+    envFile: clientEnvFile(),
   };
 }
 
@@ -135,16 +151,75 @@ function createWindow(url) {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-// Auto-update: fica DORMENTE até você definir UPDATE_FEED_URL (no build/.env).
-// Quando definida, o app checa esse feed HTTP genérico a cada abertura e baixa/
-// instala a versão nova sozinho. Sem a URL, é um no-op (modo handoff manual).
+// Compara duas versões "x.y.z". Retorna true se `a` é mais nova que `b`.
+function versaoMaisNova(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
+// macOS: como o app NÃO é assinado (sem custo de certificado Apple), o sistema
+// proíbe a auto-atualização silenciosa. Então aqui só CHECAMOS a última release
+// no GitHub e, se houver versão nova, avisamos com um link para baixar o .dmg —
+// o cliente instala por cima manualmente. Sem dependências externas (https nativo).
+function checkMacUpdate() {
+  const https = require('https');
+  const opts = {
+    hostname: 'api.github.com',
+    path: `/repos/${GH_OWNER}/${GH_REPO}/releases/latest`,
+    headers: { 'User-Agent': 'KampekiFinance', Accept: 'application/vnd.github+json' },
+  };
+  https.get(opts, (res) => {
+    let body = '';
+    res.on('data', (d) => { body += d; });
+    res.on('end', () => {
+      try {
+        const rel = JSON.parse(body);
+        const tag = String(rel.tag_name || '').replace(/^v/i, '');
+        if (!tag || !versaoMaisNova(tag, app.getVersion())) return;
+        const asset = (rel.assets || []).find((a) => /\.dmg$/i.test(a.name));
+        const url = asset ? asset.browser_download_url : (rel.html_url || '');
+        const r = dialog.showMessageBoxSync(mainWindow, {
+          type: 'info',
+          title: 'Kampeki Finance — atualização disponível',
+          message: `Nova versão disponível: v${tag} (você está na v${app.getVersion()}).`,
+          detail: 'No macOS a atualização é manual. Clique em "Baixar" para pegar a nova versão e instalar por cima da atual.',
+          buttons: ['Baixar', 'Agora não'],
+          defaultId: 0,
+          cancelId: 1,
+        });
+        if (r === 0 && url) shell.openExternal(url);
+      } catch (e) {
+        console.error('[updater mac]', e.message);
+      }
+    });
+  }).on('error', (e) => console.error('[updater mac]', e.message));
+}
+
+// Auto-update. Windows: o electron-updater lê o app-update.yml embutido (gerado
+// a partir do `build.publish` = GitHub Releases) e baixa/instala a versão nova
+// sozinho, notificando o usuário. macOS: sem assinatura não há update silencioso,
+// então apenas avisamos (checkMacUpdate). Em dev, no-op.
 function setupAutoUpdate() {
-  const feed = process.env.UPDATE_FEED_URL || '';
-  if (!feed || isDev) return;
+  if (isDev) return;
+  if (process.platform === 'darwin') {
+    checkMacUpdate();
+    return;
+  }
   try {
     // eslint-disable-next-line global-require
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.setFeedURL({ provider: 'generic', url: feed });
+    // Compat: um feed genérico explícito (UPDATE_FEED_URL) ainda é respeitado;
+    // sem ele, usa o app-update.yml embutido (provider github do package.json).
+    const feed = process.env.UPDATE_FEED_URL || '';
+    if (feed) autoUpdater.setFeedURL({ provider: 'generic', url: feed });
+    autoUpdater.autoDownload = true;
     autoUpdater.checkForUpdatesAndNotify();
   } catch (e) {
     console.error('[updater]', e.message);
@@ -165,6 +240,30 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     try {
+      // Configuração ausente (app empacotado): o cliente precisa depositar o
+      // arquivo .env (enviado a ele) na pasta de configuração. Sem ele, o backend
+      // não conecta à planilha nem valida login — então avisamos onde colocar,
+      // abrimos a pasta e encerramos (em vez de subir pela metade).
+      const { envFile } = resourcePaths();
+      if (!isDev && !fs.existsSync(envFile)) {
+        const dir = path.dirname(envFile);
+        const escolha = dialog.showMessageBoxSync({
+          type: 'warning',
+          title: 'Kampeki Finance — configuração ausente',
+          message: 'Arquivo de configuração (.env) não encontrado.',
+          detail: `Coloque o arquivo ".env" que você recebeu nesta pasta e reabra o aplicativo:\n\n${dir}`,
+          buttons: ['Abrir a pasta', 'Sair'],
+          defaultId: 0,
+          cancelId: 1,
+        });
+        if (escolha === 0) {
+          try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignora */ }
+          shell.openPath(dir);
+        }
+        app.quit();
+        return;
+      }
+
       const info = await startBackend();
       createWindow(`http://127.0.0.1:${info.port}`);
       setupAutoUpdate();
