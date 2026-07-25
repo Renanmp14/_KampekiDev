@@ -85,6 +85,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ "${{ matrix.ebflag }}" = "--win" ]; then
+            # Em jobs Windows, secrets de certificado do macOS ficam vazios.
+            # Se CSC_LINK="" chegar ao electron-builder, ele tenta resolver como
+            # diretório atual e falha com "Env WIN_CSC_LINK ... not a file".
+            unset CSC_LINK CSC_KEY_PASSWORD
             npx electron-builder --win --publish always
           elif [ -z "$CSC_LINK" ]; then
             echo "macOS sem certificado Apple (MAC_CSC_LINK ausente) -> build ad-hoc, como hoje."
