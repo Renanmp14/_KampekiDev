@@ -1959,3 +1959,60 @@ Durante o estudo, descobriu-se que **`KampekiDash/backend/.env.example` estava v
 ### Transição (primeira vez) e pendências
 - **Primeira troca é manual:** o app instalado hoje tem o updater dormente e lê o `.env` embutido; ele **não** se auto-atualiza para a 1.6.0. O cliente instala a **1.6.0 manualmente uma vez** e, **antes**, deposita o `.env` na pasta de `userData` (o app mostra o caminho). Do 1.6.0 em diante, o Windows atualiza sozinho.
 - **Pendências:** (1) **rotacionar a chave/senha/JWT** (crítico, ver acima); (2) primeiro release de fato (`git push` da tag `v1.6.0`) e validação do build macOS no Actions; (3) enviar ao cliente o instalador + `.env` da 1.6.0. Herdada: aperto do CORS (desde a 1.5.2).
+
+### Guia operacional — como publicar uma versão (release)
+
+> Também disponível como arquivo próprio: `GUIA-PUBLICACAO.md` (raiz do repo). O guia do **cliente** (instalar/atualizar) é `KampekiDash/desktop/GUIA-CLIENTE.md`.
+
+**Pré-requisitos (uma vez):** repo público; chave da Service Account rotacionada + senha admin/`JWT_SECRET` trocados; `desktop/build/.env` local preenchido com as credenciais atuais. **Nenhum segredo é necessário no GitHub** — o instalador não empacota o `.env` e o upload usa o `GITHUB_TOKEN` automático do Actions.
+
+**Regra de ouro:** a `version` do `desktop/package.json` e a tag têm de ser iguais (versão `1.6.1` → tag `v1.6.1`). O workflow aborta de propósito se divergirem.
+
+**Passo a passo:**
+1. **Suba a versão** em `KampekiDash/desktop/package.json` (campo `version`). Semver: correção → `1.6.1`; recurso → `1.7.0`; mudança grande → `2.0.0`.
+2. **Commit:** `git add KampekiDash/desktop/package.json && git commit -m "desktop 1.6.1"`.
+3. **Push do código:** `git push origin main`.
+4. **Crie a tag:** `git tag -a v1.6.1 -m "Kampeki Finance 1.6.1"` (`-a` = tag anotada).
+5. **Publique a tag (DISPARA o build):** `git push origin v1.6.1`. Saída esperada: `* [new tag] v1.6.1 -> v1.6.1`.
+6. **Acompanhe:** GitHub → **Actions** → workflow "Release Kampeki Finance" → esperar os jobs `windows-latest` e `macos-latest` ficarem verdes (~5–10 min).
+7. **Publique o Release:** o build cria um **rascunho (draft)**. Em **Releases**, conferir os arquivos (`.exe`, `.dmg`, `latest.yml`, `latest-mac.yml`) e clicar **"Publish release"**. ⚠️ Só um Release **publicado** faz os clientes atualizarem (o updater ignora rascunhos); **não apagar** os `latest*.yml`.
+
+**Atalho sem terminal:** Actions → Release Kampeki Finance → **Run workflow** (usa a versão do `package.json`).
+
+**Desfazer uma tag errada (antes de publicar):** `git tag -d v1.6.1` (local) + `git push origin :v1.6.1` (remoto).
+
+**Bloco copiar/colar** (trocando `X.Y.Z`):
+```bash
+# editar KampekiDash/desktop/package.json -> "version": "X.Y.Z"
+git add KampekiDash/desktop/package.json
+git commit -m "desktop X.Y.Z"
+git push origin main
+git tag -a vX.Y.Z -m "Kampeki Finance X.Y.Z"
+git push origin vX.Y.Z
+```
+
+### Mapa do projeto — onde fica cada informação
+
+Raiz do repositório: `_KampekiDev/` (público no GitHub: `Renanmp14/_KampekiDev`).
+
+| Local | O que guarda |
+|---|---|
+| `KAMPEKI_APP_BRIEF.md` | **Documento mestre** — histórico de decisões, regras de negócio, changelog de cada versão (este arquivo). |
+| `GUIA-PUBLICACAO.md` | Guia de publicação (release). |
+| `.github/workflows/release.yml` | Pipeline de build na nuvem (GitHub Actions) — builda e publica os instaladores. |
+| `README.md`, `docs/`, PDFs, `.xlsx`, manuais | Documentação, guias e planilhas-modelo de importação. |
+| `KampekiDash/backend/` | **API** (Node + Express): lógica de negócio, rotas, integração com o Google Sheets. |
+| `KampekiDash/backend/.env` | Credenciais **reais** para dev (ignorado pelo git). |
+| `KampekiDash/backend/.env.example` | Modelo do `.env` (placeholders — versionado). |
+| `KampekiDash/frontend/` | **Interface** (React + Vite): telas, dashboards, componentes. |
+| `KampekiDash/desktop/` | Empacotamento **Electron** (app de mesa). |
+| `KampekiDash/desktop/package.json` | **A VERSÃO do app** (campo `version` — a tag espelha isto) + config do electron-builder e do `publish` (GitHub Releases). |
+| `KampekiDash/desktop/main.js` | Processo principal do Electron: sobe o backend, abre a janela, faz o **auto-update**. |
+| `KampekiDash/desktop/build/` | Ícones (`.ico`/`.icns`/`.png`) e o `.env` de **dev** (`build/.env`, ignorado). |
+| `KampekiDash/desktop/build/.env.example` | Modelo do `.env` (placeholders — versionado). |
+| `KampekiDash/desktop/GUIA-CLIENTE.md` | Guia de instalação/atualização **para o cliente**. |
+| `KampekiDash/desktop/dist/` | Saída dos builds locais (ignorado). |
+| **GitHub Releases** (fora do repo) | Instaladores publicados (`.exe`, `.dmg`) + manifestos de update (`latest.yml`, `latest-mac.yml`). De onde os clientes baixam/atualizam. |
+| **Máquina do cliente** — `userData/.env` | O `.env` depositado uma vez. Windows: `%APPDATA%\Kampeki Finance\.env`; macOS: `~/Library/Application Support/Kampeki Finance/.env`. Sobrevive às atualizações. |
+| **Google Sheets** | O **banco de dados** do app (Fornecedor, Tag, Itens, Custos, Folha). |
+| **Google Cloud** (IAM / Service Account) | A chave que autentica o app no Sheets — onde a chave é **rotacionada**. |
