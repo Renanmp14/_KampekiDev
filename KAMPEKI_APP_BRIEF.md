@@ -2088,3 +2088,44 @@ Sem notarização, **não roda** num Mac que o XProtect bloqueia — comprovado 
 - Subir `desktop/package.json` → **1.6.1**, commit e release (gestor).
 - Reorganização feita pelo gestor: docs/PDFs/manuais movidos para `KampekiDash/ReleaseNotes/` — **atenção:** repo é público, então o **PDF da marca (24 MB)** e manuais ali ficam visíveis; tirar da pasta o que não deve ser público antes do commit.
 - Herdadas: rotação da chave (crítico), aperto do CORS.
+
+---
+
+## Atualizações — 25/07/2026 — DECISÃO do Mac: partir para a versão web (Opção B) via Oracle Cloud
+
+> Registro do ponto em que paramos: a 1.6.1 saiu, o **auto-update do Windows foi validado ponta a ponta** (release publicado → cliente atualizou sozinho ✓). O que resta é **só o Mac**, e a decisão sobre ele foi tomada: **seguir com a Opção B (versão web)**, em vez de notarizar.
+
+### A escolha
+- **Contexto:** no Mac do cliente (`nataliavolpato`, Sequoia), o XProtect bloqueia o app não assinado como "malware" e o contorno ad-hoc **não vence** (comprovado). Sem notarização (US$ 99/ano) não roda. As saídas eram **A) notarizar** ou **B) web**.
+- **Decisão:** testar a **Opção B — versão web** (o app já é web por dentro; o cliente do Mac abriria uma **URL no navegador**, sem instalar nada, sem Gatekeeper/XProtect). O Windows **continua** no app desktop (auto-update funcionando).
+- **Onde hospedar — avaliado:**
+  - *Google Cloud Run* (grátis na escala do app, mesmo ecossistema do Google, aguenta importações longas) — porém tem **cold start** (~15–30s na 1ª abertura ociosa).
+  - *Render free* (simples, mas hiberna/cold start).
+  - **Oracle Cloud "Always Free" — ESCOLHIDO:** VM real 24/7, **grátis para sempre e sem cold start**. Custo: setup mais técnico. O gestor topou o setup em troca do "sempre ligado + grátis".
+
+### O que temos que fazer (roteiro do deploy na Oracle)
+Divisão: **gestor** faz a conta/VM/SSH; **assistente** prepara código, scripts e configs e guia comando a comando.
+
+1. **Gestor:** criar conta Oracle Cloud (cartão só p/ verificação; Always Free não cobra) → provisionar a **VM Always Free** → anotar o **IP público**.
+   - VM: tentar **ARM Ampere** (4 núcleos/24GB, mais forte); se der "out of capacity", cair p/ **AMD micro** (1GB, sempre disponível — suficiente p/ este app).
+2. **Endereço/HTTPS:** apontar um domínio pro IP (HTTPS não sai em IP puro). Opções: **domínio próprio** (~US$10/ano) **ou** subdomínio grátis **DuckDNS** (ex.: `kampeki.duckdns.org`).
+3. **Assistente prepara / gestor roda (via SSH):**
+   - Mudança de código: backend passar a escutar em **`0.0.0.0:$PORT`** (hoje é `127.0.0.1`, que o host não alcança).
+   - Instalar **Node + pm2** (mantém o app vivo e no boot) + **Caddy** (proxy reverso com **HTTPS automático grátis**).
+   - Subir os segredos como `.env` na VM (usar a **chave rotacionada**).
+4. **Testar:** abrir a URL no navegador do Mac.
+
+### Pega-ratão da Oracle (já mapeados)
+- **Firewall duplo:** liberar 80/443 **no painel da Oracle E no firewall do SO** da VM (erro nº 1 de quem começa).
+- **Capacidade ARM** pode faltar → plano B AMD micro.
+- **HTTPS exige domínio** → DuckDNS grátis se não houver domínio.
+
+### Perguntas em aberto (aguardando o gestor, para retomar)
+1. **Domínio próprio ou DuckDNS grátis?**
+2. **VM ARM (tento primeiro) com AMD micro de plano B?** (recomendado)
+3. O assistente pode **adiantar o código** (bind `0.0.0.0` + configs de Caddy/pm2) enquanto a VM não existe — **pendente de OK**.
+
+### Segurança (obrigatório quando a web for definitiva)
+Na web o **login fica público** na internet → endurecer: **limite de tentativas no login**, **apertar o CORS**, **senha admin forte**, e HTTPS (o Caddy resolve). Usar sempre a **chave rotacionada** no `.env`.
+
+> **Retomar daqui:** o gestor saiu para criar a conta/VM. Próximo passo ao voltar: responder as 3 perguntas acima; então o assistente adianta o código e guia o deploy na VM.
