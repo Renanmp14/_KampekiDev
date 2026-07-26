@@ -2014,6 +2014,9 @@ Raiz do repositório: `_KampekiDev/` (público no GitHub: `Renanmp14/_KampekiDev
 | `KampekiDash/desktop/dist/` | Saída dos builds locais (ignorado). |
 | **GitHub Releases** (fora do repo) | Instaladores publicados (`.exe`, `.dmg`) + manifestos de update (`latest.yml`, `latest-mac.yml`). De onde os clientes baixam/atualizam. |
 | **Máquina do cliente** — `userData/.env` | O `.env` depositado uma vez. Windows: `%APPDATA%\Kampeki Finance\.env`; macOS: `~/Library/Application Support/Kampeki Finance/.env`. Sobrevive às atualizações. |
+| `GUIA-SERVIDOR-WEB.html` | *(add. 26/07)* **Manual do servidor web** — ficha técnica, etapas do deploy, rotina de atualização, comandos e troubleshooting. |
+| `GUIA-DEPLOY-ORACLE.md` | *(add. 26/07)* Roteiro passo a passo do deploy na Oracle Cloud (14 fases). |
+| **VM Oracle** (fora do repo) | *(add. 26/07)* A **versão web** em produção — `https://kampeki.duckdns.org`. Node+pm2 e Caddy; `backend/.env` e `frontend/dist` vivem só nela (fora do git). |
 | **Google Sheets** | O **banco de dados** do app (Fornecedor, Tag, Itens, Custos, Folha). |
 | **Google Cloud** (IAM / Service Account) | A chave que autentica o app no Sheets — onde a chave é **rotacionada**. |
 
@@ -2129,3 +2132,184 @@ Divisão: **gestor** faz a conta/VM/SSH; **assistente** prepara código, scripts
 Na web o **login fica público** na internet → endurecer: **limite de tentativas no login**, **apertar o CORS**, **senha admin forte**, e HTTPS (o Caddy resolve). Usar sempre a **chave rotacionada** no `.env`.
 
 > **Retomar daqui:** o gestor saiu para criar a conta/VM. Próximo passo ao voltar: responder as 3 perguntas acima; então o assistente adianta o código e guia o deploy na VM.
+
+---
+
+## Atualizações — 26/07/2026 — **A VERSÃO WEB ESTÁ NO AR** (deploy na Oracle Cloud)
+
+> A Opção B saiu do papel na mesma sessão em que foi retomada. O app está acessível em
+> **<https://kampeki.duckdns.org>** com HTTPS válido, dados reais do Google Sheets, e o **muro do macOS
+> deixou de existir**: a cliente do Mac abre uma URL no navegador, sem instalador, sem Gatekeeper, sem
+> XProtect. O **Windows continua no app desktop** com auto-update — os dois caminhos coexistem sobre o
+> mesmo código e a mesma planilha.
+>
+> **Documentação operacional completa:** `GUIA-SERVIDOR-WEB.html` (novo, na raiz) — manual do servidor com
+> ficha técnica, as 13 etapas de construção, rotina de atualização, comandos do dia a dia e catálogo de
+> problemas. Esta seção do brief registra as **decisões e os achados**; o *como fazer* está lá.
+
+### As 3 perguntas em aberto de 25/07 — respondidas
+
+| Pergunta | Resposta |
+|---|---|
+| Domínio próprio ou DuckDNS grátis? | **DuckDNS** — `kampeki.duckdns.org`. Grátis, 2 minutos, sem cartão. Migrar para domínio próprio depois é **uma linha** no `Caddyfile` (o Caddy reemite o certificado sozinho); não valia travar o deploy numa compra. |
+| VM ARM com AMD micro de plano B? | **Caiu no plano B.** O ARM `A1.Flex` foi recusado com *"Out of capacity… in availability domain AD-1"*. Detalhe que fecha a porta da sugestão da Oracle: **São Paulo tem um único Availability Domain**, então "tente outro AD" não se aplica. Ficou o **AMD `VM.Standard.E2.1.Micro`** (1 OCPU, 1 GB), que praticamente nunca falta. |
+| Adiantar o código antes da VM existir? | **Não foi necessário** — ver a correção de plano abaixo. |
+
+### Correção de plano — o bind `0.0.0.0` **não** era necessário (e seria pior)
+
+**Antes (plano de 25/07):** listava como mudança de código obrigatória "backend passar a escutar em
+`0.0.0.0:$PORT` (hoje é `127.0.0.1`, que o host não alcança)".
+
+**Agora:** **mantido `127.0.0.1`.** O Caddy roda **na mesma VM**, então alcança o Node em `127.0.0.1:3001`
+sem qualquer mudança. Manter o bind local é **melhor**: a porta 3001 fica inacessível da internet, e o único
+ponto de entrada é o Caddy (com HTTPS). Expor `0.0.0.0` teria aberto o Express cru ao mundo sem ganho algum.
+
+**Consequência:** o deploy da web exigiu **zero mudança de código de aplicação**. O backend já servia o
+`frontend/dist` na mesma origem (`app.js`, bloco "Frontend estático") e o front já chamava `/api` em URL
+relativa — o app **já estava pronto para web** desde antes.
+
+### O que subiu (produção)
+
+| Camada | Decisão |
+|---|---|
+| **VM** | Oracle Always Free, AMD `E2.1.Micro` (1 OCPU / 1 GB), Ubuntu 24.04.4, Brazil East (São Paulo), IP `163.176.35.169` |
+| **Swap** | 2 GB em `/swapfile` — **obrigatório** com 1 GB de RAM (sem isso, `npm install`/build morrem por falta de memória) |
+| **Runtime** | Node 22.23.1 (NodeSource), pm2 7.0.3, git 2.43.0 |
+| **Processo** | pm2 `kampeki`, habilitado no systemd → volta sozinho após reboot |
+| **Proxy/HTTPS** | Caddy 2.11.4 — certificado Let's Encrypt automático, renovação automática, redirect 308 de `http://`. Caddyfile de **3 linhas** |
+| **DNS** | DuckDNS |
+| **Frontend** | Buildado **no Windows** e enviado por `scp` — o `vite build` (1265 módulos) não cabe confortavelmente em 1 GB |
+| **Segredos** | `.env` em `backend/.env` (permissão `600`), enviado por **pipe direto** para a VM — nunca gravado em disco na máquina de dev |
+| **Firewall** | Portas 80/443 liberadas **nos dois** (Security List da Oracle **e** iptables do Ubuntu) |
+
+### 🔴 Achado — o pm2 **não** sobe este app com `pm2 start src/app.js`
+
+**Sintoma:** `pm2 status` mostrava `online` consumindo 123 MB, **sem uma única linha de log** e com a porta
+3001 **fechada**. Nada de erro, nada de restart. Rodar `node src/app.js` na mão funcionava perfeitamente.
+
+**Causa (comprovada rodando em primeiro plano, não deduzida):** o guarda no fim de `backend/src/app.js`:
+
+```js
+const invokedDirectly = process.argv[1]
+  && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (invokedDirectly) startServer();
+```
+
+Esse guarda existe para o **Electron** poder `import`ar o `startServer` sem subir um servidor duplicado. Mas
+o pm2, em modo *fork*, **importa** o script a partir do wrapper dele (`ProcessContainerFork.js`) — então
+`process.argv[1]` aponta para o wrapper, a comparação dá `false` e **`startServer()` nunca é chamado**. O
+módulo carrega, o container do pm2 mantém o processo vivo, e o servidor simplesmente não existe.
+
+**Correção (sem tocar no código):** fazer o pm2 executar o `npm start`, aí quem roda o script é o `node` de
+verdade e `process.argv[1]` volta a ser o `app.js`:
+
+```bash
+cd ~/_KampekiDev/KampekiDash/backend
+pm2 start npm --name kampeki -- start
+```
+
+> **Vale para qualquer gerenciador de processos que importe o módulo em vez de executá-lo** (não é uma
+> peculiaridade do pm2). Registrado aqui porque o sintoma — "online, sem log, porta fechada" — não sugere
+> a causa de forma alguma.
+
+### Versão exibida no app — a web mostrava `1.0.0`
+
+**Antes:** `resolveVersion()` em `app.js` usava `APP_VERSION` (injetada pelo Electron em
+`desktop/main.js:87`) e, na falta dela, caía no `backend/package.json` — que está em **`1.0.0` desde o
+primeiro commit** e nunca foi versionado junto do app. Resultado: desktop mostrava `1.6.1`, web mostrava
+`1.0.0`.
+
+**Agora:** a cadeia de resolução passou a ser **`APP_VERSION` → `desktop/package.json` →
+`backend/package.json` → `'dev'`**. O `desktop/package.json` já era a fonte única da versão do app (é o que
+a tag do release espelha), então a **web passa a acompanhar o desktop automaticamente** a cada `git pull` —
+sem passo manual por release. O caminho do Electron fica **idêntico** (o `APP_VERSION` tem precedência;
+verificado com `APP_VERSION=9.9.9-teste`).
+
+> **Nota:** rebuildar o frontend **não** resolveria — a versão nunca esteve no bundle do React. O
+> `VersionBadge.jsx` sempre consultou `GET /api/version`.
+
+### 🟢 Segurança — a chave vazada foi **confirmada revogada**
+
+A pendência crítica aberta em 25/07 (chave real da Service Account versionada em `backend/.env.example`, com
+o repo tornado público) está **resolvida**, e com **evidência**, não com suposição:
+
+- A chave em produção é a **rotacionada** (`private_key_id 416a93e9…`), conferida antes de subir — o script
+  que monta o `.env` **aborta** se detectar a `806c084d…`.
+- Ao testar o backend na máquina de dev, o Google respondeu **`invalid_grant: Invalid JWT Signature`** para
+  a chave do `.env` **local** — ou seja, a `806c084d…` foi de fato **apagada no Google Cloud**. É o que
+  neutraliza o vazamento (o histórico público do repo agora carrega uma chave morta).
+- `ADMIN_PASSWORD` e `JWT_SECRET` também foram trocados (senha aleatória de 24 caracteres, JWT de 96).
+
+> **Efeito colateral a corrigir:** o `KampekiDash/backend/.env` **local (dev)** continua com a chave morta —
+> `npm run dev` sobe mas não lê a planilha. Basta substituir o `GOOGLE_CREDENTIALS_JSON` pelo JSON novo.
+
+### Rotina de atualização da web — **dois destinos independentes**
+
+O ponto que mais gera erro operacional daqui em diante: **publicar um release não atualiza o servidor web**,
+e **atualizar o servidor não atualiza o desktop**. São dois destinos a partir do mesmo commit.
+
+```
+CÓDIGO ALTERADO
+   ├── tag vX.Y.Z → GitHub Actions → Releases → desktop se auto-atualiza (Windows)
+   └── git push → na VM: git pull + pm2 restart      (backend)
+       npm run build (no Windows) + scp dist/        (frontend)
+```
+
+- **Mexeu no backend:** `git push` → na VM `git pull` + `pm2 restart kampeki`.
+- **Mexeu no frontend:** `npm run build` no Windows + `scp -r dist` para
+  `…/KampekiDash/frontend/` (o destino termina em `/frontend/`, **não** em `/frontend/dist`).
+- `git pull` **não** atropela o `dist` enviado nem o `.env`: ambos estão no `.gitignore`.
+
+### Documentação nova
+
+| Arquivo | O que é |
+|---|---|
+| `GUIA-SERVIDOR-WEB.html` | **Manual do servidor** — ficha técnica completa, as 13 etapas do deploy, acesso SSH, `.env`, DNS, Caddy, rotina de atualização, comandos do dia a dia, 8 problemas com sintoma → causa → solução, e anexo com todos os comandos na ordem. Autocontido (abre offline), com botão de copiar em cada comando. |
+| `GUIA-DEPLOY-ORACLE.md` | O roteiro passo a passo usado **durante** o deploy (14 fases), preservado com as notas de campo (capacidade do ARM, atalho de build local). |
+
+### Changelog técnico — 26/07/2026 (por arquivo)
+
+| Arquivo | O que mudou |
+|---|---|
+| `backend/src/app.js` | `resolveVersion()` reescrita: cadeia `APP_VERSION` → `desktop/package.json` → `backend/package.json` → `'dev'`; novo helper `lerVersaoDe(...partes)`. Unifica a versão exibida na web com a do desktop. **Única mudança de código do deploy.** |
+| `frontend/package.json` | `version` `1.0.0` → `1.6.1` (cosmético — nada no app lê este campo; alinha por consistência). |
+| `GUIA-SERVIDOR-WEB.html` | **Novo** — manual do servidor web (ver acima). |
+| `GUIA-DEPLOY-ORACLE.md` | **Novo** — roteiro do deploy na Oracle. |
+| *(servidor, fora do repo)* | `backend/.env` na VM (`600`); `/etc/caddy/Caddyfile`; `/swapfile` + entrada no `/etc/fstab`; regras iptables + `netfilter-persistent`; serviços `pm2-ubuntu` e `caddy` habilitados no systemd. |
+
+### Validação
+
+- **Ponta a ponta pela URL pública**, de fora da VM: `/` → **HTTP 200**; `/api/health` → `{"ok":true}`;
+  `/api/version` → **`{"version":"1.6.1"}`**; `http://` → **308** para `https://`; certificado
+  **Let's Encrypt válido** (`ssl_verify_result 0`), emitido 26/07, expira 24/10/2026.
+- **Login real** pela URL pública: token JWT de 195 caracteres devolvido.
+- **Dados reais atravessando a web** (com o token, contra o Sheets):
+  **7.675 custos · 3.420 itens · 773 fornecedores · 540 folhas · 22 tags**.
+- **Resolução de versão** exercitada nos dois modos: sem `APP_VERSION` → `1.6.1` (lida do desktop);
+  com `APP_VERSION=9.9.9-teste` → `9.9.9-teste` (caminho do Electron intacto).
+- **Persistência:** `pm2-ubuntu` e `caddy` **enabled** no systemd; `pm2 save` executado; swap ativo
+  (`/etc/fstab`); regras de firewall salvas (`netfilter-persistent`).
+- **Segredos fora do pacote:** `.env` com permissão `600`, 13 linhas / 2.664 bytes (JSON em uma linha só).
+- **Não exercitado:** reboot completo da VM (a configuração está feita, mas o religamento automático não foi
+  testado na prática); comportamento sob carga simultânea de vários usuários.
+
+### Pendências em aberto
+
+- 🔴 **Rate limit no login** — `POST /api/auth/login` está na internet **aceitando tentativas ilimitadas de
+  senha**. No desktop era aceitável (rodava só na máquina do usuário); na web **não é**. Mudança de código,
+  **não aplicada**.
+- 🔴 **Apertar o CORS** — `app.js` ainda usa `app.use(cors())` com wildcard. Pendente desde a **1.5.2**;
+  com o app na internet, deixou de ser recomendação e passou a ser obrigatório.
+- **`.env` local (dev) com a chave revogada** — trocar o `GOOGLE_CREDENTIALS_JSON` pelo JSON novo.
+- **IP público é efêmero** — parar (Stop) e iniciar a instância pelo painel **pode mudar o IP**, derrubando
+  o site até o DuckDNS ser corrigido (um `sudo reboot` de dentro **não** muda). Duas saídas documentadas no
+  `GUIA-SERVIDOR-WEB.html`: converter para **Reserved** no painel (recomendado, também gratuito) ou um cron
+  de 5 min sincronizando o DuckDNS.
+- **Enviar a URL para a cliente do Mac** — recomendado **só depois** do rate limit e do CORS.
+- **Manutenção do SO** — `sudo apt update && sudo apt upgrade -y` uma vez por mês.
+- Herdadas do desktop, **inalteradas**: a notarização do macOS segue **preparada e dormente**
+  (`NOTARIZACAO.md`) — a web tornou a decisão A/B **desnecessária por ora**, mas se um dia o desktop no Mac
+  voltar à mesa, o caminho está pronto.
+
+> **Estado:** a versão web substitui o app desktop **apenas no Mac**. Nada do fluxo do Windows mudou —
+> release por tag, build no Actions, auto-update pelo GitHub Releases (`GUIA-PUBLICACAO.md`).

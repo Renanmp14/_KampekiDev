@@ -1,6 +1,6 @@
 {
   "name": "kampeki-desktop",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Kampeki Finance — aplicativo desktop (Windows e macOS)",
   "author": "Kampeki",
   "main": "main.js",
@@ -49,7 +49,12 @@
       {
         "from": "../backend",
         "to": "backend",
-        "filter": ["**/*", "!.env", "!.env.*", "!**/*.log"]
+        "filter": [
+          "**/*",
+          "!.env",
+          "!.env.*",
+          "!**/*.log"
+        ]
       },
       {
         "from": "../frontend/dist",
@@ -57,7 +62,9 @@
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "build/icon.ico",
       "artifactName": "KampekiFinance-Setup-${version}.${ext}"
     },
@@ -70,7 +77,9 @@
       "shortcutName": "Kampeki Finance"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "build/icon.icns",
       "category": "public.app-category.finance",
       "artifactName": "KampekiFinance-${version}.${ext}"

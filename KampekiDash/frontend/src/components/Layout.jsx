@@ -27,6 +27,16 @@ const sistema = [
   { to: '/configuracoes', label: 'Configurações' },
 ];
 
+// Seções da navegação. O ícone e o título compõem o cabeçalho destacado de cada
+// grupo (ver .nav-section no styles.css) — a hierarquia fica legível de relance,
+// em vez de quatro listas visualmente iguais.
+const secoes = [
+  { titulo: 'Dashboards', icone: '📊', itens: dashboards },
+  { titulo: 'Lançamentos', icone: '✏️', itens: lancamentos },
+  { titulo: 'Backup', icone: '💾', itens: saidas },
+  { titulo: 'Sistema', icone: '⚙️', itens: sistema },
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,33 +64,26 @@ export default function Layout() {
           <span className="brand-sub">Finance</span>
         </div>
 
-        <div className="nav-section">Dashboards</div>
-        {dashboards.map((d) => (
-          <NavLink key={d.to} to={d.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            {d.label}
-          </NavLink>
-        ))}
-
-        <div className="nav-section">Lançamentos</div>
-        {lancamentos.map((l) => (
-          <NavLink key={l.to} to={l.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            {l.label}
-          </NavLink>
-        ))}
-
-        <div className="nav-section">Saída</div>
-        {saidas.map((s) => (
-          <NavLink key={s.to} to={s.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            {s.label}
-          </NavLink>
-        ))}
-
-        <div className="nav-section">Sistema</div>
-        {sistema.map((s) => (
-          <NavLink key={s.to} to={s.to} onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            {s.label}
-          </NavLink>
-        ))}
+        <nav className="nav">
+          {secoes.map((sec) => (
+            <div className="nav-group" key={sec.titulo}>
+              <div className="nav-section">
+                <span className="nav-ico" aria-hidden="true">{sec.icone}</span>
+                {sec.titulo}
+              </div>
+              {sec.itens.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={closeMenu}
+                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
 
         <div className="logout-btn">
           <ZoomControl />

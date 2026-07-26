@@ -42,6 +42,17 @@ function resolveVersion() {
 const APP_VERSION = resolveVersion();
 
 const app = express();
+
+// Atrás de um proxy reverso (Caddy, no deploy web), o IP do cliente chega em
+// X-Forwarded-For — sem isto, `req.ip` seria sempre 127.0.0.1 e o limite de
+// tentativas de login contaria todos os visitantes num único balde.
+// Ligado por configuração (TRUST_PROXY=1 na VM) e desligado por padrão: no app
+// desktop não há proxy, e confiar no cabeçalho sem proxy permitiria falsear o IP.
+if (process.env.TRUST_PROXY) {
+  const saltos = Number(process.env.TRUST_PROXY);
+  app.set('trust proxy', Number.isFinite(saltos) && saltos > 0 ? saltos : 1);
+}
+
 app.use(cors());
 // Limite alto para suportar importações em lote (planilhas grandes).
 app.use(express.json({ limit: '50mb' }));

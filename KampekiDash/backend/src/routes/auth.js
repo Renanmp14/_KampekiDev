@@ -1,10 +1,16 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
+import { criarLoginRateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 
+// Uma única instância do limitador (o estado das tentativas vive nela).
+const limitarTentativas = criarLoginRateLimit();
+
 // POST /api/auth/login — valida contra ADMIN_EMAIL / ADMIN_PASSWORD do .env.
-router.post('/login', (req, res) => {
+// Protegido por limite de tentativas por IP: esta é a única rota pública que
+// aceita credenciais e, na versão web, está exposta na internet.
+router.post('/login', limitarTentativas, (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Email e senha são obrigatórios' });

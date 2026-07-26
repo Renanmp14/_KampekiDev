@@ -77,6 +77,10 @@ export default function DashCustos() {
     if (!key) return;
     setSelMes((prev) => (prev === key ? '' : key));
   }
+  // Handler de clique nos retângulos das barras (o Recharts entrega o dado da
+  // própria barra clicada). Usado nas <Bar> em vez de no <BarChart>, para que o
+  // alvo venha do hit-test do navegador e não de coordenada calculada.
+  const cliqueNaBarraDoMes = (d) => toggleMes(d?.key ?? d?.payload?.key);
   function limparDrill() {
     setSelCategoria('');
     setSelSubcategoria('');
@@ -396,12 +400,12 @@ export default function DashCustos() {
           </div>
         </div>
         <div>
+        {/* O clique fica na <Bar> (cada retângulo), não no <BarChart>: o handler
+            do gráfico deriva o mês da COORDENADA do mouse, o que erra o alvo
+            quando a página está sob zoom. No elemento, o hit-test é do
+            navegador — imune ao zoom. Mesmo padrão do DashFolha. */}
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart
-            data={porMes}
-            onClick={(s) => toggleMes(s?.activePayload?.[0]?.payload?.key)}
-            style={{ cursor: 'pointer' }}
-          >
+          <BarChart data={porMes} style={{ cursor: 'pointer' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
             <XAxis dataKey="mes" stroke="#93a39b" fontSize={12} />
             <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
@@ -415,6 +419,7 @@ export default function DashCustos() {
             <Bar
               dataKey="total"
               radius={[4, 4, 0, 0]}
+              onClick={(d) => toggleMes(d?.key ?? d?.payload?.key)}
               style={{ cursor: 'pointer', outline: 'none' }}
             >
               {porMes.map((m) => (
@@ -440,11 +445,10 @@ export default function DashCustos() {
         <div className="grupo-wrap">
           <div className="grupo-chart">
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart
-                data={porGrupoMes}
-                onClick={(s) => toggleMes(s?.activePayload?.[0]?.payload?.key)}
-                style={{ cursor: 'pointer' }}
-              >
+              {/* Idem: clique por barra (ver comentário no gráfico acima). Num
+                  empilhado, as barras cobrem a coluna inteira até o total, então
+                  clicar em qualquer faixa do mês funciona. */}
+              <BarChart data={porGrupoMes} style={{ cursor: 'pointer' }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
                 <XAxis dataKey="mes" stroke="#93a39b" fontSize={12} />
                 <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
@@ -456,17 +460,17 @@ export default function DashCustos() {
                   cursor={{ fill: 'rgba(255,255,255,0.08)' }}
                 />
                 <Legend />
-                <Bar dataKey="CMV" stackId="g" fill="#ff8b7c">
+                <Bar dataKey="CMV" stackId="g" fill="#ff8b7c" onClick={cliqueNaBarraDoMes}>
                   {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
                 </Bar>
-                <Bar dataKey="Despesas" stackId="g" fill="#4f868f">
+                <Bar dataKey="Despesas" stackId="g" fill="#4f868f" onClick={cliqueNaBarraDoMes}>
                   {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
                 </Bar>
-                <Bar dataKey="Folha" stackId="g" fill="#bfcb7f" radius={temOutrosChart ? undefined : [4, 4, 0, 0]}>
+                <Bar dataKey="Folha" stackId="g" fill="#bfcb7f" radius={temOutrosChart ? undefined : [4, 4, 0, 0]} onClick={cliqueNaBarraDoMes}>
                   {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
                 </Bar>
                 {temOutrosChart && (
-                  <Bar dataKey="Outros" stackId="g" fill={OUTROS_COLOR} radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="Outros" stackId="g" fill={OUTROS_COLOR} radius={[4, 4, 0, 0]} onClick={cliqueNaBarraDoMes}>
                     {porGrupoMes.map((m) => <Cell key={m.key} fillOpacity={!selMes || selMes === m.key ? 1 : 0.3} />)}
                   </Bar>
                 )}
