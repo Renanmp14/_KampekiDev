@@ -1,0 +1,1183 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampeki Finance — Manual do Servidor Web (Oracle Cloud)</title>
+<style>
+  :root{
+    --bg:#0e1a18; --surface:#18322E; --surface-2:#1e3b36; --line:#2c524b;
+    --text:#E6E6E6; --muted:#9fb3ae; --primary:#FF8B7C; --on-primary:#18322E;
+    --teal:#4F868F; --olive:#BFCB7F; --sand:#D7C4B6; --wine:#8f4a4a;
+    --code-bg:#0b1513; --radius:10px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f2ef; --surface:#ffffff; --surface-2:#faf8f6; --line:#ddd6cf;
+      --text:#1c2b28; --muted:#5f6f6b; --primary:#c9503d; --on-primary:#ffffff;
+      --teal:#3d6b73; --olive:#7c8a3f; --sand:#8a7461; --wine:#8f4a4a;
+      --code-bg:#132320;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+  }
+  .wrap{max-width:1500px;margin:0 auto;display:grid;grid-template-columns:290px 1fr;gap:0}
+  /* ---- SUMÁRIO ---- */
+  nav{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    padding:26px 18px; background:var(--surface); border-right:1px solid var(--line);
+  }
+  nav .brand{font-weight:800;letter-spacing:.16em;font-size:15px;color:var(--primary);margin-bottom:2px}
+  nav .sub{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:20px}
+  nav a{display:block;color:var(--muted);text-decoration:none;font-size:13.5px;padding:5px 9px;border-radius:6px;border-left:2px solid transparent}
+  nav a:hover{color:var(--text);background:var(--surface-2)}
+  nav a.h2{padding-left:20px;font-size:12.5px;opacity:.85}
+  nav .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--primary);margin:18px 0 5px 9px;font-weight:700}
+  main{padding:38px 46px 120px;min-width:0}
+  /* ---- TIPOGRAFIA ---- */
+  h1{font-size:31px;line-height:1.2;margin:0 0 6px;letter-spacing:.02em;text-transform:uppercase}
+  h2{
+    font-size:23px;margin:52px 0 14px;padding-bottom:9px;border-bottom:2px solid var(--primary);
+    letter-spacing:.01em;scroll-margin-top:20px;
+  }
+  h3{font-size:18px;margin:30px 0 10px;color:var(--primary);scroll-margin-top:20px}
+  h4{font-size:15px;margin:20px 0 8px;color:var(--sand)}
+  p,li{color:var(--text)}
+  a{color:var(--primary)}
+  code{
+    background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:13.5px;
+    font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+    color:var(--olive);border:1px solid var(--line);white-space:nowrap;
+  }
+  /* ---- BLOCOS DE CÓDIGO ---- */
+  .code{position:relative;margin:14px 0}
+  .code pre{
+    background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);
+    padding:15px 17px;overflow-x:auto;margin:0;
+    font:13.5px/1.65 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+    color:#d9e6e2;
+  }
+  .code pre code{background:none;border:none;padding:0;color:inherit;white-space:pre}
+  .code .cp{
+    position:absolute;top:9px;right:9px;background:var(--surface-2);color:var(--muted);
+    border:1px solid var(--line);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;
+    opacity:0;transition:opacity .15s;
+  }
+  .code:hover .cp{opacity:1}
+  .code .cp:hover{color:var(--primary);border-color:var(--primary)}
+  .code .lbl{
+    font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
+    margin-bottom:5px;display:block;font-weight:700;
+  }
+  .lbl-win::before{content:"🪟 no seu Windows (PowerShell) — ";color:var(--teal)}
+  .lbl-vm::before{content:"🐧 dentro da VM (SSH) — ";color:var(--olive)}
+  .lbl-web::before{content:"🌐 no navegador — ";color:var(--sand)}
+  /* ---- CAIXAS ---- */
+  .box{border-radius:var(--radius);padding:14px 18px;margin:16px 0;border-left:4px solid;background:var(--surface)}
+  .box p:first-child{margin-top:0}.box p:last-child{margin-bottom:0}
+  .box .tt{font-weight:700;margin-bottom:5px;display:block;font-size:14px}
+  .warn{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 9%,var(--surface))}
+  .warn .tt{color:var(--primary)}
+  .danger{border-color:var(--wine);background:color-mix(in srgb,var(--wine) 14%,var(--surface))}
+  .danger .tt{color:#ff9b9b}
+  .info{border-color:var(--teal);background:color-mix(in srgb,var(--teal) 11%,var(--surface))}
+  .info .tt{color:var(--teal)}
+  .ok{border-color:var(--olive);background:color-mix(in srgb,var(--olive) 11%,var(--surface))}
+  .ok .tt{color:var(--olive)}
+  /* ---- TABELAS ---- */
+  .tw{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:var(--radius)}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:480px}
+  th{background:var(--surface-2);text-align:left;padding:10px 13px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{white-space:normal;word-break:break-word}
+  /* ---- DIVERSOS ---- */
+  .hero{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--primary);border-radius:var(--radius);padding:22px 26px;margin:22px 0 6px}
+  .hero .url{font-size:24px;font-weight:800;color:var(--primary);word-break:break-all;text-decoration:none;display:inline-block;margin:4px 0}
+  .meta{color:var(--muted);font-size:13px;margin-top:14px}
+  .steps{counter-reset:s;list-style:none;padding-left:0}
+  .steps>li{counter-increment:s;position:relative;padding-left:42px;margin-bottom:18px}
+  .steps>li::before{
+    content:counter(s);position:absolute;left:0;top:-1px;width:28px;height:28px;border-radius:50%;
+    background:var(--primary);color:var(--on-primary);font-weight:800;font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .diag{
+    background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);padding:18px;
+    overflow-x:auto;font:13px/1.5 ui-monospace,Consolas,monospace;color:#cfe0db;white-space:pre;margin:18px 0;
+  }
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+  .p-ok{background:var(--olive);color:#1a2410}
+  .p-todo{background:var(--wine);color:#fff}
+  hr{border:none;border-top:1px solid var(--line);margin:44px 0}
+  .kbd{background:var(--surface-2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:12px;font-family:monospace}
+  @media (max-width:1000px){
+    .wrap{grid-template-columns:1fr}
+    nav{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}
+    main{padding:24px 18px 80px}
+    h1{font-size:25px}
+  }
+  @media print{
+    nav{display:none} .wrap{grid-template-columns:1fr} .code .cp{display:none}
+    body{background:#fff;color:#000}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <div class="brand">KAMPEKI</div>
+  <div class="sub">Manual do Servidor</div>
+
+  <div class="grp">Referência</div>
+  <a href="#ficha">Ficha técnica</a>
+  <a href="#arquitetura">Como funciona</a>
+
+  <div class="grp">Como foi construído</div>
+  <a href="#p1">1. Conta e região Oracle</a>
+  <a href="#p2">2. Chave SSH</a>
+  <a href="#p3">3. Rede (VCN)</a>
+  <a href="#p4">4. A instância (VM)</a>
+  <a href="#p5">5. Firewall duplo</a>
+  <a href="#p6">6. Acessar a instância</a>
+  <a href="#p7">7. Preparar o servidor</a>
+  <a href="#p8">8. Backend no servidor</a>
+  <a href="#p9">9. O arquivo .env</a>
+  <a href="#p10">10. Subir com pm2</a>
+  <a href="#p11">11. Frontend (build)</a>
+  <a href="#p12">12. DNS (DuckDNS)</a>
+  <a href="#p13">13. Caddy e HTTPS</a>
+
+  <div class="grp">Operação</div>
+  <a href="#atualizar">Atualizar o app</a>
+  <a href="#dia-a-dia">Comandos do dia a dia</a>
+  <a href="#env-mudar">Mexer no .env</a>
+  <a href="#senha">Trocar a senha</a>
+  <a href="#ip">Se o IP mudar</a>
+  <a href="#desktop">Windows × Web</a>
+
+  <div class="grp">Apoio</div>
+  <a href="#problemas">Problemas e soluções</a>
+  <a href="#seguranca">Segurança e pendências</a>
+  <a href="#anexo">Anexo: todos os comandos</a>
+</nav>
+
+<main>
+
+<h1>Kampeki Finance — Manual do Servidor Web</h1>
+<p style="color:var(--muted);margin-top:0">
+  Documentação completa do deploy na Oracle Cloud realizado em <strong>26 de julho de 2026</strong>.
+  Registra o que foi feito, por quê, e como você opera tudo sozinho daqui em diante.
+</p>
+
+<div class="hero">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">O app está no ar em</div>
+  <a class="url" href="https://kampeki.duckdns.org">https://kampeki.duckdns.org</a>
+  <div class="meta">
+    Login: <code>admin@financesheet.local</code> · A senha está no seu gerenciador de senhas
+    (<strong>não foi anotada neste arquivo de propósito</strong> — ver <a href="#senha">Trocar a senha</a>).
+  </div>
+</div>
+
+<div class="box warn">
+  <span class="tt">Por que este servidor existe</span>
+  <p>
+    O app desktop (Electron) <strong>não abre no Mac da cliente</strong>: o XProtect, antivírus do próprio
+    macOS, classifica aplicativos não assinados como malware e os move para o Lixo — e não oferece a opção
+    "Abrir Mesmo Assim". Resolver exigiria a notarização da Apple (US$ 99/ano). Como o Kampeki já é uma
+    aplicação web por dentro, escolhemos <strong>hospedá-la</strong>: o Mac abre uma URL no navegador e o
+    problema deixa de existir. O <strong>Windows continua no app desktop</strong>, com auto-update funcionando.
+  </p>
+</div>
+
+<h2 id="ficha">Ficha técnica</h2>
+<p>Tudo que identifica esta instalação. Se você precisar refazer o servidor do zero, é daqui que parte.</p>
+
+<div class="tw"><table>
+<tr><th colspan="2">Nuvem</th></tr>
+<tr><td>Provedor / plano</td><td>Oracle Cloud Infrastructure — <strong>Always Free</strong> (gratuito permanente, não é trial)</td></tr>
+<tr><td>Região (permanente)</td><td>Brazil East (São Paulo) — <code>sa-saopaulo-1</code></td></tr>
+<tr><td>Availability Domain</td><td>AD-1 <em>(São Paulo só tem um)</em></td></tr>
+<tr><td>Compartment</td><td><code>renanmp (root)</code></td></tr>
+<tr><th colspan="2">Instância</th></tr>
+<tr><td>Nome</td><td><code>kampeki</code></td></tr>
+<tr><td>Shape</td><td><code>VM.Standard.E2.1.Micro</code> — AMD x86_64, 1 OCPU, 1 GB RAM</td></tr>
+<tr><td>Sistema</td><td>Canonical Ubuntu 24.04.4 LTS</td></tr>
+<tr><td>Disco</td><td>50 GB (usado ~11%)</td></tr>
+<tr><td>IP público</td><td><code>163.176.35.169</code> <span class="pill p-todo">efêmero</span> — ver <a href="#ip">Se o IP mudar</a></td></tr>
+<tr><td>Usuário de acesso</td><td><code>ubuntu</code></td></tr>
+<tr><th colspan="2">Rede</th></tr>
+<tr><td>VCN</td><td><code>vcn-kampeki</code> — CIDR <code>10.0.0.0/16</code></td></tr>
+<tr><td>Subnet</td><td><code>public subnet-vcn-kampeki</code> — CIDR <code>10.0.0.0/24</code> (<strong>pública</strong>)</td></tr>
+<tr><td>Portas abertas</td><td>22 (SSH) · 80 (HTTP/ACME) · 443 (HTTPS)</td></tr>
+<tr><td>IPv6</td><td>Desabilitado (não é necessário)</td></tr>
+<tr><th colspan="2">Endereço</th></tr>
+<tr><td>Domínio</td><td><code>kampeki.duckdns.org</code> (DuckDNS, gratuito)</td></tr>
+<tr><td>Certificado</td><td>Let's Encrypt via Caddy — emitido 26/07/2026, expira 24/10/2026, <strong>renova sozinho</strong></td></tr>
+<tr><th colspan="2">Software instalado</th></tr>
+<tr><td>Node.js</td><td><code>v22.23.1</code> (repositório NodeSource)</td></tr>
+<tr><td>npm</td><td><code>10.9.8</code></td></tr>
+<tr><td>pm2</td><td><code>7.0.3</code> (global)</td></tr>
+<tr><td>git</td><td><code>2.43.0</code></td></tr>
+<tr><td>Caddy</td><td><code>v2.11.4</code> (repositório oficial Cloudsmith)</td></tr>
+<tr><td>Swap</td><td>2 GB em <code>/swapfile</code>, permanente via <code>/etc/fstab</code></td></tr>
+<tr><th colspan="2">Caminhos no servidor</th></tr>
+<tr><td>Repositório</td><td><code>/home/ubuntu/_KampekiDev</code> (179 MB)</td></tr>
+<tr><td>Backend</td><td><code>/home/ubuntu/_KampekiDev/KampekiDash/backend</code></td></tr>
+<tr><td>Frontend buildado</td><td><code>/home/ubuntu/_KampekiDev/KampekiDash/frontend/dist</code></td></tr>
+<tr><td>Credenciais</td><td><code>/home/ubuntu/_KampekiDev/KampekiDash/backend/.env</code> (permissão <code>600</code>)</td></tr>
+<tr><td>Config do Caddy</td><td><code>/etc/caddy/Caddyfile</code></td></tr>
+<tr><td>Logs do app</td><td><code>/home/ubuntu/.pm2/logs/kampeki-out.log</code> e <code>-error.log</code></td></tr>
+<tr><td>Certificados</td><td><code>/var/lib/caddy/.local/share/caddy/certificates/</code></td></tr>
+<tr><th colspan="2">Chaves e acessos</th></tr>
+<tr><td>Chave SSH privada</td><td><code>C:\Users\Renan Milech Pereira\.ssh\kampeki_oracle</code> <strong>(no seu PC — é o que dá acesso ao servidor)</strong></td></tr>
+<tr><td>Chave SSH pública</td><td><code>...\.ssh\kampeki_oracle.pub</code> (instalada na VM)</td></tr>
+<tr><td>Service Account Google</td><td><code>kampeki-app@kampeki-finance.iam.gserviceaccount.com</code></td></tr>
+<tr><td>Chave em uso</td><td><code>private_key_id 416a93e9…</code> — a <strong>rotacionada</strong>, não a que vazou</td></tr>
+<tr><td>Planilha (banco de dados)</td><td><code>1gh7mnsn6tKTxfBYFhfEs4eU-YuCggrTcLDf-rpyEru8</code></td></tr>
+</table></div>
+
+<div class="box danger">
+  <span class="tt">A chave SSH privada é insubstituível</span>
+  <p>
+    O arquivo <code>C:\Users\Renan Milech Pereira\.ssh\kampeki_oracle</code> é a <strong>única</strong> forma
+    de entrar no servidor. A Oracle não guarda cópia e não há "esqueci minha senha". Se você perder esse
+    arquivo, perde o acesso à VM (a saída seria criar outra do zero). <strong>Faça uma cópia</strong> num
+    pendrive ou cofre de senhas — e nunca a envie por e-mail, WhatsApp ou repositório.
+  </p>
+</div>
+
+<h2 id="arquitetura">Como funciona (o caminho de uma visita)</h2>
+
+<div class="diag">   NAVEGADOR (Mac da cliente, celular, qualquer lugar)
+        │
+        │  https://kampeki.duckdns.org
+        ▼
+   ┌─ DuckDNS ──────────────────────────────────────┐
+   │  traduz "kampeki.duckdns.org" → 163.176.35.169 │
+   └────────────────────────────────────────────────┘
+        │
+        ▼
+   ╔══ VM Oracle (Ubuntu, 163.176.35.169) ═══════════════════════╗
+   ║                                                             ║
+   ║   [Firewall Oracle]  portas 22, 80, 443 liberadas           ║
+   ║   [Firewall Ubuntu]  portas 22, 80, 443 liberadas           ║
+   ║        │                                                    ║
+   ║        ▼                                                    ║
+   ║   ┌─ CADDY (porta 443) ────────────────────────────────┐    ║
+   ║   │  • termina o HTTPS (certificado Let's Encrypt)     │    ║
+   ║   │  • renova o certificado sozinho                    │    ║
+   ║   │  • redireciona http:// → https://                  │    ║
+   ║   │  • repassa tudo para ↓                             │    ║
+   ║   └────────────────────────────────────────────────────┘    ║
+   ║        │  reverse_proxy 127.0.0.1:3001                      ║
+   ║        ▼                                                    ║
+   ║   ┌─ NODE / EXPRESS (porta 3001, só local) ───────────┐     ║
+   ║   │  gerenciado pelo pm2 (religa sozinho)             │     ║
+   ║   │  • /api/*  → regras de negócio                    │     ║
+   ║   │  • /*      → entrega o frontend React (dist/)     │     ║
+   ║   └───────────────────────────────────────────────────┘     ║
+   ║        │  Service Account (chave no .env)                   ║
+   ╚════════│════════════════════════════════════════════════════╝
+            ▼
+   ┌─ GOOGLE SHEETS ────────────────────────────────┐
+   │  O banco de dados: FORNECEDOR, TAG, ITENS,     │
+   │  CUSTOS, FOLHA. Os dados NÃO ficam na VM.      │
+   └────────────────────────────────────────────────┘</div>
+
+<div class="box info">
+  <span class="tt">Duas consequências importantes desse desenho</span>
+  <p>
+    <strong>1.</strong> O Node escuta apenas em <code>127.0.0.1:3001</code> — ou seja, <em>só</em> o Caddy,
+    de dentro da própria máquina, consegue falar com ele. A internet nunca alcança o Node diretamente.
+    Isso é intencional e mais seguro do que expor a porta 3001.
+  </p>
+  <p>
+    <strong>2.</strong> <strong>A VM não guarda dados.</strong> Tudo mora no Google Sheets. Se o servidor
+    for destruído, nenhum lançamento se perde — você recria a VM com este manual e volta ao ar. O que existe
+    de insubstituível na VM é apenas o <code>.env</code> (e você tem a chave original no Google Cloud).
+  </p>
+</div>
+
+<hr>
+
+<h2 id="p1">1. Conta e região Oracle</h2>
+
+<p>
+  Cadastro em <a href="https://www.oracle.com/br/cloud/free/">oracle.com/br/cloud/free</a>. O cartão de
+  crédito serve <strong>apenas para verificação de identidade</strong> — o Always Free não gera cobrança
+  (há uma cobrança-teste de ~US$ 1 que é estornada).
+</p>
+
+<div class="box danger">
+  <span class="tt">A região é definitiva</span>
+  <p>
+    A região escolhida no cadastro é a <em>home region</em> e <strong>não pode ser trocada depois</strong>.
+    Os recursos Always Free existem <em>somente</em> nela. A nossa é <strong>Brazil East (São Paulo)</strong>.
+    Se um dia você criar recursos e não os encontrar, confira o seletor de região no canto superior direito
+    da console.
+  </p>
+</div>
+
+<h3>O que "Always Free" cobre</h3>
+<div class="tw"><table>
+<tr><th>Recurso</th><th>Cota gratuita</th><th>Nosso uso</th></tr>
+<tr><td>VM AMD (E2.1.Micro)</td><td>até 2 instâncias, 1 GB cada</td><td>1 instância <span class="pill p-ok">ok</span></td></tr>
+<tr><td>VM ARM (A1.Flex)</td><td>4 OCPUs + 24 GB no total</td><td>não usada (sem capacidade)</td></tr>
+<tr><td>Disco (block volume)</td><td>200 GB no total</td><td>50 GB <span class="pill p-ok">ok</span></td></tr>
+<tr><td>Tráfego de saída</td><td>10 TB/mês</td><td>irrisório <span class="pill p-ok">ok</span></td></tr>
+</table></div>
+
+<div class="box warn">
+  <span class="tt">Como não ser cobrado por acidente</span>
+  <p>
+    Ao criar qualquer recurso, procure o selo verde <strong>"Always Free eligible"</strong>. Se ele não
+    aparecer, você está prestes a criar algo pago. Foi o que quase aconteceu no nosso deploy: o formulário
+    sugeriu <strong>60 GB</strong> de memória para a VM ARM, acima dos 24 GB gratuitos.
+  </p>
+</div>
+
+<h2 id="p2">2. A chave SSH</h2>
+
+<p>
+  Servidores Linux na nuvem não usam senha para acesso — usam um <strong>par de chaves</strong>. A pública
+  fica no servidor; a privada fica no seu PC e funciona como a fechadura correspondente. Ninguém entra
+  sem ela.
+</p>
+
+<div class="code"><span class="lbl lbl-win">gerar o par (feito uma vez, já está pronto)</span><pre><code>ssh-keygen -t ed25519 -C "kampeki-oracle" -f "$env:USERPROFILE\.ssh\kampeki_oracle"</code></pre></div>
+
+<p>Isso criou dois arquivos em <code>C:\Users\Renan Milech Pereira\.ssh\</code>:</p>
+<ul>
+  <li><code>kampeki_oracle</code> — <strong>a privada</strong>. Nunca sai do seu PC.</li>
+  <li><code>kampeki_oracle.pub</code> — a pública. Foi colada na Oracle ao criar a VM.</li>
+</ul>
+
+<div class="code"><span class="lbl lbl-win">ver a chave pública (para colar em algum lugar)</span><pre><code>Get-Content "$env:USERPROFILE\.ssh\kampeki_oracle.pub" | Set-Clipboard</code></pre></div>
+
+<h3>Usar o servidor de outro computador</h3>
+<p>
+  Copie o arquivo <code>kampeki_oracle</code> (o privado) para a pasta <code>.ssh</code> do outro
+  computador. No Linux/macOS é preciso ajustar a permissão, senão o SSH recusa a chave:
+</p>
+<div class="code"><span class="lbl">no Linux/macOS, depois de copiar</span><pre><code>chmod 600 ~/.ssh/kampeki_oracle</code></pre></div>
+
+<h2 id="p3">3. A rede (VCN)</h2>
+
+<p>
+  Uma <strong>VCN</strong> (Virtual Cloud Network) é a rede privada onde a VM vive. Ela precisa de uma
+  <strong>subnet pública</strong> e de um <strong>Internet Gateway</strong> para que a máquina seja
+  alcançável de fora.
+</p>
+
+<div class="box warn">
+  <span class="tt">Não crie a rede pelo formulário da instância</span>
+  <p>
+    Tentamos primeiro criar a VCN dentro da tela "Create instance" e o botão
+    <em>"Automatically assign public IPv4 address"</em> ficava permanentemente desabilitado, com o aviso
+    <em>"You must select a public subnet"</em>. O formulário da instância não cria o Internet Gateway, então
+    a subnet nunca é considerada pública de fato. <strong>Crie a rede antes, pelo assistente de Networking.</strong>
+  </p>
+</div>
+
+<h3>O caminho que funciona</h3>
+<ol class="steps">
+  <li><span class="kbd">☰ Menu</span> → <strong>Networking</strong> → <strong>Virtual cloud networks</strong></li>
+  <li>Botão <strong>Start VCN wizard</strong> → escolher <strong>"Create VCN with Internet Connectivity"</strong></li>
+  <li>Nome <code>vcn-kampeki</code>, compartment <code>renanmp (root)</code>, e <strong>todos os CIDRs no padrão</strong>
+      (<code>10.0.0.0/16</code> para a VCN, <code>10.0.0.0/24</code> para a subnet pública)</li>
+  <li><strong>Enable IPv6:</strong> deixar <strong>desmarcado</strong> — não usamos, e marcar só criaria uma
+      segunda pilha de rede para configurar</li>
+  <li><strong>Create</strong>. Em ~1 minuto ele monta a VCN completa: subnet pública, subnet privada,
+      <strong>Internet Gateway</strong>, NAT Gateway e tabelas de rota.</li>
+</ol>
+
+<h2 id="p4">4. A instância (VM)</h2>
+
+<p><span class="kbd">☰ Menu</span> → <strong>Compute</strong> → <strong>Instances</strong> → <strong>Create instance</strong></p>
+
+<div class="tw"><table>
+<tr><th>Campo</th><th>Valor usado</th></tr>
+<tr><td>Name</td><td><code>kampeki</code></td></tr>
+<tr><td>Image</td><td>Canonical Ubuntu 24.04</td></tr>
+<tr><td>Shape</td><td><code>VM.Standard.E2.1.Micro</code> (aba <strong>AMD</strong>)</td></tr>
+<tr><td>Primary network</td><td><em>Select existing</em> → <code>vcn-kampeki</code></td></tr>
+<tr><td>Subnet</td><td><em>Select existing</em> → <code>public subnet-vcn-kampeki</code> ⚠️ a <strong>pública</strong>, não a Private</td></tr>
+<tr><td>Public IPv4</td><td><strong>Yes</strong></td></tr>
+<tr><td>SSH keys</td><td><em>Paste public keys</em> → conteúdo de <code>kampeki_oracle.pub</code></td></tr>
+<tr><td>Boot volume</td><td>padrão (50 GB)</td></tr>
+</table></div>
+
+<div class="box warn">
+  <span class="tt">"Out of capacity" no ARM — o que aconteceu conosco</span>
+  <p>
+    A primeira tentativa foi com o shape ARM <code>VM.Standard.A1.Flex</code> (4 OCPUs / 24 GB), que é o
+    Always Free mais potente. A Oracle recusou:
+    <em>"Out of capacity for shape VM.Standard.A1.Flex in availability domain AD-1"</em>.
+    O ARM é o recurso mais disputado do plano gratuito e vive esgotado em São Paulo. A sugestão da própria
+    Oracle de "tente outro Availability Domain" <strong>não se aplica: São Paulo tem apenas o AD-1</strong>.
+  </p>
+  <p>
+    <strong>Escolhemos o AMD <code>E2.1.Micro</code></strong> (1 GB), que praticamente nunca falta. Ele roda
+    este app sem problema — desde que exista <a href="#p7">swap</a> e que o build do frontend seja feito no
+    seu PC. Se um dia quiser migrar para o ARM, basta repetir este manual numa VM nova: leva ~30 minutos e
+    os dados nem são tocados (estão no Sheets).
+  </p>
+</div>
+
+<h2 id="p5">5. O firewall duplo</h2>
+
+<div class="box danger">
+  <span class="tt">O erro nº 1 de quem começa na Oracle — e nós caímos nele</span>
+  <p>
+    Existem <strong>dois firewalls independentes</strong>, e liberar uma porta em apenas um deles não
+    adianta nada. Passamos por isso: liberamos as portas dentro do Ubuntu, o Caddy tentou emitir o
+    certificado e o Let's Encrypt respondeu
+    <em>"Timeout during connect (likely firewall problem)"</em> — porque faltava a liberação no painel.
+  </p>
+</div>
+
+<h3>Firewall 1 — Security List (no painel da Oracle)</h3>
+<p><span class="kbd">☰ Menu</span> → <strong>Networking</strong> → <strong>Virtual cloud networks</strong> → <code>vcn-kampeki</code> → aba <strong>Security</strong> → <strong>Default Security List for vcn-kampeki</strong> → <strong>Add Ingress Rules</strong></p>
+
+<div class="tw"><table>
+<tr><th>Campo</th><th>Regra HTTP</th><th>Regra HTTPS</th></tr>
+<tr><td>Stateless</td><td>desmarcado</td><td>desmarcado</td></tr>
+<tr><td>Source Type</td><td>CIDR</td><td>CIDR</td></tr>
+<tr><td>Source CIDR</td><td><code>0.0.0.0/0</code></td><td><code>0.0.0.0/0</code></td></tr>
+<tr><td>IP Protocol</td><td>TCP</td><td>TCP</td></tr>
+<tr><td>Destination Port Range</td><td><code>80</code></td><td><code>443</code></td></tr>
+</table></div>
+
+<p>A regra da porta 22 (SSH) já vem criada pelo wizard da VCN.</p>
+
+<div class="box info">
+  <span class="tt">Por que a porta 80 é obrigatória mesmo o site sendo HTTPS</span>
+  <p>
+    O Let's Encrypt valida que você controla o domínio buscando um arquivo em
+    <code>http://kampeki.duckdns.org/.well-known/acme-challenge/…</code> — pela porta <strong>80</strong>.
+    Sem ela, o certificado nunca é emitido. Depois disso, a porta 80 ainda serve para redirecionar quem
+    digitar <code>http://</code> para a versão segura.
+  </p>
+</div>
+
+<h3>Firewall 2 — iptables (dentro do Ubuntu)</h3>
+<p>A imagem Ubuntu da Oracle vem com tudo bloqueado, exceto SSH:</p>
+<div class="code"><span class="lbl lbl-vm">liberar 80 e 443 e salvar permanentemente</span><pre><code>sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+sudo netfilter-persistent save</code></pre></div>
+
+<p>O <code>netfilter-persistent save</code> é o que faz as regras sobreviverem a um reboot. Estado atual:</p>
+<div class="code"><span class="lbl lbl-vm">conferir</span><pre><code>sudo iptables -L INPUT -n --line-numbers</code></pre></div>
+<div class="code"><pre><code>num  target     prot  source       destination
+1    ACCEPT     tcp   0.0.0.0/0    0.0.0.0/0    tcp dpt:443
+2    ACCEPT     tcp   0.0.0.0/0    0.0.0.0/0    tcp dpt:80
+3    ACCEPT     all   0.0.0.0/0    0.0.0.0/0    state RELATED,ESTABLISHED
+4    ACCEPT     icmp  0.0.0.0/0    0.0.0.0/0
+5    ACCEPT     all   0.0.0.0/0    0.0.0.0/0
+6    ACCEPT     tcp   0.0.0.0/0    0.0.0.0/0    state NEW tcp dpt:22
+7    REJECT     all   0.0.0.0/0    0.0.0.0/0    reject-with icmp-host-prohibited</code></pre></div>
+
+<p>O <code>ufw</code> (o outro firewall do Ubuntu) está <strong>inativo</strong> nesta imagem — não precisa mexer.</p>
+
+<h2 id="p6">6. Acessar a instância</h2>
+
+<div class="code"><span class="lbl lbl-win">entrar no servidor</span><pre><code>ssh -i "$env:USERPROFILE\.ssh\kampeki_oracle" ubuntu@163.176.35.169</code></pre></div>
+
+<p>
+  Na primeira vez ele pergunta se você confia no host — digite <code>yes</code>. Deu certo quando o prompt
+  virar <code>ubuntu@kampeki:~$</code>. Para sair, digite <code>exit</code>.
+</p>
+
+<h3>Deixar o acesso mais curto (opcional, mas recomendado)</h3>
+<p>Criando um arquivo de configuração do SSH, você passa a entrar digitando apenas <code>ssh kampeki</code>:</p>
+<div class="code"><span class="lbl lbl-win">criar/editar C:\Users\...\.ssh\config</span><pre><code>notepad "$env:USERPROFILE\.ssh\config"</code></pre></div>
+<div class="code"><span class="lbl">conteúdo do arquivo</span><pre><code>Host kampeki
+    HostName 163.176.35.169
+    User ubuntu
+    IdentityFile ~/.ssh/kampeki_oracle
+    ServerAliveInterval 60</code></pre></div>
+<p>Depois disso, <code>ssh kampeki</code> e <code>scp arquivo kampeki:/caminho</code> funcionam sem os parâmetros longos.</p>
+
+<div class="box info">
+  <span class="tt">Erros comuns de conexão</span>
+  <p>
+    <strong>Permission denied (publickey)</strong> → caminho da chave errado (não use o <code>.pub</code>)
+    ou usuário errado (é <code>ubuntu</code>, não <code>opc</code> nem <code>root</code>).<br>
+    <strong>Connection timed out</strong> → a VM está desligada, o IP mudou, ou a regra da porta 22 sumiu
+    da Security List.
+  </p>
+</div>
+
+<h2 id="p7">7. Preparar o servidor</h2>
+
+<h3>7.1 Swap — obrigatório nesta VM</h3>
+<p>
+  Com 1 GB de RAM, qualquer operação mais pesada (um <code>npm install</code> grande, um build) mata o
+  processo com <em>"JavaScript heap out of memory"</em>. O swap é uma extensão da memória em disco: mais
+  lento, mas evita o travamento.
+</p>
+<div class="code"><span class="lbl lbl-vm">criar 2 GB de swap permanente</span><pre><code>sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab</code></pre></div>
+<p>A última linha grava no <code>/etc/fstab</code>, que é o que faz o swap voltar depois de um reboot. Conferir com <code>free -h</code>.</p>
+
+<h3>7.2 Node.js, git e pm2</h3>
+<div class="code"><span class="lbl lbl-vm">instalar</span><pre><code>sudo apt update
+sudo apt install -y git curl ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2</code></pre></div>
+
+<p>
+  O Node vem do repositório <strong>NodeSource</strong>, não do apt padrão do Ubuntu — o do apt costuma
+  estar muitas versões atrasado. Conferir: <code>node -v</code>, <code>npm -v</code>, <code>pm2 -v</code>.
+</p>
+
+<div class="box info">
+  <span class="tt">O que é o pm2</span>
+  <p>
+    Se você rodasse <code>node src/app.js</code> e fechasse o SSH, o app morreria junto. O pm2 é um
+    gerenciador de processos: mantém o app rodando em segundo plano, <strong>religa automaticamente</strong>
+    se ele travar, guarda os logs e <strong>volta sozinho quando a VM reinicia</strong>.
+  </p>
+</div>
+
+<h2 id="p8">8. Backend no servidor</h2>
+
+<p>O repositório é público, então o clone não pede senha nem chave:</p>
+<div class="code"><span class="lbl lbl-vm">clonar e instalar dependências</span><pre><code>cd ~
+git clone https://github.com/Renanmp14/_KampekiDev.git
+cd ~/_KampekiDev/KampekiDash
+npm install --prefix backend</code></pre></div>
+
+<p>Foram instalados 103 pacotes (Express, googleapis, jsonwebtoken, dotenv, cors).</p>
+
+<div class="box warn">
+  <span class="tt">Instalamos apenas o backend</span>
+  <p>
+    As dependências do <strong>frontend não são instaladas na VM</strong>. O React é buildado no seu
+    Windows e enviado pronto (ver <a href="#p11">seção 11</a>) — o <code>vite build</code> não cabe
+    confortavelmente em 1 GB de RAM. A VM só precisa <em>servir</em> os arquivos prontos, e disso o próprio
+    Express dá conta.
+  </p>
+</div>
+
+<h2 id="p9">9. O arquivo <code>.env</code></h2>
+
+<p>
+  É onde ficam <strong>todos os segredos</strong>: a chave da Service Account do Google, a senha de login e
+  o segredo do JWT. Ele fica em <code>~/_KampekiDev/KampekiDash/backend/.env</code>, porque o backend o
+  carrega a partir do diretório onde é executado (<code>import 'dotenv/config'</code>).
+</p>
+
+<div class="tw"><table>
+<tr><th>Variável</th><th>Para que serve</th></tr>
+<tr><td><code>PORT</code></td><td><code>3001</code> — porta local onde o Node escuta (só o Caddy acessa)</td></tr>
+<tr><td><code>NODE_ENV</code></td><td><code>production</code></td></tr>
+<tr><td><code>JWT_SECRET</code></td><td>Segredo que assina os tokens de sessão. Aleatório, 96 caracteres. Ninguém digita.</td></tr>
+<tr><td><code>JWT_EXPIRES_IN</code></td><td><code>7d</code> — validade do login</td></tr>
+<tr><td><code>ADMIN_EMAIL</code></td><td><code>admin@financesheet.local</code></td></tr>
+<tr><td><code>ADMIN_PASSWORD</code></td><td>A senha de acesso ao app</td></tr>
+<tr><td><code>GOOGLE_SHEET_ID</code></td><td>ID da planilha que serve de banco de dados</td></tr>
+<tr><td><code>GOOGLE_CREDENTIALS_JSON</code></td><td>O JSON inteiro da Service Account, <strong>numa única linha</strong></td></tr>
+<tr><td><code>GROWTH_ALERT_THRESHOLD</code></td><td><code>20</code> — % de crescimento que dispara alerta no dashboard</td></tr>
+</table></div>
+
+<div class="box danger">
+  <span class="tt">A regra que mais quebra o .env</span>
+  <p>
+    O <code>GOOGLE_CREDENTIALS_JSON</code> tem que ficar em <strong>uma única linha</strong>. Os
+    <code>\n</code> dentro da <code>private_key</code> são literais (dois caracteres: barra e "n") e devem
+    permanecer assim — se virarem quebras de linha reais ao colar, o arquivo quebra e o app não sobe.
+    No nosso deploy, o <code>.env</code> ficou com <strong>13 linhas e 2.664 bytes</strong>; se o seu tiver
+    dezenas de linhas, o JSON foi quebrado.
+  </p>
+</div>
+
+<h3>Como o .env foi enviado (sem passar por arquivo no disco)</h3>
+<p>
+  Um script leu o JSON da Service Account, serializou em uma linha, gerou senha e JWT aleatórios, e o
+  resultado foi <strong>canalizado direto para dentro do servidor</strong> — sem nunca criar um arquivo com
+  segredos no seu Windows:
+</p>
+<div class="code"><span class="lbl lbl-win">o padrão do envio</span><pre><code>node gera-env.js | ssh -i "$env:USERPROFILE\.ssh\kampeki_oracle" ubuntu@163.176.35.169 `
+  "cat &gt; ~/_KampekiDev/KampekiDash/backend/.env &amp;&amp; chmod 600 ~/_KampekiDev/KampekiDash/backend/.env"</code></pre></div>
+
+<p>
+  O <code>chmod 600</code> deixa o arquivo legível <strong>apenas pelo dono</strong> (<code>ubuntu</code>).
+  Ver <a href="#env-mudar">Mexer no .env</a> para alterar qualquer valor depois.
+</p>
+
+<h2 id="p10">10. Subir o app com pm2</h2>
+
+<div class="code"><span class="lbl lbl-vm">iniciar (o comando exato usado)</span><pre><code>cd ~/_KampekiDev/KampekiDash/backend
+pm2 start npm --name kampeki -- start</code></pre></div>
+
+<div class="box danger">
+  <span class="tt">Atenção: NÃO use <code>pm2 start src/app.js</code></span>
+  <p>
+    Foi a primeira coisa que tentamos e <strong>não funciona neste projeto</strong>. O pm2 mostrava o
+    processo como <em>online</em>, consumindo 123 MB, mas <strong>sem nenhum log e com a porta 3001
+    fechada</strong>. A causa está no fim do <code>backend/src/app.js</code>:
+  </p>
+  <div class="code"><pre><code>const invokedDirectly = process.argv[1]
+  &amp;&amp; pathToFileURL(process.argv[1]).href === import.meta.url;
+if (invokedDirectly) startServer();</code></pre></div>
+  <p>
+    Esse guarda existe para o <strong>Electron</strong> poder importar o <code>startServer</code> sem subir
+    um servidor duplicado. Só que o pm2, em modo <em>fork</em>, <strong>importa</strong> o script a partir
+    do wrapper dele (<code>ProcessContainerFork.js</code>). Assim <code>process.argv[1]</code> aponta para o
+    wrapper, a comparação dá <code>false</code> e <strong><code>startServer()</code> nunca é
+    chamado</strong> — o módulo carrega e o processo fica vivo sem fazer nada.
+  </p>
+  <p>
+    Mandando o pm2 executar <code>npm start</code>, quem roda o script é o <code>node</code> de verdade,
+    <code>process.argv[1]</code> volta a ser o <code>app.js</code> e o servidor sobe normalmente.
+    <strong>Isso vale para qualquer gerenciador de processos que importe o módulo em vez de executá-lo.</strong>
+  </p>
+</div>
+
+<h3>Fazer o pm2 voltar sozinho depois de um reboot</h3>
+<div class="code"><span class="lbl lbl-vm">registrar no systemd</span><pre><code>pm2 save
+sudo env PATH=$PATH pm2 startup systemd -u ubuntu --hp /home/ubuntu
+pm2 save</code></pre></div>
+<p>
+  O <code>pm2 save</code> congela a lista de processos atual; o <code>pm2 startup</code> cria o serviço
+  <code>pm2-ubuntu</code> no systemd. Ambos estão <strong>habilitados</strong> nesta instalação, junto com
+  o <code>caddy</code> — se a VM reiniciar, tudo volta sem intervenção.
+</p>
+
+<h3>Como está configurado hoje</h3>
+<div class="tw"><table>
+<tr><td>Nome do processo</td><td><code>kampeki</code></td></tr>
+<tr><td>Executável</td><td><code>/usr/bin/npm</code> com argumento <code>start</code></td></tr>
+<tr><td>Diretório de trabalho</td><td><code>/home/ubuntu/_KampekiDev/KampekiDash/backend</code></td></tr>
+<tr><td>Interpretador</td><td><code>/usr/bin/node</code></td></tr>
+<tr><td>Memória em uso</td><td>~66 MB</td></tr>
+</table></div>
+
+<h2 id="p11">11. Frontend — onde buildar e como enviar</h2>
+
+<div class="box info">
+  <span class="tt">Não existe "servidor de frontend" separado</span>
+  <p>
+    O <code>backend/src/app.js</code> detecta a pasta <code>frontend/dist</code> e, se ela existir, serve os
+    arquivos do React <strong>na mesma origem</strong> das rotas <code>/api</code>. Qualquer URL que não
+    comece com <code>/api</code> devolve o <code>index.html</code>, para o React Router resolver a rota no
+    navegador. É por isso que o app funciona com um único processo e sem configuração extra de CORS.
+  </p>
+</div>
+
+<p><strong>O build é feito no seu Windows</strong> e enviado pronto. Dois motivos: a VM de 1 GB sofre com o <code>vite build</code>, e assim você testa localmente exatamente o que vai para o ar.</p>
+
+<div class="code"><span class="lbl lbl-win">1) buildar</span><pre><code>cd "$env:USERPROFILE\Documents\_KampekiDev\KampekiDash\frontend"
+npm run build</code></pre></div>
+
+<p>Gera a pasta <code>dist/</code> (~3,8 MB). O aviso <em>"Some chunks are larger than 500 kB"</em> é conhecido e inofensivo.</p>
+
+<div class="code"><span class="lbl lbl-win">2) enviar para o servidor</span><pre><code>scp -i "$env:USERPROFILE\.ssh\kampeki_oracle" -r dist ubuntu@163.176.35.169:/home/ubuntu/_KampekiDev/KampekiDash/frontend/</code></pre></div>
+
+<div class="box warn">
+  <span class="tt">Detalhe do scp que confunde</span>
+  <p>
+    O destino termina em <code>/frontend/</code>, <strong>não</strong> em <code>/frontend/dist</code>.
+    O <code>scp -r dist destino/</code> cria <code>destino/dist</code>. Se você apontar para
+    <code>/frontend/dist</code>, vai acabar com <code>dist/dist</code> e o site não carrega.
+  </p>
+</div>
+
+<p>Depois de trocar o <code>dist</code>, <strong>não é obrigatório</strong> reiniciar o app (o Express lê os arquivos do disco a cada requisição), mas reiniciar é inofensivo e garante estado limpo.</p>
+
+<h2 id="p12">12. O endereço (DuckDNS)</h2>
+
+<p>
+  Certificados HTTPS não são emitidos para endereços IP — é preciso um nome. O <strong>DuckDNS</strong>
+  fornece subdomínios gratuitos, sem cartão e sem prazo.
+</p>
+
+<ol class="steps">
+  <li>Entrar em <a href="https://www.duckdns.org">duckdns.org</a> com a conta Google</li>
+  <li>Criar o domínio <code>kampeki</code> → vira <code>kampeki.duckdns.org</code></li>
+  <li>Preencher o campo <strong>current ip</strong> com <code>163.176.35.169</code> → <strong>update ip</strong></li>
+  <li>Guardar o <strong>token</strong> exibido no topo da página (serve para atualizar o IP por script)</li>
+</ol>
+
+<div class="code"><span class="lbl lbl-win">conferir se o nome está apontando certo</span><pre><code>nslookup kampeki.duckdns.org</code></pre></div>
+
+<p>
+  <strong>Quer um domínio próprio depois?</strong> Compre em qualquer registrador (~R$ 40–60/ano), crie um
+  registro <strong>A</strong> apontando para o IP da VM, e troque o nome no <code>Caddyfile</code>. O Caddy
+  emite o novo certificado sozinho. É uma linha de mudança.
+</p>
+
+<h2 id="p13">13. Caddy e HTTPS</h2>
+
+<p>
+  O <strong>Caddy</strong> é o servidor que fica na frente. Ele recebe as visitas em 443, resolve o
+  certificado com o Let's Encrypt (emissão e <strong>renovação automáticas</strong>) e repassa tudo para o
+  Node na porta local 3001.
+</p>
+
+<div class="code"><span class="lbl lbl-vm">instalação (repositório oficial)</span><pre><code>sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install -y caddy</code></pre></div>
+
+<h3>A configuração inteira</h3>
+<p>O arquivo <code>/etc/caddy/Caddyfile</code> tem exatamente três linhas:</p>
+<div class="code"><pre><code>kampeki.duckdns.org {
+    reverse_proxy 127.0.0.1:3001
+}</code></pre></div>
+
+<p>Isso sozinho já entrega: certificado válido, renovação automática, redirecionamento de <code>http://</code> para <code>https://</code> (HTTP 308) e compressão.</p>
+
+<div class="code"><span class="lbl lbl-vm">editar e aplicar</span><pre><code>sudo nano /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl restart caddy</code></pre></div>
+
+<p>No <code>nano</code>: <span class="kbd">Ctrl+O</span> <span class="kbd">Enter</span> salva, <span class="kbd">Ctrl+X</span> sai. Rode sempre o <code>validate</code> antes do restart.</p>
+
+<div class="code"><span class="lbl lbl-vm">acompanhar a emissão do certificado</span><pre><code>sudo journalctl -u caddy -n 30 --no-pager</code></pre></div>
+<p>A linha que confirma sucesso é <code>certificate obtained successfully</code>.</p>
+
+<hr>
+
+<h2 id="atualizar">Rotina de atualização — o processo que você vai usar sempre</h2>
+
+<p>
+  Sempre que o código mudar, a atualização tem <strong>duas metades</strong>: o que vem do GitHub
+  (backend) e o que você builda e envia (frontend).
+</p>
+
+<div class="diag">   CÓDIGO ALTERADO no seu PC
+        │
+        ├──── git commit + git push ────────► GitHub (repo público)
+        │                                        │
+        │                                        │  git pull
+        │                                        ▼
+        │                                    [ BACKEND na VM ]
+        │
+        └──── npm run build ──► dist/ ──scp──► [ FRONTEND na VM ]
+                                                    │
+                                                    ▼
+                                              pm2 restart kampeki</div>
+
+<h3>O procedimento completo, na ordem</h3>
+
+<ol class="steps">
+  <li>
+    <strong>Publique o código no GitHub</strong> (do seu PC). Sem isso, o <code>git pull</code> na VM não
+    tem o que trazer.
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>cd "$env:USERPROFILE\Documents\_KampekiDev"
+git add -A
+git commit -m "descricao da mudanca"
+git push origin main</code></pre></div>
+  </li>
+  <li>
+    <strong>Builde o frontend</strong> (só se você mexeu em algo de <code>frontend/</code>).
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>cd "$env:USERPROFILE\Documents\_KampekiDev\KampekiDash\frontend"
+npm run build</code></pre></div>
+  </li>
+  <li>
+    <strong>Envie o frontend</strong> para o servidor.
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>scp -i "$env:USERPROFILE\.ssh\kampeki_oracle" -r dist ubuntu@163.176.35.169:/home/ubuntu/_KampekiDev/KampekiDash/frontend/</code></pre></div>
+  </li>
+  <li>
+    <strong>Atualize o backend e reinicie</strong>, dentro da VM.
+    <div class="code"><span class="lbl lbl-vm"></span><pre><code>cd ~/_KampekiDev
+git pull
+npm install --prefix KampekiDash/backend
+pm2 restart kampeki
+pm2 logs kampeki --lines 20</code></pre></div>
+  </li>
+  <li>
+    <strong>Confirme que subiu.</strong> Nos logs deve aparecer
+    <code>Kampeki Finance API (v…) em http://127.0.0.1:3001</code>. Depois, no navegador, recarregue com
+    <span class="kbd">Ctrl+F5</span> (força o navegador a buscar os arquivos novos em vez do cache).
+  </li>
+</ol>
+
+<div class="box info">
+  <span class="tt">Atalhos honestos</span>
+  <p>
+    <strong>Mexeu só no frontend?</strong> Passos 1 → 2 → 3. Nem precisa reiniciar o pm2.<br>
+    <strong>Mexeu só no backend?</strong> Passos 1 → 4.<br>
+    <strong>O <code>npm install</code> do passo 4</strong> só é necessário quando o <code>package.json</code>
+    do backend mudou (dependência nova). Rodar sempre não faz mal, só demora alguns segundos.
+  </p>
+</div>
+
+<div class="box warn">
+  <span class="tt">Por que o <code>git pull</code> não sobrescreve o seu <code>dist</code> nem o <code>.env</code></span>
+  <p>
+    Ambos estão no <code>.gitignore</code> do projeto — o git nem sabe que existem. Por isso o
+    <code>dist</code> enviado por <code>scp</code> e o <code>.env</code> com os segredos sobrevivem a
+    qualquer <code>git pull</code>.
+  </p>
+</div>
+
+<h3>Verificação rápida pós-atualização</h3>
+<div class="code"><span class="lbl lbl-win">testar de fora, como um visitante</span><pre><code>curl.exe -s https://kampeki.duckdns.org/api/health
+curl.exe -s https://kampeki.duckdns.org/api/version</code></pre></div>
+<p>Esperado: <code>{"ok":true}</code> e o número da versão.</p>
+
+<h2 id="dia-a-dia">Comandos do dia a dia</h2>
+
+<div class="tw"><table>
+<tr><th>Preciso…</th><th>Comando (dentro da VM)</th></tr>
+<tr><td>Ver se o app está de pé</td><td><code>pm2 status</code></td></tr>
+<tr><td>Ver os logs ao vivo</td><td><code>pm2 logs kampeki</code> <em>(Ctrl+C para sair)</em></td></tr>
+<tr><td>Ver as últimas 50 linhas</td><td><code>pm2 logs kampeki --lines 50 --nostream</code></td></tr>
+<tr><td>Reiniciar o app</td><td><code>pm2 restart kampeki</code></td></tr>
+<tr><td>Parar / iniciar o app</td><td><code>pm2 stop kampeki</code> / <code>pm2 start kampeki</code></td></tr>
+<tr><td>Limpar os logs antigos</td><td><code>pm2 flush</code></td></tr>
+<tr><td>Testar o app sem o Caddy</td><td><code>curl http://127.0.0.1:3001/api/health</code></td></tr>
+<tr><td>Ver status do Caddy</td><td><code>sudo systemctl status caddy</code></td></tr>
+<tr><td>Reiniciar o Caddy</td><td><code>sudo systemctl restart caddy</code></td></tr>
+<tr><td>Logs do Caddy</td><td><code>sudo journalctl -u caddy -n 50 --no-pager</code></td></tr>
+<tr><td>Memória e swap</td><td><code>free -h</code></td></tr>
+<tr><td>Espaço em disco</td><td><code>df -h /</code></td></tr>
+<tr><td>Atualizar o Ubuntu</td><td><code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></td></tr>
+<tr><td>Reiniciar a VM inteira</td><td><code>sudo reboot</code> <em>(app e Caddy voltam sozinhos; espere ~40s)</em></td></tr>
+</table></div>
+
+<div class="box info">
+  <span class="tt">Manutenção recomendada</span>
+  <p>
+    Rode <code>sudo apt update &amp;&amp; sudo apt upgrade -y</code> <strong>uma vez por mês</strong>. É o que
+    aplica correções de segurança do sistema. Se ele avisar que um reboot é necessário, pode reiniciar sem
+    medo — tudo volta automaticamente.
+  </p>
+</div>
+
+<h2 id="env-mudar">Mexer no <code>.env</code></h2>
+
+<div class="code"><span class="lbl lbl-vm">editar</span><pre><code>nano ~/_KampekiDev/KampekiDash/backend/.env</code></pre></div>
+<div class="code"><span class="lbl lbl-vm">aplicar (obrigatório — o .env só é lido na inicialização)</span><pre><code>pm2 restart kampeki
+pm2 logs kampeki --lines 15 --nostream</code></pre></div>
+
+<div class="box warn">
+  <span class="tt">Antes de salvar, cuidado com estas três coisas</span>
+  <p>
+    <strong>1.</strong> No <code>nano</code>, use as setas — o mouse não posiciona o cursor.<br>
+    <strong>2.</strong> Não deixe espaços em volta do <code>=</code>: é <code>CHAVE=valor</code>.<br>
+    <strong>3.</strong> Jamais quebre a linha do <code>GOOGLE_CREDENTIALS_JSON</code>.
+  </p>
+</div>
+
+<div class="code"><span class="lbl lbl-vm">conferir sem expor os segredos na tela</span><pre><code>cut -d= -f1 ~/_KampekiDev/KampekiDash/backend/.env
+grep -c '' ~/_KampekiDev/KampekiDash/backend/.env</code></pre></div>
+<p>O primeiro lista só os nomes das variáveis; o segundo conta as linhas (devem ser <strong>13</strong>).</p>
+
+<h3>Trocar a chave do Google (rotação futura)</h3>
+<ol class="steps">
+  <li>No Google Cloud, gere uma chave JSON nova para a Service Account <code>kampeki-app</code></li>
+  <li>Abra o JSON, copie <strong>todo o conteúdo</strong> (que já vem em uma linha só)</li>
+  <li>No <code>.env</code>, substitua o valor após <code>GOOGLE_CREDENTIALS_JSON=</code></li>
+  <li><code>pm2 restart kampeki</code> e confira nos logs se aparece <code>[initSheets] Todas as abas já existem.</code></li>
+  <li><strong>Só então</strong> apague a chave antiga no Google Cloud</li>
+</ol>
+
+<h2 id="senha">Trocar a senha de acesso</h2>
+
+<p>A senha atual foi gerada aleatoriamente (24 caracteres) e <strong>não está registrada neste documento</strong> — ela deve viver no seu gerenciador de senhas. Para trocá-la:</p>
+
+<div class="code"><span class="lbl lbl-vm">1) editar</span><pre><code>nano ~/_KampekiDev/KampekiDash/backend/.env</code></pre></div>
+<p>Altere a linha <code>ADMIN_PASSWORD=</code>. Se quiser gerar uma forte na hora:</p>
+<div class="code"><span class="lbl lbl-vm">gerar uma senha aleatória</span><pre><code>openssl rand -base64 18 | tr -d '/+=' | cut -c1-20</code></pre></div>
+<div class="code"><span class="lbl lbl-vm">2) aplicar</span><pre><code>pm2 restart kampeki</code></pre></div>
+
+<div class="box danger">
+  <span class="tt">Esta senha está exposta à internet</span>
+  <p>
+    Diferente do app desktop, o login agora está acessível do mundo inteiro. Não use nada parecido com
+    <code>admin@2026</code>, datas, nomes ou variações do nome da empresa. Mínimo de 16 caracteres
+    aleatórios. E veja a pendência de <a href="#seguranca">limite de tentativas</a> — hoje não há nada
+    impedindo tentativas infinitas de senha.
+  </p>
+</div>
+
+<h2 id="ip">Se o IP mudar</h2>
+
+<div class="box warn">
+  <span class="tt">O IP público desta VM é efêmero</span>
+  <p>
+    Por padrão, a Oracle atribui um IP <strong>efêmero</strong>: ele permanece o mesmo enquanto a instância
+    estiver rodando, mas <strong>pode mudar se você parar (Stop) e iniciar (Start) a máquina</strong>. Um
+    simples <code>sudo reboot</code> de dentro do sistema <em>não</em> muda o IP — o risco está em parar a
+    instância pelo painel.
+  </p>
+</div>
+
+<h3>Solução A — tornar o IP permanente (recomendado)</h3>
+<ol class="steps">
+  <li>Página da instância → seção <strong>Primary VNIC</strong> → em <strong>IPv4 Addresses</strong>, os três pontinhos → <strong>Edit</strong></li>
+  <li>Em <em>Public IP Type</em>, trocar de <strong>Ephemeral</strong> para <strong>Reserved</strong></li>
+  <li>Dar um nome (ex.: <code>ip-kampeki</code>) e salvar</li>
+</ol>
+<p>IPs reservados também entram no Always Free (1 gratuito por conta enquanto estiver em uso).</p>
+
+<h3>Solução B — atualizar o DuckDNS quando mudar</h3>
+<p>Se o IP mudar, o site fica inacessível até o DNS ser corrigido. Manualmente, é entrar no duckdns.org e atualizar o campo <em>current ip</em>. Para automatizar, com o seu token:</p>
+<div class="code"><span class="lbl lbl-vm">agendar atualização automática a cada 5 minutos</span><pre><code>(crontab -l 2>/dev/null; echo "*/5 * * * * curl -s 'https://www.duckdns.org/update?domains=kampeki&amp;token=SEU_TOKEN&amp;ip=' &gt;/dev/null") | crontab -</code></pre></div>
+<p>Deixando o parâmetro <code>ip=</code> vazio, o DuckDNS usa automaticamente o IP de onde a requisição partiu — ou seja, o da própria VM. Troque <code>SEU_TOKEN</code> pelo token da sua conta.</p>
+
+<h2 id="desktop">Windows (desktop) × Mac (web)</h2>
+
+<p>Os dois caminhos convivem e usam <strong>o mesmo código e a mesma planilha</strong>. O que muda é a entrega:</p>
+
+<div class="tw"><table>
+<tr><th></th><th>App desktop (Windows)</th><th>Versão web (Mac e qualquer navegador)</th></tr>
+<tr><td>Como o usuário abre</td><td>Ícone instalado na máquina</td><td>URL <code>https://kampeki.duckdns.org</code></td></tr>
+<tr><td>Onde roda o backend</td><td>Na máquina do usuário (Electron sobe o Node)</td><td>Na VM Oracle</td></tr>
+<tr><td>Credenciais</td><td><code>.env</code> em <code>%APPDATA%\Kampeki Finance\</code></td><td><code>.env</code> na VM</td></tr>
+<tr><td>Como se atualiza</td><td><strong>Sozinho</strong>, via GitHub Releases</td><td>Você faz o <code>git pull</code> + <code>scp</code></td></tr>
+<tr><td>Como você publica</td><td>Subir a versão + tag <code>vX.Y.Z</code> → GitHub Actions builda</td><td>A <a href="#atualizar">rotina de atualização</a> acima</td></tr>
+<tr><td>Documentação</td><td><code>GUIA-PUBLICACAO.md</code></td><td>Este arquivo</td></tr>
+</table></div>
+
+<div class="box info">
+  <span class="tt">Os dois precisam da mesma atenção</span>
+  <p>
+    Ao lançar uma versão nova, lembre-se de que <strong>publicar o release não atualiza o servidor web</strong>
+    e <strong>atualizar o servidor não atualiza o desktop</strong>. São dois destinos independentes a partir
+    do mesmo commit. Se a cliente do Mac e a do Windows precisam ver a mesma coisa, faça os dois.
+  </p>
+</div>
+
+<hr>
+
+<h2 id="problemas">Problemas que enfrentamos e como resolver</h2>
+
+<p>Todos os itens abaixo aconteceram de verdade durante este deploy.</p>
+
+<h3>1. O botão de IP público fica desabilitado ao criar a instância</h3>
+<p><strong>Sintoma:</strong> <em>"You must select a public subnet to assign a public IPv4 address"</em>, e o toggle não liga de jeito nenhum.</p>
+<p><strong>Causa:</strong> a VCN estava sendo criada dentro do formulário da instância, que não cria o Internet Gateway — sem ele, nenhuma subnet é realmente pública.</p>
+<p><strong>Solução:</strong> criar a rede antes pelo <strong>Start VCN wizard</strong> (opção <em>Create VCN with Internet Connectivity</em>) e, na instância, apenas <em>selecionar</em> a VCN e a subnet <strong>pública</strong>. Ver <a href="#p3">seção 3</a>.</p>
+
+<h3>2. "Out of capacity" ao criar a VM ARM</h3>
+<p><strong>Causa:</strong> o shape gratuito ARM vive esgotado em São Paulo, que tem um único Availability Domain — a dica da Oracle de "tente outro AD" não se aplica.</p>
+<p><strong>Solução:</strong> usar o AMD <code>E2.1.Micro</code>. Ou tentar o ARM com 1 OCPU / 6 GB, em horários alternados. Ver <a href="#p4">seção 4</a>.</p>
+
+<h3>3. O site não responde, mas o SSH funciona</h3>
+<p><strong>Sintoma:</strong> a porta 22 conecta e as portas 80/443 dão timeout. O Caddy falha com <em>"Timeout during connect (likely firewall problem)"</em>.</p>
+<p><strong>Causa:</strong> as regras de entrada faltavam na <strong>Security List</strong> do painel (só tinham sido criadas dentro do Ubuntu).</p>
+<div class="code"><span class="lbl lbl-win">como diagnosticar</span><pre><code>Test-NetConnection -ComputerName 163.176.35.169 -Port 80</code></pre></div>
+<p>Se der <code>False</code> aqui mas o <code>iptables</code> da VM estiver liberado, o problema é a Security List. Ver <a href="#p5">seção 5</a>.</p>
+
+<h3>4. O pm2 diz "online" mas o site não abre</h3>
+<p><strong>Sintoma:</strong> <code>pm2 status</code> mostra <em>online</em>, mas os logs estão <strong>vazios</strong> e <code>curl http://127.0.0.1:3001/api/health</code> não responde.</p>
+<p><strong>Causa:</strong> o app foi iniciado com <code>pm2 start src/app.js</code>, e o guarda <code>invokedDirectly</code> impede o <code>startServer()</code> de rodar quando o script é importado.</p>
+<div class="code"><span class="lbl lbl-vm">solução</span><pre><code>pm2 delete kampeki
+cd ~/_KampekiDev/KampekiDash/backend
+pm2 start npm --name kampeki -- start
+pm2 save</code></pre></div>
+<p>Explicação completa na <a href="#p10">seção 10</a>.</p>
+
+<h3>5. O app sobe mas não lê a planilha</h3>
+<p><strong>Sintoma nos logs:</strong> <code>[initSheets] Falha ao inicializar a planilha</code>.</p>
+<p><strong>Causas prováveis, em ordem:</strong></p>
+<ol>
+  <li>O <code>GOOGLE_CREDENTIALS_JSON</code> quebrou em várias linhas (conte as linhas: devem ser 13)</li>
+  <li>A chave foi apagada ou desativada no Google Cloud</li>
+  <li>A planilha não está compartilhada com <code>kampeki-app@kampeki-finance.iam.gserviceaccount.com</code></li>
+  <li>O <code>GOOGLE_SHEET_ID</code> está errado</li>
+</ol>
+<p>Quando isso ocorre, o app <strong>ainda assim sobe</strong> (por decisão de projeto, o erro é registrado e o servidor continua), mas as telas ficam vazias.</p>
+
+<h3>6. Como investigar qualquer travamento na inicialização</h3>
+<p>Rodar o app em primeiro plano contorna o pm2 e mostra tudo na tela — foi assim que descobrimos o problema nº 4:</p>
+<div class="code"><span class="lbl lbl-vm"></span><pre><code>pm2 stop kampeki
+cd ~/_KampekiDev/KampekiDash/backend
+timeout 45 node src/app.js
+pm2 start kampeki</code></pre></div>
+
+<h3>7. O certificado HTTPS não é emitido</h3>
+<p><strong>Verifique, nesta ordem:</strong> a porta 80 está aberta <em>nos dois firewalls</em>? O DNS aponta para o IP certo (<code>nslookup</code>)? O Caddy está rodando?</p>
+<div class="code"><span class="lbl lbl-vm">ver o motivo exato da falha</span><pre><code>sudo journalctl -u caddy -n 40 --no-pager | grep -i error</code></pre></div>
+<div class="box warn">
+  <span class="tt">Não fique tentando repetidamente</span>
+  <p>
+    O Let's Encrypt tem limite de tentativas com falha (cerca de 5 por hora por domínio). Se estourar, você
+    fica bloqueado por uma hora <em>mesmo depois de corrigir o problema</em>. Diagnostique primeiro, reinicie
+    o Caddy depois.
+  </p>
+</div>
+
+<h3>8. O site abre mas mostra a versão antiga</h3>
+<p>Cache do navegador. <span class="kbd">Ctrl+F5</span> (ou <span class="kbd">Cmd+Shift+R</span> no Mac). Se persistir, confira se o <code>scp</code> do <code>dist</code> foi mesmo para a pasta certa (ver <a href="#p11">seção 11</a>).</p>
+
+<h2 id="seguranca">Segurança e pendências</h2>
+
+<div class="tw"><table>
+<tr><th>Item</th><th>Situação</th></tr>
+<tr><td>HTTPS com certificado válido e renovação automática</td><td><span class="pill p-ok">feito</span></td></tr>
+<tr><td>Node acessível só localmente (<code>127.0.0.1</code>)</td><td><span class="pill p-ok">feito</span></td></tr>
+<tr><td><code>.env</code> com permissão <code>600</code>, fora do git</td><td><span class="pill p-ok">feito</span></td></tr>
+<tr><td>Chave da Service Account rotacionada (<code>416a93e9…</code>)</td><td><span class="pill p-ok">feito</span></td></tr>
+<tr><td>Senha de admin forte e aleatória</td><td><span class="pill p-ok">feito</span></td></tr>
+<tr><td>Acesso ao servidor só por chave SSH (sem senha)</td><td><span class="pill p-ok">feito</span></td></tr>
+<tr><td><strong>Apagar a chave antiga <code>806c084d…</code> no Google Cloud</strong></td><td><span class="pill p-todo">pendente</span></td></tr>
+<tr><td><strong>Limite de tentativas no login (rate limit)</strong></td><td><span class="pill p-todo">pendente</span></td></tr>
+<tr><td><strong>Apertar o CORS</strong> (hoje <code>app.use(cors())</code> com wildcard)</td><td><span class="pill p-todo">pendente</span></td></tr>
+</table></div>
+
+<div class="box danger">
+  <span class="tt">A chave vazada continua válida até ser apagada</span>
+  <p>
+    A chave <code>806c084d…</code> foi versionada por engano em <code>backend/.env.example</code> e está no
+    histórico de um repositório <strong>público</strong>. Gerar a chave nova <strong>não invalida</strong> a
+    antiga — as duas funcionam em paralelo. Enquanto a antiga existir, qualquer pessoa que leia o histórico
+    do repositório tem acesso total à planilha.
+  </p>
+  <p>
+    <strong>Onde apagar:</strong> Google Cloud → IAM &amp; Admin → Service Accounts →
+    <code>kampeki-app</code> → aba <strong>Chaves</strong> → apagar a <code>806c084d…</code>.
+    Confirme antes que a linha <code>416a93e9…</code> existe (é a que está em uso).
+  </p>
+</div>
+
+<div class="box warn">
+  <span class="tt">Login sem limite de tentativas</span>
+  <p>
+    O endpoint <code>POST /api/auth/login</code> aceita tentativas ilimitadas. No app desktop isso era
+    aceitável (só rodava na máquina do usuário); <strong>na web, não é</strong> — qualquer um pode tentar
+    senhas em série. É uma mudança de código no backend, ainda não aplicada.
+  </p>
+</div>
+
+<h2 id="anexo">Anexo — todos os comandos executados, na ordem</h2>
+
+<p>A sequência completa do deploy de 26/07/2026, para reconstruir o servidor do zero se necessário.</p>
+
+<h4>No Windows (uma vez)</h4>
+<div class="code"><pre><code>ssh-keygen -t ed25519 -C "kampeki-oracle" -f "$env:USERPROFILE\.ssh\kampeki_oracle"
+Get-Content "$env:USERPROFILE\.ssh\kampeki_oracle.pub" | Set-Clipboard</code></pre></div>
+
+<h4>No painel da Oracle</h4>
+<ol>
+  <li>Criar conta (região <strong>Brazil East / São Paulo</strong> — permanente)</li>
+  <li>Networking → <strong>Start VCN wizard</strong> → <em>Create VCN with Internet Connectivity</em> → <code>vcn-kampeki</code>, CIDRs padrão, IPv6 desmarcado</li>
+  <li>Compute → <strong>Create instance</strong>: Ubuntu 24.04, <code>VM.Standard.E2.1.Micro</code>, VCN e subnet <strong>pública</strong> existentes, IP público <strong>Yes</strong>, colar a chave pública</li>
+  <li>Networking → <code>vcn-kampeki</code> → <strong>Security</strong> → Default Security List → <strong>Add Ingress Rules</strong>: TCP 80 e TCP 443 de <code>0.0.0.0/0</code></li>
+</ol>
+
+<h4>Na VM — preparação do sistema</h4>
+<div class="code"><pre><code># swap
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# firewall do SO
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+sudo netfilter-persistent save
+
+# runtime
+sudo apt update
+sudo apt install -y git curl ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2</code></pre></div>
+
+<h4>Na VM — aplicação</h4>
+<div class="code"><pre><code>cd ~
+git clone https://github.com/Renanmp14/_KampekiDev.git
+cd ~/_KampekiDev/KampekiDash
+npm install --prefix backend
+
+# (o .env é enviado do Windows por pipe — ver secao 9)
+chmod 600 ~/_KampekiDev/KampekiDash/backend/.env
+
+cd ~/_KampekiDev/KampekiDash/backend
+pm2 start npm --name kampeki -- start
+pm2 save
+sudo env PATH=$PATH pm2 startup systemd -u ubuntu --hp /home/ubuntu
+pm2 save</code></pre></div>
+
+<h4>No Windows — frontend</h4>
+<div class="code"><pre><code>cd "$env:USERPROFILE\Documents\_KampekiDev\KampekiDash\frontend"
+npm run build
+scp -i "$env:USERPROFILE\.ssh\kampeki_oracle" -r dist ubuntu@163.176.35.169:/home/ubuntu/_KampekiDev/KampekiDash/frontend/</code></pre></div>
+
+<h4>No duckdns.org</h4>
+<p>Criar <code>kampeki</code> e apontar <em>current ip</em> para <code>163.176.35.169</code>.</p>
+
+<h4>Na VM — Caddy e HTTPS</h4>
+<div class="code"><pre><code>sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install -y caddy
+
+printf 'kampeki.duckdns.org {\n    reverse_proxy 127.0.0.1:3001\n}\n' | sudo tee /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl restart caddy</code></pre></div>
+
+<h4>Validação final</h4>
+<div class="code"><pre><code>curl -s https://kampeki.duckdns.org/api/health     # {"ok":true}
+curl -s https://kampeki.duckdns.org/api/version    # {"version":"1.0.0"}</code></pre></div>
+
+<p style="margin-top:14px">
+  Resultado conferido no dia do deploy, com dados reais atravessando a URL pública:
+  <strong>7.675 custos, 3.420 itens, 773 fornecedores, 540 registros de folha e 22 tags</strong>.
+</p>
+
+<hr>
+<p style="color:var(--muted);font-size:13px">
+  Kampeki Finance — Manual do Servidor Web · deploy realizado em 26/07/2026 ·
+  complementa o <code>KAMPEKI_APP_BRIEF.md</code> (documento mestre do projeto) e o
+  <code>GUIA-PUBLICACAO.md</code> (release do app desktop).
+</p>
+
+</main>
+</div>
+
+<script>
+  // Botão "copiar" em cada bloco de código.
+  document.querySelectorAll('.code').forEach(function (bloco) {
+    var pre = bloco.querySelector('pre');
+    if (!pre) return;
+    var btn = document.createElement('button');
+    btn.className = 'cp';
+    btn.textContent = 'copiar';
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(pre.innerText).then(function () {
+        btn.textContent = 'copiado!';
+        setTimeout(function () { btn.textContent = 'copiar'; }, 1500);
+      });
+    });
+    bloco.appendChild(btn);
+  });
+
+  // Destaca no sumário a seção que está na tela.
+  var alvos = document.querySelectorAll('main h2[id]');
+  var links = {};
+  document.querySelectorAll('nav a').forEach(function (a) { links[a.getAttribute('href')] = a; });
+  var obs = new IntersectionObserver(function (entradas) {
+    entradas.forEach(function (e) {
+      var link = links['#' + e.target.id];
+      if (!link) return;
+      if (e.isIntersecting) {
+        Object.values(links).forEach(function (l) { l.style.borderLeftColor = 'transparent'; l.style.color = ''; });
+        link.style.borderLeftColor = 'var(--primary)';
+        link.style.color = 'var(--text)';
+      }
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  alvos.forEach(function (h) { obs.observe(h); });
+</script>
+</body>
+</html>

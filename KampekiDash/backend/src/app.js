@@ -18,16 +18,26 @@ import folhaRoutes from './routes/folha.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Versão exibida no app: injetada pelo Electron (APP_VERSION) ou lida do
-// package.json do backend quando roda standalone (dev).
-function resolveVersion() {
-  if (process.env.APP_VERSION) return process.env.APP_VERSION;
+// Versão exibida no app. Ordem de resolução:
+//   1. APP_VERSION — injetada pelo Electron (desktop/main.js) e também
+//      aceita como override manual em qualquer ambiente;
+//   2. desktop/package.json — a fonte única da versão do app, para que o
+//      deploy web (standalone, sem Electron) mostre a MESMA versão do desktop;
+//   3. backend/package.json — fallback se o backend for servido sem o resto
+//      do repositório ao lado.
+function lerVersaoDe(...partes) {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-    return pkg.version || 'dev';
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, ...partes), 'utf8'));
+    return pkg.version || null;
   } catch {
-    return 'dev';
+    return null;
   }
+}
+function resolveVersion() {
+  return process.env.APP_VERSION
+    || lerVersaoDe('..', '..', 'desktop', 'package.json')
+    || lerVersaoDe('..', 'package.json')
+    || 'dev';
 }
 const APP_VERSION = resolveVersion();
 
