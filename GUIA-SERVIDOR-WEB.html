@@ -156,10 +156,12 @@
   <div class="grp">Operação</div>
   <a href="#atualizar">Atualizar o app</a>
   <a href="#dia-a-dia">Comandos do dia a dia</a>
+  <a href="#monitoramento">Monitorar CPU, memória e disco</a>
   <a href="#env-mudar">Mexer no .env</a>
   <a href="#senha">Trocar a senha</a>
   <a href="#ip">Se o IP mudar</a>
   <a href="#desktop">Windows × Web</a>
+  <a href="#publicar-desktop">Publicar o app desktop</a>
 
   <div class="grp">Apoio</div>
   <a href="#problemas">Problemas e soluções</a>
@@ -859,6 +861,92 @@ curl.exe -s https://kampeki.duckdns.org/api/version</code></pre></div>
   </p>
 </div>
 
+<h2 id="monitoramento">Monitorar CPU, memória e disco</h2>
+
+<p>
+  Esta VM tem <strong>1 GB de RAM</strong>, então vale saber olhar. A boa notícia é que o app é leve: o
+  backend vive em torno de <strong>70 MB</strong>. Os comandos abaixo respondem "está tudo bem?" em segundos.
+</p>
+
+<h3>Os cinco comandos que resolvem</h3>
+
+<div class="code"><span class="lbl lbl-vm">painel ao vivo do app (o mais útil no dia a dia)</span><pre><code>pm2 monit</code></pre></div>
+<p>Mostra CPU e memória do processo com os logs ao lado, atualizando em tempo real. Sai com <span class="kbd">Ctrl+C</span>.</p>
+
+<div class="code"><span class="lbl lbl-vm">resumo em tabela</span><pre><code>pm2 status</code></pre></div>
+
+<div class="code"><span class="lbl lbl-vm">memória e swap</span><pre><code>free -h</code></pre></div>
+
+<div class="code"><span class="lbl lbl-vm">espaço em disco</span><pre><code>df -h /</code></pre></div>
+
+<div class="code"><span class="lbl lbl-vm">carga da CPU (médias de 1, 5 e 15 minutos)</span><pre><code>uptime</code></pre></div>
+
+<h3>Indo mais fundo</h3>
+
+<div class="code"><span class="lbl lbl-vm">todos os processos da máquina (instale uma vez)</span><pre><code>sudo apt install -y htop
+htop</code></pre></div>
+
+<div class="code"><span class="lbl lbl-vm">o que está ocupando espaço, pasta por pasta</span><pre><code>du -sh ~/_KampekiDev
+du -sh ~/_KampekiDev/KampekiDash/backend/node_modules
+du -sh ~/_KampekiDev/KampekiDash/frontend/dist
+du -sh ~/.pm2/logs</code></pre></div>
+
+<div class="code"><span class="lbl lbl-vm">as 10 maiores pastas do sistema (quando o disco encher)</span><pre><code>sudo du -h / 2&gt;/dev/null | sort -rh | head -10</code></pre></div>
+
+<h3>Valores de referência — como estava em 26/07/2026</h3>
+<p>Guarde esta linha de base: é contra ela que você compara quando achar que "está lento".</p>
+
+<div class="tw"><table>
+<tr><th>Indicador</th><th>Medido</th><th>Como ler</th></tr>
+<tr><td>Carga da CPU (<code>uptime</code>)</td><td><code>0.00, 0.03, 0.00</code></td><td>Praticamente ociosa. Com <strong>2 vCPUs</strong>, o saudável é ficar abaixo de <strong>2.0</strong>; acima disso há fila de processos esperando.</td></tr>
+<tr><td>Memória (<code>free -h</code>)</td><td>540 MB usados de 954 MB · <strong>413 MB disponíveis</strong></td><td>Confortável. Olhe a coluna <strong>available</strong>, não a <em>free</em> — o Linux usa a RAM sobrando como cache e devolve quando precisa.</td></tr>
+<tr><td>Swap</td><td>18 MB de 2 GB</td><td>Quase intocado, sinal de que a RAM dá conta. Swap alto e constante = hora de pensar numa VM maior.</td></tr>
+<tr><td>Disco (<code>df -h /</code>)</td><td>4,9 GB de 45 GB — <strong>11%</strong></td><td>Folgado.</td></tr>
+<tr><td>App (<code>pm2 status</code>)</td><td><strong>68,9 MB</strong>, 0% de CPU</td><td>Normal em repouso. Sobe durante importações grandes e volta depois.</td></tr>
+<tr><td>Maiores pastas</td><td><code>node_modules</code> 124 MB · repo 182 MB · <code>dist</code> 5,9 MB · logs 8 KB</td><td>O peso é de dependências, não de dados — os dados moram no Google Sheets.</td></tr>
+</table></div>
+
+<div class="box warn">
+  <span class="tt">Os dois números que realmente importam</span>
+  <p>
+    <strong>1. A coluna <code>↺</code> do <code>pm2 status</code></strong> é o contador de <em>restarts</em>.
+    Se ele subir sozinho, o app está caindo e sendo religado em laço — o <code>pm2 logs kampeki</code> mostra
+    o motivo. Um número parado é normal (cada deploy que você fizer soma um).
+  </p>
+  <p>
+    <strong>2. A memória <em>available</em> durante uma importação grande</strong> (aquelas de mil linhas).
+    Se encostar no limite, o swap absorve — mais lento, mas sem quebrar. Foi exatamente para isso que
+    criamos os 2 GB de swap na instalação.
+  </p>
+</div>
+
+<h3>Docker — não se aplica aqui</h3>
+
+<div class="box info">
+  <span class="tt">Este servidor não usa Docker</span>
+  <p>
+    Confirmado na máquina: <code>docker</code> <strong>não está instalado</strong>. O Node roda direto no
+    sistema, gerenciado pelo pm2, com o Caddy na frente — não há contêiner nenhum. Se você procurar por
+    contêineres aqui, não vai encontrar, e não é problema: é o desenho da instalação.
+  </p>
+</div>
+
+<p>Ficam registrados para o caso de um dia haver Docker em algum servidor seu:</p>
+
+<div class="code"><span class="lbl">equivalentes no Docker</span><pre><code>docker stats                # CPU, memória, rede e I/O ao vivo, por contêiner
+docker stats --no-stream    # o mesmo, uma foto só (bom para script/log)
+docker system df            # armazenamento: imagens, contêineres, volumes, cache de build
+docker system df -v         # o mesmo, detalhado item por item
+docker ps -s                # tamanho de cada contêiner (camada de escrita + virtual)
+docker system prune -a      # libera espaço apagando o que não está em uso (cuidado)</code></pre></div>
+
+<p>
+  Traduzindo: <code>docker stats</code> é o "gerenciador de tarefas" do Docker (equivale ao
+  <code>pm2 monit</code> aqui) e <code>docker system df</code> é o que responde "por que meu disco encheu"
+  (equivale ao <code>df -h</code> + <code>du -sh</code>) — no Docker, quase sempre a resposta é imagem antiga
+  e cache de build acumulados.
+</p>
+
 <h2 id="env-mudar">Mexer no <code>.env</code></h2>
 
 <div class="code"><span class="lbl lbl-vm">editar</span><pre><code>nano ~/_KampekiDev/KampekiDash/backend/.env</code></pre></div>
@@ -953,6 +1041,140 @@ grep -c '' ~/_KampekiDev/KampekiDash/backend/.env</code></pre></div>
     do mesmo commit. Se a cliente do Mac e a do Windows precisam ver a mesma coisa, faça os dois.
   </p>
 </div>
+
+<h2 id="publicar-desktop">Publicar o app desktop (release)</h2>
+
+<p>
+  O outro destino: gerar os instaladores e fazer os clientes do <strong>Windows</strong> se atualizarem
+  sozinhos. Você <strong>não builda nada na sua máquina</strong> e <strong>não precisa de um Mac</strong> — o
+  GitHub Actions builda o <code>.exe</code> e o <code>.dmg</code> na nuvem e publica no GitHub Releases.
+</p>
+
+<div class="box warn">
+  <span class="tt">A regra de ouro</span>
+  <p>
+    A <code>version</code> do <code>KampekiDash/desktop/package.json</code> e a <strong>tag</strong> têm de
+    ser iguais: versão <code>1.6.2</code> → tag <code>v1.6.2</code>. O workflow <strong>aborta de
+    propósito</strong> se divergirem, porque é essa versão que nomeia o Release e que o auto-update compara.
+  </p>
+</div>
+
+<h3>Pré-requisitos (uma vez só, já atendidos)</h3>
+<ul>
+  <li>Repositório <code>_KampekiDev</code> <strong>público</strong> ✅</li>
+  <li>Chave da Service Account <strong>rotacionada</strong> e senha admin / <code>JWT_SECRET</code> trocados ✅</li>
+  <li><code>KampekiDash/desktop/build/.env</code> preenchido com as credenciais atuais (usado só para rodar em dev; ignorado pelo git)</li>
+</ul>
+
+<div class="box info">
+  <span class="tt">Nenhum segredo é necessário no GitHub</span>
+  <p>
+    O instalador <strong>não empacota</strong> o <code>.env</code> — cada cliente guarda o dele em
+    <code>userData</code>, que sobrevive às atualizações. E o upload do Release usa o
+    <code>GITHUB_TOKEN</code> que o Actions fornece sozinho. Foi essa decisão (de 25/07) que tornou seguro
+    distribuir o instalador publicamente.
+  </p>
+</div>
+
+<h3>Passo a passo</h3>
+
+<ol class="steps">
+  <li>
+    <strong>Suba a versão</strong> em <code>KampekiDash/desktop/package.json</code> (campo
+    <code>version</code>).
+    <div class="box info" style="margin:8px 0">
+      <p style="margin:0">
+        <strong>Semver:</strong> correção pequena → <code>1.6.2</code> · recurso novo → <code>1.7.0</code> ·
+        mudança grande → <code>2.0.0</code>
+      </p>
+    </div>
+  </li>
+  <li>
+    <strong>Commit</strong> (inclua as outras alterações da versão no mesmo commit).
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>git add -A
+git commit -m "desktop 1.6.2"</code></pre></div>
+  </li>
+  <li>
+    <strong>Envie o código.</strong>
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>git push origin main</code></pre></div>
+  </li>
+  <li>
+    <strong>Crie a tag</strong> com o mesmo número e um <code>v</code> na frente. O <code>-a</code> cria uma
+    tag anotada (com autor, data e mensagem — o recomendado).
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>git tag -a v1.6.2 -m "Kampeki Finance 1.6.2"</code></pre></div>
+  </li>
+  <li>
+    <strong>Publique a tag — é isto que DISPARA o build.</strong>
+    <div class="code"><span class="lbl lbl-win"></span><pre><code>git push origin v1.6.2</code></pre></div>
+    <p>Saída esperada: <code>* [new tag] v1.6.2 -&gt; v1.6.2</code></p>
+  </li>
+  <li>
+    <strong>Acompanhe.</strong> GitHub → aba <strong>Actions</strong> → workflow
+    <strong>"Release Kampeki Finance"</strong>. Espere os dois jobs (<code>windows-latest</code> e
+    <code>macos-latest</code>) ficarem <strong>verdes</strong> — leva de 5 a 10 minutos.
+  </li>
+  <li>
+    <strong>Publique o Release.</strong> O build cria um <strong>rascunho (draft)</strong>. Vá em
+    <strong>Releases</strong>, confira que os arquivos subiram (<code>.exe</code>, <code>.dmg</code>,
+    <code>latest.yml</code>, <code>latest-mac.yml</code>) e clique em <strong>"Publish release"</strong>.
+  </li>
+</ol>
+
+<div class="box danger">
+  <span class="tt">Duas coisas que impedem os clientes de atualizar</span>
+  <p>
+    <strong>1.</strong> Um Release em <strong>rascunho não atualiza ninguém</strong> — o updater ignora
+    drafts. Se o cliente reclamar que não atualizou, confira primeiro se você clicou em "Publish release".
+  </p>
+  <p>
+    <strong>2. Não apague os arquivos <code>latest.yml</code> / <code>latest-mac.yml</code></strong> do
+    Release. São os manifestos que o auto-update lê para saber que existe versão nova. Sem eles, o
+    <code>.exe</code> fica lá e ninguém é avisado.
+  </p>
+</div>
+
+<h3>Bloco copiar e colar</h3>
+<p>Trocando <code>X.Y.Z</code> pela versão nova:</p>
+<div class="code"><span class="lbl lbl-win"></span><pre><code># 1) editar KampekiDash/desktop/package.json -&gt; "version": "X.Y.Z"
+git add -A
+git commit -m "desktop X.Y.Z"
+git push origin main
+git tag -a vX.Y.Z -m "Kampeki Finance X.Y.Z"
+git push origin vX.Y.Z</code></pre></div>
+
+<h3>Errou a tag antes de publicar?</h3>
+<div class="code"><span class="lbl lbl-win"></span><pre><code>git tag -d vX.Y.Z              # apaga localmente
+git push origin :vX.Y.Z        # apaga no GitHub (se já tinha subido)</code></pre></div>
+
+<h3>Atalho sem terminal</h3>
+<p>
+  O build também pode ser disparado pela web: <strong>Actions → Release Kampeki Finance → Run workflow →
+  Run</strong>. Ele usa a versão que estiver no <code>package.json</code>. A tag, porém, é a forma
+  recomendada — é ela que marca a versão no histórico do repositório.
+</p>
+
+<h3>O que cada cliente vê depois</h3>
+<div class="tw"><table>
+<tr><th>Sistema</th><th>Comportamento</th></tr>
+<tr><td><strong>Windows</strong></td><td>Atualiza <strong>sozinho</strong> ao abrir o app. Também há o botão <em>"🔄 Verificar atualizações"</em> em Configurações, que baixa e oferece "Reiniciar e atualizar agora".</td></tr>
+<tr><td><strong>macOS</strong></td><td>Recebe um <strong>aviso com botão Baixar</strong> (o <code>.dmg</code>), porque auto-update no Mac exigiria assinatura da Apple. <em>Na prática, a cliente do Mac usa a versão web e não precisa disto.</em></td></tr>
+</table></div>
+
+<div class="box warn">
+  <span class="tt">Depois de publicar o release, não esqueça da web</span>
+  <p>
+    O Release atualiza o <strong>desktop</strong>. Para a mesma versão chegar em
+    <code>kampeki.duckdns.org</code>, execute também a <a href="#atualizar">rotina de atualização</a> —
+    <code>git pull</code> + <code>pm2 restart</code> na VM e o <code>scp</code> do <code>dist</code>. São
+    dois destinos independentes.
+  </p>
+</div>
+
+<p class="muted" style="font-size:13px">
+  Referência completa deste processo: <code>GUIA-PUBLICACAO.md</code> (raiz do repositório) — inclui também o
+  mapa de onde fica cada informação do projeto. O guia do <strong>cliente</strong> (instalar/atualizar) é
+  <code>KampekiDash/desktop/GUIA-CLIENTE.md</code>.
+</p>
 
 <hr>
 

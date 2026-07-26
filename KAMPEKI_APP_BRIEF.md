@@ -2313,3 +2313,170 @@ CÓDIGO ALTERADO
 
 > **Estado:** a versão web substitui o app desktop **apenas no Mac**. Nada do fluxo do Windows mudou —
 > release por tag, build no Actions, auto-update pelo GitHub Releases (`GUIA-PUBLICACAO.md`).
+
+---
+
+## Atualizações — 26/07/2026 — versão 1.6.2 (em preparação) — login protegido, telefone, sidebar e o bug do zoom
+
+> Quatro frentes pedidas pelo gestor na mesma sessão do deploy web: (1) **limitar tentativas de login**,
+> agora que ele está exposto na internet; (2) **responsividade para telefone** (referência: iPhone 14), sem
+> nada se sobrepondo; (3) **mais destaque para as categorias** da sidebar; (4) **corrigir o deslocamento dos
+> cliques do drill-down** quando a tela está reduzida pelo zoom do próprio app.
+>
+> `desktop/package.json` e `frontend/package.json` subidos para **1.6.2**.
+
+### 1. Limite de tentativas no login (fecha pendência da versão web)
+
+Novo `backend/src/middleware/rateLimit.js`, aplicado **somente** em `POST /api/auth/login` — a única rota
+pública que aceita credenciais. Enquanto o app era só desktop, tentativas ilimitadas eram inofensivas (a rota
+existia apenas em `127.0.0.1`, na máquina do próprio usuário); com a web, deixou de ser.
+
+**Como funciona:**
+- **5 falhas** (resposta 401) na janela de **15 min** → **bloqueio de 15 min**, com HTTP **429** e cabeçalho
+  `Retry-After`.
+- **Escalada:** cada reincidência **dobra** o bloqueio (15 → 30 → 60 min, com teto de 60).
+- **Atraso progressivo** antes do bloqueio: `300 ms × falhas acumuladas` (teto de 2 s). É o que derruba a
+  velocidade de uma varredura automatizada bem antes do bloqueio; quem digitou torto **uma** vez espera
+  300 ms e não percebe. A primeira tentativa nunca tem atraso.
+- **Login correto zera** o contador do IP. Durante o bloqueio, **nem a senha certa passa** — não há como
+  burlar acertando.
+- Só o **401** conta como falha: um 400 (corpo incompleto) não consome cota.
+- Configurável por `.env`: `LOGIN_MAX_TENTATIVAS`, `LOGIN_JANELA_MIN`, `LOGIN_BLOQUEIO_MIN`.
+- Bloqueios são **registrados no log** (`[login] IP … bloqueado por N min …`), visíveis via `pm2 logs`.
+
+**Decisão registrada — não existe bloqueio global.** A alternativa óbvia (limitar o total de tentativas
+somando todos os IPs) viraria **arma contra o dono**: com um único usuário administrador, bastaria um
+atacante disparar tentativas para trancar o acesso legítimo. O limite por IP protege sem abrir essa porta.
+Com senha aleatória de 24 caracteres, a proteção por IP é suficiente.
+
+**`TRUST_PROXY` — novo e necessário na web.** Atrás do Caddy, `req.ip` seria sempre `127.0.0.1` e **todos os
+visitantes dividiriam o mesmo balde** (um atacante trancaria o gestor). `app.js` passou a aceitar
+`trust proxy`, **desligado por padrão**: no desktop não há proxy, e confiar no `X-Forwarded-For` sem proxy
+permitiria **falsear o IP** e escapar do limite. Na VM é preciso `TRUST_PROXY=1` no `.env`.
+
+### 2. Responsividade para telefone (iPhone 14 — 390 × 844)
+
+Bloco `≤520px` reescrito e o de `820px` estendido. O que estava quebrado e por quê:
+
+- **Campos com largura fixa em `style` inline** (`maxWidth: 170` no `PeriodFilter`, `minWidth: 180` nas
+  Visões avançadas, os vários `maxWidth` dos filtros de Custos): **media query não alcança estilo inline** —
+  só `!important` no stylesheet vence. Sem isso sobravam campos estreitos com espaço morto ao lado. Agora
+  `.field { min-width: 0 !important; max-width: none !important }` no mobile.
+- **iOS dava zoom automático ao focar um campo:** o Safari faz isso quando a fonte é menor que 16px, e a tela
+  fica desalinhada depois. Inputs passam a 16px no mobile — **inclusive** os campos compactos da conferência
+  de NFS-e, que têm regra própria mais específica e escapariam.
+- **`100vh` → `100dvh`** em `.app-shell` e `.login-wrap`: no iOS a barra de endereço entra e sai, e `100vh`
+  conta a tela cheia, escondendo o rodapé atrás dela.
+- **Sobreposição do selo de versão:** ele é `position: fixed` no canto inferior e ficava **sobre** a última
+  linha de conteúdo. Em vez de escondê-lo (a versão é útil no suporte), o `.main` ganhou 48px de padding
+  inferior reservando a faixa.
+- **Modais** alinham ao **topo** no mobile (`align-items: flex-start`) — centralizados, um modal alto era
+  cortado nas duas pontas; `max-height: calc(100dvh - 20px)`, botões de ação em largura fluida, `modal-lg`
+  sem limite de largura.
+- **Abas** passam a **rolar na horizontal** em vez de quebrar em várias faixas empilhadas.
+- **Gaveta lateral** em `min(84vw, 280px)` (era 250px fixos) — não cobre a tela inteira num aparelho estreito.
+- Alvos de toque ≥ 40px (botões, links da nav, × dos chips), tabelas com padding menor para render mais
+  colunas antes de rolar, KPIs das dialogs de notas em **uma** coluna, `overscroll-behavior-x: contain` nas
+  tabelas para o gesto lateral não disparar o "voltar" do navegador.
+
+> **Auditado:** todas as tabelas dentro de modais (`ClassificarItens`, `Subcategorias`, `ImportNfsePdf`,
+> `NotasFiltro`, `NotasItem`, `DrillPeriodo`, `CruzamentoMes`) já estavam envolvidas em `.table-wrap`, então
+> rolam dentro do próprio contêiner e **nenhuma vaza** para fora do modal.
+
+### 3. Sidebar — categorias com destaque
+
+**Antes:** os quatro títulos de seção eram 11px, cinza-mudo (`--muted`), e as quatro listas ficavam
+visualmente idênticas — nada separava um grupo do outro.
+
+**Agora:** cada grupo tem cabeçalho com **ícone em selo coral**, título em caixa alta 12px peso 800 na cor
+`--primary`, e **divisor** entre grupos; os itens ficam indentados com barra lateral (a barra fica coral no
+item ativo). A hierarquia se lê de relance.
+
+- **`Saída` → `Backup`** no título da seção — é como o gestor se refere a ela. Os outros três seguem
+  `Dashboards`, `Lançamentos` e `Sistema`. O rótulo do item ("Saída (Backup mensal)") e o título da página
+  não mudaram.
+- De quebra, a navegação virou **orientada a dados**: os quatro blocos de JSX copiados viraram um `map` sobre
+  um array `secoes` (`{ titulo, icone, itens }`). Acrescentar uma seção agora é uma linha.
+
+### 4. 🔴 Bug — cliques do drill-down deslocados sob zoom (e a política de zoom revista)
+
+**Sintoma relatado:** com a tela reduzida pelo zoom do próprio app, os cliques do drill-down do Dash Custos
+caem na barra errada.
+
+**Causa (comprovada por comparação dentro do próprio código, não por dedução):** o `ZoomControl` aplicava
+`zoom` no **CSS** do elemento raiz, escalando a página **por dentro**. O Recharts deriva a barra ativa de
+`event.pageX - getBoundingClientRect().left` — e sob `zoom` as duas medidas deixam de estar na mesma escala,
+com **erro proporcional à distância da borda** do gráfico. A prova estava no repositório:
+
+| Gráfico | Como capturava o clique | Sob zoom |
+|---|---|---|
+| `DashFolha.jsx:260` | `<Bar onClick>` — hit-test do **navegador** no retângulo | sempre funcionou |
+| `DashCustos.jsx:402` e `:445` | `<BarChart onClick>` — **coordenada calculada** pelo Recharts | deslocava |
+
+> **Descoberta além do relatado:** o mesmo defeito afetava **hover e tooltip** dos gráficos, não apenas o
+> clique — ambos usam a mesma conta de coordenada. Corrigir só o clique deixaria o tooltip errado.
+
+**Duas correções:**
+
+1. **Clique por elemento** (`DashCustos.jsx`): removido o `onClick` do `<BarChart>` e colocado nas `<Bar>`,
+   alinhando ao padrão que o `DashFolha` já usava. O alvo passa a vir do hit-test do navegador — **imune a
+   zoom**, e vale também na versão web. Nos empilhados, as barras cobrem a coluna até o total, então clicar
+   em qualquer faixa do mês funciona. Novo helper `cliqueNaBarraDoMes`.
+2. **Causa raiz — política de zoom revista.**
+   **Antes (v1.1.0, "Zoom embutido na ferramenta"):** `document.documentElement.style.zoom`.
+   **Agora:** no app desktop, **zoom nativo do Chromium** via `webFrame.setZoomFactor`, exposto por
+   `desktop/preload.js` como `window.kampekiZoom`. O navegador escala tudo **fora** do sistema de coordenadas
+   da página, então layout, hit-test e JS seguem coerentes — corrige clique, hover e tooltip de uma vez, em
+   qualquer gráfico presente ou futuro.
+
+**Consequência na versão web:** não existe API para um script alterar o zoom nativo do navegador. Em vez de
+reintroduzir o bug com CSS, o controle na web passa a **indicar o atalho do próprio navegador**
+(`Ctrl` + `+` / `−`), que faz o mesmo trabalho sem distorcer nada. A preferência salva no desktop continua
+valendo (mesma chave `kampeki_zoom` no `localStorage`), e o `ZoomControl` limpa qualquer `zoom` de CSS
+remanescente de versões anteriores.
+
+### Changelog técnico — 1.6.2 (por arquivo)
+
+| Arquivo | O que mudou |
+|---|---|
+| `backend/src/middleware/rateLimit.js` | **Novo** — `criarLoginRateLimit()`: contagem por IP das falhas 401, atraso progressivo, bloqueio 429 com `Retry-After`, escalada por ciclos, poda de registros e trava de memória (5.000 IPs). Sem dependências novas. |
+| `backend/src/routes/auth.js` | `POST /login` passa pelo limitador (instância única no módulo). |
+| `backend/src/app.js` | Suporte a `trust proxy` via `TRUST_PROXY` (desligado por padrão) — necessário para o limitador ver o IP real atrás do Caddy. |
+| `desktop/preload.js` | Nova ponte `window.kampekiZoom` (`obter`/`definir`) usando `webFrame` — zoom nativo, sem `fs` nem rede. |
+| `frontend/src/components/ZoomControl.jsx` | Usa o zoom nativo quando a ponte existe; na web mostra o atalho do navegador. Limpa `zoom` de CSS herdado. Novo `temZoomNativo()`. |
+| `frontend/src/components/Layout.jsx` | Navegação orientada a dados (array `secoes` com título + ícone); seção `Saída` → `Backup`; markup `<nav>/.nav-group`. |
+| `frontend/src/pages/dash/DashCustos.jsx` | `onClick` sai do `<BarChart>` e vai para as `<Bar>` (os dois gráficos, incluindo as 4 séries do empilhado); helper `cliqueNaBarraDoMes`. |
+| `frontend/src/styles.css` | Cabeçalhos de seção destacados (`.nav`, `.nav-group`, `.nav-ico`) e itens indentados; `.zoom-hint`; `100dvh`; `-webkit-text-size-adjust`; rolagem por toque nas tabelas; bloco mobile ≤520px reescrito (inputs 16px, campos fluidos com `!important`, modais no topo, abas roláveis, padding reservando o selo de versão, alvos de toque). |
+| `desktop/package.json`, `frontend/package.json` | `version` → **1.6.2**. |
+
+### Validação
+
+- **Limitador exercitado de verdade — 24/24.** Duas camadas: pela **HTTP contra o `app` Express real**
+  (401 dentro da cota, atraso crescente medido, 429 com `Retry-After` e mensagem em português, senha correta
+  barrada durante o bloqueio, `/api/health` intacto, `trust proxy` desligado por padrão) e **unitária com
+  `req`/`res` falsos** para o que a HTTP não alcança (escalada 10 → 20 min conferida no registro, sucesso
+  apagando o contador, IPs independentes, 400 não consumindo cota).
+- **Um defeito encontrado e corrigido no próprio desenvolvimento:** o atraso progressivo só entrava na 3ª
+  tentativa, embora o comentário prometesse "a partir da 2ª" — o teste pegou a divergência entre código e
+  intenção.
+- `vite build` OK; `node --check` OK em `app.js`, `auth.js`, `rateLimit.js` e `preload.js`.
+- **Auditoria estática de largura** no frontend: varridas as larguras fixas inline e do CSS base para achar
+  o que estouraria 390px; confirmado que todas as tabelas de modal rolam em `.table-wrap`.
+- **NÃO exercitado (exige ambiente que não roda aqui):**
+  - o **zoom nativo** do Electron — depende do app empacotado; validar com `npm start Windows` ou no
+    instalador, conferindo que os botões de zoom ainda escalam a tela **e** que o clique/tooltip dos gráficos
+    passam a acertar a barra correta;
+  - a **aparência no telefone** — as mudanças de CSS não foram vistas renderizadas; conferir no DevTools em
+    modo iPhone 14 e, de preferência, no aparelho real;
+  - o **destaque da sidebar** — idem, é visual.
+
+### Pendências em aberto
+
+- **Revisão visual dos itens 2 e 3** (telefone e sidebar) — feita pelo gestor no navegador.
+- **Deploy da 1.6.2:** commit + push + tag `v1.6.2`; na VM `git pull` + `pm2 restart` **e acrescentar
+  `TRUST_PROXY=1` ao `.env`** (sem isso o limitador conta todos os visitantes no mesmo balde); build do
+  frontend no Windows + `scp` do `dist`.
+- 🔴 **Apertar o CORS** — segue aberto desde a **1.5.2**. Era um dos dois itens de segurança da web; a
+  1.6.2 fecha o do login, este continua pendente.
+- **`.env` local (dev) com a chave revogada** — `npm run dev` sobe mas não lê a planilha.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
