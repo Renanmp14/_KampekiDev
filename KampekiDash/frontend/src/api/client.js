@@ -2,6 +2,7 @@
 
 const TOKEN_KEY = 'kampeki_token';
 const LOGIN_KEY = 'kampeki_login';
+const PERFIL_KEY = 'kampeki_perfil';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -13,10 +14,36 @@ export function setToken(token) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+  // O perfil acompanha a sessão: sai o token, sai o perfil (vale tanto para o
+  // logout quanto para a expiração automática tratada no request()).
+  localStorage.removeItem(PERFIL_KEY);
 }
 
 export function isAuthenticated() {
   return !!getToken();
+}
+
+// --- Perfil de acesso ('admin' | 'leitura') ---
+// Guardado no login para a interface esconder o que o usuário não pode fazer.
+// É CONVENIÊNCIA, não segurança: quem barra de verdade é o backend
+// (middleware escritaRequerAdmin). Sessões antigas não têm perfil gravado —
+// nesse caso a interface libera e o backend decide.
+export function setPerfil(perfil) {
+  if (perfil) localStorage.setItem(PERFIL_KEY, perfil);
+  else localStorage.removeItem(PERFIL_KEY);
+}
+
+export function getPerfil() {
+  return localStorage.getItem(PERFIL_KEY) || '';
+}
+
+export function podeEscrever() {
+  const p = getPerfil();
+  return p ? p === 'admin' : true;
+}
+
+export function clearPerfil() {
+  localStorage.removeItem(PERFIL_KEY);
 }
 
 // --- Credenciais salvas ("manter-me conectado") ---
@@ -43,6 +70,12 @@ export function clearCredentials() {
 }
 
 async function request(method, path, body) {
+  // Rede de segurança: um usuário de consulta nunca dispara uma escrita, mesmo
+  // que algum botão escape de ser escondido. O login é POST e fica de fora.
+  if (method !== 'GET' && !path.startsWith('/auth/login') && !podeEscrever()) {
+    throw new Error('Seu usuário tem acesso apenas de consulta e não pode fazer lançamentos.');
+  }
+
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;

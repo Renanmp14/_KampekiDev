@@ -10,6 +10,7 @@ import Tag from './pages/Tag.jsx';
 import Itens from './pages/Itens.jsx';
 import Custos from './pages/Custos.jsx';
 import Folha from './pages/Folha.jsx';
+import Caixa from './pages/Caixa.jsx';
 import Saida from './pages/Saida.jsx';
 import Configuracoes from './pages/Configuracoes.jsx';
 import DashCustos from './pages/dash/DashCustos.jsx';
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/itens" element={<Itens />} />
         <Route path="/custos" element={<Custos />} />
         <Route path="/folha" element={<Folha />} />
+        <Route path="/caixa" element={<Caixa />} />
         <Route path="/saida" element={<Saida />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
         <Route path="/dash/custos" element={<DashCustos />} />

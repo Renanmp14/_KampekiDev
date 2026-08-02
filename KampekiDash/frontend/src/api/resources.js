@@ -1,8 +1,9 @@
-import { api, setToken } from './client.js';
+import { api, setToken, setPerfil } from './client.js';
 
 export async function login(email, password) {
   const data = await api.post('/auth/login', { email, password });
   setToken(data.token);
+  setPerfil(data.perfil); // 'admin' | 'leitura' — a interface esconde o que não pode
   return data;
 }
 
@@ -26,6 +27,8 @@ export const fornecedorApi = {
   importar: (rows) => api.post('/fornecedor/import', { rows }),
 };
 export const tagApi = crud('/tag');
+// Caixa (dinheiro físico) — CRUD simples; MES_ANO/ANO vêm derivados do backend.
+export const caixaApi = crud('/caixa');
 export const itensApi = {
   ...crud('/itens'),
   subcategorias: () => api.get('/itens/subcategorias'),

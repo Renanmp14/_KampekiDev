@@ -18,6 +18,9 @@ export const TABS = {
   FOLHA: [
     'UUID', 'MES_ANO', 'MES_NUM', 'ANO', 'TAG', 'ITEM_FOLHA', 'VALOR', 'OBSERVACAO',
   ],
+  // Caixa (dinheiro físico) — módulo desacoplado: não se relaciona com CUSTOS,
+  // ITENS ou FOLHA. MES_ANO/ANO não são gravados: derivam de DATA na leitura.
+  CAIXA: ['UUID', 'DATA', 'TIPO', 'DESCRICAO', 'VALOR', 'PESSOA'],
 };
 
 // Converte índice de coluna (0-based) em letra(s) A1 (0->A, 26->AA).

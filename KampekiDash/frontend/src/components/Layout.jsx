@@ -19,6 +19,12 @@ const dashboards = [
   { to: '/dash/avancado', label: 'Visões avançadas' },
 ];
 
+// Caixa (dinheiro físico) — módulo desacoplado dos lançamentos de custo/folha,
+// por isso ganha seção própria em vez de entrar em "Lançamentos".
+const caixa = [
+  { to: '/caixa', label: 'Caixa' },
+];
+
 const saidas = [
   { to: '/saida', label: 'Saída (Backup mensal)' },
 ];
@@ -33,6 +39,7 @@ const sistema = [
 const secoes = [
   { titulo: 'Dashboards', icone: '📊', itens: dashboards },
   { titulo: 'Lançamentos', icone: '✏️', itens: lancamentos },
+  { titulo: 'Caixa', icone: '💵', itens: caixa },
   { titulo: 'Backup', icone: '💾', itens: saidas },
   { titulo: 'Sistema', icone: '⚙️', itens: sistema },
 ];

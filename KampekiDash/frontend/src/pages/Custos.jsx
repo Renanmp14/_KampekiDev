@@ -10,6 +10,7 @@ import ImportNfsePdfModal from '../components/ImportNfsePdfModal.jsx';
 import ImportResult from '../components/ImportResult.jsx';
 import ClassificarItensModal from '../components/ClassificarItensModal.jsx';
 import CellUsageBar from '../components/CellUsageBar.jsx';
+import { podeEscrever } from '../api/client.js';
 import SearchableSelect from '../components/SearchableSelect.jsx';
 import { parseCustos } from '../utils/importParse.js';
 import { brl, toNum, categoriaBadgeClass } from '../utils/format.js';
@@ -141,6 +142,8 @@ function CustosDateStep({ parsed, setExtra, setExtraValid }) {
 }
 
 export default function Custos() {
+  // Perfil de consulta não vê os controles de escrita (o backend também barra).
+  const escrever = podeEscrever();
   const [custos, setCustos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [itens, setItens] = useState([]);
@@ -632,11 +635,15 @@ export default function Custos() {
       <CellUsageBar />
 
       <div className="toolbar">
-        <button className="btn" onClick={abrirNovo}>+ Novo lançamento</button>
-        <button className="btn btn-ghost" onClick={() => setShowImport(true)}>Importar planilha</button>
-        <button className="btn btn-ghost" onClick={() => setShowImportXml(true)}>Importar NF-e (.zip)</button>
-        <button className="btn btn-ghost" onClick={() => setShowImportNfse(true)}>Importar NFS-e (PDF)</button>
-        {qtdAClassificar > 0 && (
+        {escrever && (
+          <>
+            <button className="btn" onClick={abrirNovo}>+ Novo lançamento</button>
+            <button className="btn btn-ghost" onClick={() => setShowImport(true)}>Importar planilha</button>
+            <button className="btn btn-ghost" onClick={() => setShowImportXml(true)}>Importar NF-e (.zip)</button>
+            <button className="btn btn-ghost" onClick={() => setShowImportNfse(true)}>Importar NFS-e (PDF)</button>
+          </>
+        )}
+        {escrever && qtdAClassificar > 0 && (
           <button
             className="btn btn-sm"
             style={{ background: 'var(--down, #e0a800)', color: '#1b1f29' }}
@@ -741,7 +748,7 @@ export default function Custos() {
           <h3 className="card-title" style={{ margin: 0 }}>
             {filtrados.length} lançamentos · Total {brl(totalFiltrado)}
           </h3>
-          {selected.size > 0 && (
+          {escrever && selected.size > 0 && (
             <div className="row-actions" style={{ alignItems: 'center', gap: 8 }}>
               <span className="muted">{selected.size} selecionado(s)</span>
               <button className="btn btn-sm" onClick={abrirBulk}>Editar em massa</button>
@@ -798,8 +805,12 @@ export default function Custos() {
                     <td className="num">{brl(c.VALOR_TOTAL)}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={() => abrirEdicao(c)}>Editar</button>
-                        <button className="btn btn-sm btn-danger" onClick={() => setConfirmDel(c)}>Excluir</button>
+                        {escrever ? (
+                          <>
+                            <button className="btn btn-sm btn-ghost" onClick={() => abrirEdicao(c)}>Editar</button>
+                            <button className="btn btn-sm btn-danger" onClick={() => setConfirmDel(c)}>Excluir</button>
+                          </>
+                        ) : <span className="muted">—</span>}
                       </div>
                     </td>
                   </tr>

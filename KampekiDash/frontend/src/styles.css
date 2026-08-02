@@ -646,3 +646,61 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .resumo-value { font-size: 16px; }
   .resumo-value-sm { font-size: 13px; }
 }
+
+/* ---------- Caixa (dinheiro físico) ---------- */
+/* Módulo desacoplado — só classes novas, nada acima é alterado. */
+
+/* Tabela (70%) + painel de resumo (30%). Degrada para uma coluna em telas
+   estreitas, como as demais grades do app. */
+.caixa-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.caixa-kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.badge-entrada { background: rgba(191, 203, 127, 0.20); color: #d7e0a6; }
+.badge-saida { background: rgba(255, 139, 124, 0.20); color: #ffb3a8; }
+
+/* Botão "+ Nova Movimentação" — oliva (entrada de dinheiro) em vez do coral
+   padrão, para não competir com os botões destrutivos da linha. */
+.btn-caixa-novo { background: var(--olive); color: var(--on-primary); }
+.btn-caixa-novo:hover { background: #cbd694; }
+
+.caixa-resumo { display: flex; flex-direction: column; gap: 10px; }
+.caixa-resumo-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.caixa-resumo-total {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 2px;
+  font-size: 15px;
+}
+
+/* Alternador Entrada/Saída do formulário. */
+.caixa-tipo-toggle { display: flex; gap: 8px; }
+.caixa-tipo {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.caixa-tipo:hover { color: var(--text); }
+.caixa-tipo.ativo.entrada { background: var(--olive); color: var(--on-primary); border-color: var(--olive); }
+.caixa-tipo.ativo.saida { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+
+@media (max-width: 1100px) {
+  .caixa-layout { grid-template-columns: 1fr; }
+}

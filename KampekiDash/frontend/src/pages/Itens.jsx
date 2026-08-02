@@ -7,6 +7,7 @@ import ImportResult from '../components/ImportResult.jsx';
 import ClassificarItensModal from '../components/ClassificarItensModal.jsx';
 import SubcategoriasModal from '../components/SubcategoriasModal.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import { podeEscrever } from '../api/client.js';
 import { parseItens } from '../utils/importParse.js';
 import { categoriaBadgeClass } from '../utils/format.js';
 
@@ -20,6 +21,8 @@ const norm = (s) => String(s || '').trim().toUpperCase();
 const emptyForm = { DESCRICAO_ITEM: '', SUB_CATEGORIA: '', TAG: '' };
 
 export default function Itens() {
+  // Perfil de consulta não vê os controles de escrita (o backend também barra).
+  const escrever = podeEscrever();
   const [items, setItems] = useState([]);
   const [subcats, setSubcats] = useState([]);
   const [tags, setTags] = useState([]);
@@ -249,9 +252,14 @@ export default function Itens() {
       <h1 className="page-title">Itens</h1>
 
       <div className="toolbar">
-        <button className="btn" onClick={abrirNovo}>+ Novo item</button>
-        <button className="btn btn-ghost" onClick={() => setShowImport(true)}>Importar planilha</button>
-        <button className="btn btn-ghost" onClick={() => setShowSubcats(true)}>Subcategorias</button>
+        {escrever && (
+          <>
+            <button className="btn" onClick={abrirNovo}>+ Novo item</button>
+            <button className="btn btn-ghost" onClick={() => setShowImport(true)}>Importar planilha</button>
+            <button className="btn btn-ghost" onClick={() => setShowSubcats(true)}>Subcategorias</button>
+          </>
+        )}
+        {escrever && (
         <button
           className="btn btn-ghost"
           onClick={reprocessarTags}
@@ -260,7 +268,8 @@ export default function Itens() {
         >
           {reprocessando ? 'Reprocessando...' : '↻ Reprocessar tags (geral)'}
         </button>
-        {qtdAClassificar > 0 && (
+        )}
+        {escrever && qtdAClassificar > 0 && (
           <button
             className="btn btn-sm"
             style={{ background: 'var(--down, #e0a800)', color: '#1b1f29' }}
@@ -339,7 +348,7 @@ export default function Itens() {
       </div>
 
       <div className="card">
-        {selected.size > 0 && (
+        {escrever && selected.size > 0 && (
           <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span className="muted">{selected.size} selecionado(s)</span>
             <div className="row-actions" style={{ alignItems: 'center', gap: 8 }}>
@@ -384,8 +393,12 @@ export default function Itens() {
                     <td>{isFolha(it.CATEGORIA) ? (it.TAG || '—') : ''}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={() => abrirEdicao(it)}>Editar</button>
-                        <button className="btn btn-sm btn-danger" onClick={() => setConfirm(it)}>Excluir</button>
+                        {escrever ? (
+                          <>
+                            <button className="btn btn-sm btn-ghost" onClick={() => abrirEdicao(it)}>Editar</button>
+                            <button className="btn btn-sm btn-danger" onClick={() => setConfirm(it)}>Excluir</button>
+                          </>
+                        ) : <span className="muted">—</span>}
                       </div>
                     </td>
                   </tr>

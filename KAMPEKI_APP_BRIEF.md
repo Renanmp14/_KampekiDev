@@ -2480,3 +2480,369 @@ remanescente de versões anteriores.
   1.6.2 fecha o do login, este continua pendente.
 - **`.env` local (dev) com a chave revogada** — `npm run dev` sobe mas não lê a planilha.
 - **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
+
+---
+
+## Atualizações — 02/08/2026 — versão 1.7.0 — **Módulo de Caixa (dinheiro físico)**
+
+> Módulo **novo e desacoplado**: não tem relação com `CUSTOS`, `ITENS`, `FOLHA` ou
+> `SUBCATEGORIA`. Controla apenas entradas e saídas de **dinheiro em espécie**. Especificação de
+> origem: `PROMPT_03_MODULO_CAIXA.md`. `desktop/package.json` e `frontend/package.json` subidos
+> para **1.7.0**.
+
+### Modelo de dados — nova aba `CAIXA`
+
+```
+CAIXA: | UUID | DATA | TIPO | DESCRICAO | VALOR | PESSOA |
+```
+
+- `DATA` string `DD/MM/YYYY`; `TIPO` `"entrada"`/`"saida"` (minúsculo, sem acento); `DESCRICAO` e
+  `VALOR` (> 0, `round(…,2)`) obrigatórios; `PESSOA` opcional (origem na entrada, destino na saída).
+- **`MES_ANO` e `ANO` não são gravados** — derivam de `DATA` na leitura (`caixa.listar()`). Evita
+  coluna redundante que pode divergir do dado e economiza células do orçamento de 10M.
+- O `initSheets` cria a aba e o cabeçalho sozinho no primeiro boot; nenhuma aba existente é tocada.
+
+### Decisões de modelagem (alinhadas ponto a ponto antes de implementar)
+
+1. **O saldo é do caixa, não do filtro.** `SALDO INICIAL`, a coluna `SALDO` e o `SALDO ATUAL`
+   consideram **todas** as movimentações do recorte de tempo, ignorando os filtros de **Tipo** e
+   **Pessoa** — senão, filtrar `Tipo = Entrada` faria o "saldo" virar um acumulado de entradas, que
+   não é dinheiro em caixa. `ENTRADAS`/`SAÍDAS` e a tabela seguem todos os filtros.
+   **Consequência registrada:** com Tipo/Pessoa ativos, `SALDO ATUAL ≠ SALDO INICIAL + ENTRADAS −
+   SAÍDAS` da tela; o painel de resumo exibe uma nota explicando isso quando o caso ocorre.
+2. **Ordenação: `DATA` desc, desempate pela ordem de gravação (`_row`) desc.** A especificação pedia
+   "UUID desc", mas o UUID é **v4 aleatório** e não ordena nada; a linha da planilha é o único
+   critério estável — e é o que torna o saldo acumulado reproduzível entre recargas.
+3. **`PESSOA` é texto livre, agrupado sem caixa/acento.** "João", "joao" e "JOÃO" são a mesma pessoa
+   nos filtros e nos gráficos 3/4; a grafia **gravada nunca é alterada** (exibe a primeira
+   registrada). No formulário o campo é um `SearchableSelect` com texto livre que **sugere as
+   pessoas já usadas**, reduzindo variantes na origem.
+4. **Gráfico "Entradas × Saídas" é adaptativo e vira filtro.** Com um mês selecionado, agrega **por
+   dia**; com "todos os meses", agrega **por mês** (um ano dia a dia daria ~365 rótulos ilegíveis).
+   **Clicar numa barra filtra a página inteira** (drill-down), com chip removível; clicar de novo
+   desfaz. O `onClick` fica na **`<Bar>`**, nunca no `<BarChart>` — o handler do gráfico deriva o
+   alvo da coordenada do mouse e erra sob zoom (bug corrigido na 1.6.2).
+5. **Data validada contra o calendário real:** `31/02/2026` é recusado. Mais estrito que
+   `utils/date.js` (que aceita qualquer dia 1–31); como é módulo novo, nasce correto sem alterar o
+   comportamento das telas existentes.
+
+### Changelog técnico — 1.7.0 (por arquivo)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/sheets.js` | Nova entrada `TABS.CAIXA` (6 colunas). Nenhuma aba existente alterada. |
+| `src/services/caixa.js` | **Novo** — `listar()` (deriva `MES_ANO`/`ANO`, ordena data desc + `_row` desc, cache `caixa`), `criar`, `atualizar`, `remover`. `montarLinha()` centraliza validação/normalização (data real, tipo canônico, valor pt-BR → `round(…,2)`, pessoa opcional). `validarTipoSuave` evita que um TIPO editado à mão na planilha derrube a listagem. |
+| `src/routes/caixa.js` | **Novo** — `GET/POST /api/caixa`, `PUT/DELETE /api/caixa/:uuid`. |
+| `src/app.js` | Registra `app.use('/api/caixa', authRequired, caixaRoutes)`. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/pages/Caixa.jsx` | **Novo** — filtros (Ano, Mês, Dia, Tipo, Pessoa) + chips; 4 KPIs; tabela 70% com saldo corrido, badges e totais no rodapé; painel de resumo 30%; 4 gráficos Recharts (Entradas × Saídas com drill-down, Evolução do saldo com ponto coral no negativo, Top 10 origens, Top 10 destinos); modal de lançamento/edição com alternador Entrada/Saída. |
+| `src/api/resources.js` | `export const caixaApi = crud('/caixa')`. |
+| `src/App.jsx` | Rota `/caixa` dentro do bloco protegido. |
+| `src/components/Layout.jsx` | Nova seção **Caixa** (💵) entre "Lançamentos" e "Backup". |
+| `src/styles.css` | Bloco novo no fim: `.caixa-layout` (7fr/3fr, uma coluna ≤1100px), `.badge-entrada`/`.badge-saida`, `.btn-caixa-novo`, `.caixa-resumo*`, `.caixa-tipo*`. Nenhuma classe existente alterada. |
+| `desktop/package.json`, `frontend/package.json` | `version` 1.6.2 → **1.7.0**. |
+
+### Validação
+
+- **Serviço exercitado de verdade — 31/31.** O `services/caixa.js` real foi rodado com **dublês** da
+  camada de planilha (mesmas assinaturas de `sheets.js`): gravação na ordem das colunas, `TIPO`
+  `"Saída"` → `"saida"`, valor `"1.234,567"` → `1234.57`, `PESSOA` omitida → `""`, os 8 caminhos de
+  rejeição (sem data, ISO, `31/02`, tipo inválido, descrição vazia, valor 0/negativo/não numérico),
+  derivação de `MES_ANO`/`ANO`, ordenação com empate no mesmo dia, saldo acumulado, `atualizar`
+  não gravando payload inválido, UUID inexistente e invalidação do cache nas escritas.
+- Backend `node --check` OK (`app.js`, `sheets.js`, `caixa.js`, `routes/caixa.js`).
+- Frontend `vite build` OK (**1266 módulos**; único aviso é o de tamanho de chunk, pré-existente).
+- **Não exercitado:** escrita real na planilha e a tela no navegador — o `backend/.env` de dev segue
+  com a **chave revogada** (pendência aberta desde 26/07), então o app não lê o Sheets nesta máquina.
+
+### Pendências em aberto (módulo Caixa)
+
+- **Teste manual** com a planilha real: criar a primeira movimentação (confirma que o `initSheets`
+  criou a aba `CAIXA`), conferir o saldo acumulado da tabela, o drill-down do gráfico 1 e o
+  formulário. Antes disso é preciso repor o `GOOGLE_CREDENTIALS_JSON` do `.env` local.
+- O backup mensal (`/saida`) **não** inclui o Caixa — decisão de escopo, fácil de acrescentar depois.
+- Não há exportação de PDF do Caixa (os dashboards de Custos/Folha têm) — candidato natural se o
+  gestor pedir.
+
+### Ajuste (mesma sessão) — filtros multi-seleção e a semântica do saldo
+
+Pedido do gestor logo após a entrega: **poder escolher vários valores no mesmo filtro** (mais de um
+mês, mais de uma pessoa).
+
+- **Ano, Mês, Dia e Pessoa viraram multi-seleção** com chips removíveis, no mesmo padrão da tela de
+  Custos (`SearchableSelect` como *adicionador* via `onPick`, contador `(N)` no rótulo, chips abaixo
+  do campo). **Array vazio = todos.** Botão **"Limpar filtros"** quando há algo ativo.
+- **Tipo continua único** — só tem dois valores, e marcar os dois seria idêntico a não filtrar.
+- **Dia segue aparecendo só com UM mês selecionado** (o mesmo `DD` em meses diferentes seria
+  ambíguo) — mesma regra já adotada em Custos na 1.4.1.
+- **Clique no gráfico agora é aditivo:** clicar numa barra **acrescenta** aquele mês (ou dia) ao
+  filtro; clicar de novo o remove. Coerente com o multi.
+
+**Consequência de modelagem — período descontínuo.** Selecionar Janeiro **e** Março (sem Fevereiro)
+torna o recorte descontínuo, e a coluna `SALDO` precisou de uma definição mais forte que a original:
+
+- O saldo corrido passou a ser calculado sobre **todo o histórico** (`saldoCorrido`), não sobre o
+  recorte. O saldo de uma linha de Março **embute os movimentos de Fevereiro**, ainda que Fevereiro
+  esteja escondido — é o dinheiro que existe de fato na caixa naquele instante.
+- `SALDO INICIAL` = saldo imediatamente antes do **ponto mais antigo selecionado**; `SALDO ATUAL` =
+  saldo na **última movimentação do recorte**.
+- Por isso, com filtros de conteúdo ou meses descontínuos, **`SALDO ATUAL ≠ SALDO INICIAL + ENTRADAS
+  − SAÍDAS` da tela** — e o painel de resumo exibe a nota explicando. É a mesma regra #1 já acordada
+  ("o saldo é do caixa, não do filtro"), agora levada às últimas consequências.
+
+**Saldo inicial — decisão:** fica **derivado das movimentações**, como está. Não haverá campo de
+abertura nem aba de configuração. Quando for preciso declarar dinheiro pré-existente, o caminho é
+lançar uma **Entrada** com descrição "Saldo inicial" na data de partida — ciente de que ela conta
+como entrada nos KPIs e no gráfico de origens daquele período.
+
+**Novo arquivo:** `frontend/src/utils/caixaCalc.js` — o núcleo de cálculo (`chaveDia`, `chaveMes`,
+`valorCom`, `saldoCorrido`, `inicioKeyDe`, `saldoAntesDe`) foi extraído da tela para funções puras,
+de modo que a matemática do dinheiro pudesse ser **testada sem renderizar o React**.
+
+**Validação do ajuste:** `caixaCalc.js` exercitado de verdade — **27/27**, incluindo o cenário
+Jan + Mar com Fevereiro escondido (saldo inicial 100, saldo atual 420 embutindo os −200 de
+Fevereiro, KPIs 550/30 seguindo só o filtro) e os casos de borda de `inicioKeyDe` (sem filtro, só
+ano, meses não contíguos, mês atravessando o ano, dias ignorados com 2+ meses). `vite build` OK
+(1267 módulos). Backend **inalterado** neste ajuste.
+
+### Correção — a tela do Caixa abria já filtrada
+
+O módulo nascia com `fAnos = [ano atual]` e `fMeses = [mês atual]`, então **toda abertura já vinha
+com dois filtros aplicados** (e, em consequência, o "Saldo atual" era o do mês, não o do caixa).
+Agora **abre sem filtro nenhum**: mostra o histórico inteiro, o gráfico agrega por mês e o Saldo
+atual é o saldo real de hoje. Filtrar passou a ser uma escolha explícita do usuário. O mês/ano
+corrente continua sempre disponível **como opção** nos filtros, mesmo sem lançamento. `vite build` OK.
+
+---
+
+## Atualizações — 02/08/2026 (parte 2) — **Usuários múltiplos e perfil de acesso**
+
+> Pergunta estrutural do gestor: dá para ter **mais de um usuário** no `.env` e **restringir quem
+> pode lançar**? Sim para as duas. Implementado com o cuidado central de **não afetar o app desktop**.
+
+### Como ficou
+
+- **`USUARIOS_JSON` no `.env`** — lista de `{ email, senha, perfil }` em uma linha. Perfis:
+  **`admin`** (faz tudo) e **`leitura`** (só consulta).
+- **`ADMIN_EMAIL`/`ADMIN_PASSWORD` continuam valendo como fallback**, tratados como `admin`. É o que
+  garante que **nenhuma instalação existente precise mudar de arquivo** — em especial o **desktop**,
+  cujo `.env` mora na máquina do cliente (`%APPDATA%\Kampeki Finance\.env`). Sem `USUARIOS_JSON`, o
+  comportamento é idêntico ao de antes.
+- **Trava de escrita:** novo middleware `escritaRequerAdmin` aplicado junto do `authRequired` em
+  **todos** os grupos de rota. Bloqueia **por método** (qualquer POST/PUT/PATCH/DELETE), não por
+  caminho — assim cobre importações, edições em massa e **módulos futuros**, sem depender de alguém
+  lembrar de proteger cada rota nova. `GET` fica liberado a qualquer usuário autenticado.
+- **Frontend:** o perfil volta no login, é guardado em `localStorage` e a interface **esconde** os
+  controles de escrita (novo/editar/excluir/importar/em massa/classificar/reprocessar) em Custos,
+  Itens, Folha, Caixa, Fornecedor e Tag. Além disso, o `client.js` **recusa localmente** qualquer
+  chamada não-GET de um usuário de leitura — rede de segurança caso algum botão escape.
+
+### ⚠ Alcance real da restrição (decisão registrada)
+
+**A trava só é uma restrição de verdade na versão WEB**, onde o backend roda na VM e o `.env` está no
+servidor. No **app desktop**, o backend roda na máquina do próprio usuário e o `.env` é um arquivo
+que ele pode abrir: dá para ler as senhas de todos e trocar o próprio `perfil` para `admin`. Ali o
+perfil é **proteção contra engano, não contra intenção**.
+
+> **Consequência prática:** quem precisa ter acesso restrito de verdade deve usar a **URL web**
+> (`kampeki.duckdns.org`), não o instalador. O desktop fica para quem é admin.
+
+Some-se o lado operacional: no desktop, cada máquina tem seu `.env`, então criar usuário significa
+distribuir arquivo; na VM é editar o `.env` e `pm2 restart`. Se um dia isso incomodar, o caminho
+natural é uma aba `USUARIOS` na planilha com senha em **hash (bcrypt)**, gerida por uma tela do app —
+avaliado nesta sessão e **adiado** de propósito, por ser bem mais trabalho para o ganho atual.
+
+### Como configurar o `.env` (exemplo real, com o admin preservado)
+
+**O admin não precisa ser repetido no JSON.** Ele continua vindo de
+`ADMIN_EMAIL`/`ADMIN_PASSWORD`; o `USUARIOS_JSON` serve para **acrescentar** gente. O mínimo para
+ganhar um usuário de consulta, mantendo o acesso de hoje intacto:
+
+```dotenv
+# ─── já existe, NÃO mexer: continua sendo o admin ───
+ADMIN_EMAIL=admin@financesheet.local
+ADMIN_PASSWORD=a_senha_que_ja_esta_la
+
+# ─── novo: só o usuário de consulta ───
+USUARIOS_JSON='[{"email":"consulta@financesheet.local","senha":"SenhaForte","perfil":"leitura"}]'
+```
+
+Para **mais de um admin**, aí sim liste todos (o `ADMIN_*` segue valendo em paralelo) — sempre em
+**uma linha só**:
+
+```dotenv
+USUARIOS_JSON='[{"email":"socio@financesheet.local","senha":"SenhaDoSocio","perfil":"admin"},{"email":"consulta@financesheet.local","senha":"SenhaDaConsulta","perfil":"leitura"}]'
+```
+
+#### 🔴 Achado — `#` na senha quebra o `USUARIOS_JSON` sem aspas
+
+O `dotenv` remove **comentário embutido** de valores sem aspas, então um `#` dentro da senha corta o
+JSON no meio e o `JSON.parse` falha (o login cairia silenciosamente só no admin do `.env`).
+Comprovado rodando o `dotenv` do próprio projeto:
+
+| Forma | Resultado |
+|---|---|
+| `USUARIOS_JSON=[{... "senha":"abc123" ...}]` | OK |
+| `USUARIOS_JSON='[{... "senha":"abc123" ...}]'` | OK |
+| `USUARIOS_JSON=[{... "senha":"Ab#123" ...}]` | **quebra** — `Unterminated string in JSON` |
+| `USUARIOS_JSON='[{... "senha":"Ab#123" ...}]'` | OK |
+
+**Regra:** envolver **todo** o JSON em **aspas simples** (aspas duplas ficam por conta do JSON
+interno). Vale sempre, não só quando há `#`.
+
+#### Demais regras de formato
+
+- **Uma linha só** — quebrar o JSON em várias linhas não funciona.
+- **Sem espaço** em volta do `=`.
+- **Email é case-insensitive; senha é comparada exatamente.**
+- `perfil` aceita `admin` ou `leitura` (mais os sinônimos abaixo). Erro de digitação vira **leitura**.
+- Listar o mesmo email que está em `ADMIN_EMAIL` faz o **JSON prevalecer** sobre o fallback.
+
+#### Aplicar e conferir
+
+```bash
+# na VM
+nano ~/_KampekiDev/KampekiDash/backend/.env      # acrescenta o USUARIOS_JSON
+pm2 restart kampeki
+
+# conferindo de qualquer máquina
+curl -s -X POST https://kampeki.duckdns.org/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"consulta@financesheet.local","password":"SenhaForte"}'
+```
+
+Esperado: `{"token":"...","email":"consulta@financesheet.local","perfil":"leitura"}`. Se voltar
+`"perfil":"admin"` sem ter pedido, o `USUARIOS_JSON` **não foi lido** — conferir as aspas e se o
+`pm2 restart` rodou.
+
+> **No desktop, nada muda.** Sem `USUARIOS_JSON` no `.env` da máquina do cliente, o
+> `admin@financesheet.local` entra com acesso total exatamente como antes.
+
+### Decisões menores
+
+- **Perfil desconhecido vira `leitura`** (menor privilégio): um perfil digitado errado no `.env`
+  nunca deve virar acesso total por acidente. Sinônimos aceitos: `administrador`/`gestor` → admin;
+  `consulta`/`readonly`/`somente-leitura` → leitura.
+- **Tokens antigos continuam valendo:** o JWT passou a carregar `perfil`, mas o `role` (que já
+  existia e nunca era lido) é mantido e serve de fallback — sessões abertas antes do deploy não
+  quebram nem perdem permissão.
+- **`USUARIOS_JSON` inválido não derruba o login:** loga o erro e cai no admin do `.env`.
+
+### Changelog técnico — 02/08/2026 (parte 2)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/usuarios.js` | **Novo** — `listarUsuarios()` (USUARIOS_JSON + fallback do admin), `autenticar(email, senha)`, `podeEscrever(perfil)`, `normalizarPerfil()`. |
+| `src/routes/auth.js` | Login usa `autenticar()`; JWT passa a levar `perfil` (e mantém `role` por compat); resposta inclui `perfil`. |
+| `src/middleware/auth.js` | Novo `escritaRequerAdmin` — libera GET/HEAD/OPTIONS, exige admin no resto, 403 com mensagem em português. |
+| `src/app.js` | `const protegidas = [authRequired, escritaRequerAdmin]` aplicado aos seis grupos de rota. |
+| `.env.example` (backend e `desktop/build/`) | Bloco documentando `USUARIOS_JSON`, os perfis e a ressalva do desktop. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/api/client.js` | `setPerfil`/`getPerfil`/`podeEscrever`/`clearPerfil`; `clearToken` também limpa o perfil; `request()` recusa não-GET de quem é leitura (o login fica de fora). |
+| `src/api/resources.js` | `login()` grava o perfil devolvido. |
+| `src/components/SimpleCrudPage.jsx` | Esconde o formulário de cadastro, o import e os botões editar/excluir (cobre Fornecedor e Tag). |
+| `src/pages/Custos.jsx` | Esconde novo/importações/a classificar, a barra de edição em massa e as ações da linha. |
+| `src/pages/Itens.jsx` | Esconde novo/importar/subcategorias/reprocessar/a classificar, edição em massa e ações da linha. |
+| `src/pages/Folha.jsx`, `src/pages/Caixa.jsx` | Escondem "+ Novo" e as ações da linha. |
+
+### Validação
+
+- **Exercitado por HTTP contra o app Express real — 19/19**, sem tocar no Google Sheets (o middleware
+  roda antes do handler; as rotas usadas não existem de propósito, então **404 = passou na trava** e
+  **403 = barrado nela**): login pelo fallback do `.env`, login dos usuários do JSON, email
+  case-insensitive, senha errada e usuário inexistente → 401, perfil desconhecido → leitura,
+  POST/PUT/DELETE de leitura → 403 com a mensagem certa, GET de leitura → passa, POST de admin →
+  passa, sem token → 401, **token de versão anterior (só `role`) ainda escreve**, token sem perfil →
+  tratado como leitura, e `USUARIOS_JSON` quebrado caindo para o admin do `.env`.
+- `node --check` OK em `app.js`, `auth.js` (rota), `middleware/auth.js` e `usuarios.js`.
+- `vite build` OK (1267 módulos).
+- **Não exercitado:** a aparência das telas com um usuário de leitura (é visual) e o login real na VM.
+
+### Pendências
+
+- **Ao publicar:** acrescentar `USUARIOS_JSON` ao `.env` **da VM** e `pm2 restart kampeki`. O `.env`
+  do desktop **não precisa de nenhuma alteração**.
+- Se o gestor quiser mesmo restringir alguém que usa Windows, orientar essa pessoa a usar a **URL
+  web** em vez do instalador.
+
+---
+
+## Fechamento da sessão 02/08/2026 — inventário e roteiro de publicação
+
+> Consolidação das duas frentes do dia (módulo Caixa e usuários/perfis), para não ter que garimpar
+> as pendências espalhadas nas seções acima.
+
+### Arquivos tocados na sessão
+
+**Novos (5)**
+
+| Arquivo | O que é |
+|---|---|
+| `backend/src/services/caixa.js` | Serviço do Caixa (CRUD + validação/normalização). |
+| `backend/src/routes/caixa.js` | Rotas `/api/caixa`. |
+| `backend/src/services/usuarios.js` | Usuários e perfis (`USUARIOS_JSON` + fallback do admin). |
+| `frontend/src/pages/Caixa.jsx` | Tela do Caixa (filtros, KPIs, tabela, 4 gráficos, modal). |
+| `frontend/src/utils/caixaCalc.js` | Núcleo de cálculo do saldo (funções puras, testáveis). |
+
+**Alterados (14)**
+
+`backend/src/services/sheets.js` (aba `CAIXA`) · `backend/src/app.js` (rota do Caixa + `protegidas`) ·
+`backend/src/routes/auth.js` · `backend/src/middleware/auth.js` · `backend/.env.example` ·
+`desktop/build/.env.example` · `frontend/src/App.jsx` · `frontend/src/api/resources.js` ·
+`frontend/src/api/client.js` · `frontend/src/components/Layout.jsx` ·
+`frontend/src/components/SimpleCrudPage.jsx` · `frontend/src/pages/Custos.jsx` ·
+`frontend/src/pages/Itens.jsx` · `frontend/src/pages/Folha.jsx` · `frontend/src/styles.css` ·
+`desktop/package.json` + `frontend/package.json` (**versão 1.7.0**).
+
+### Estado da validação
+
+| Frente | Como foi verificada | Resultado |
+|---|---|---|
+| Serviço do Caixa | `services/caixa.js` real com dublês da camada de planilha | **31/31** |
+| Cálculo de saldo | `utils/caixaCalc.js` real, incluindo período descontínuo | **27/27** |
+| Usuários e perfis | HTTP contra o app Express real, sem tocar no Sheets | **19/19** |
+| Backend | `node --check` nos arquivos alterados | OK |
+| Frontend | `vite build` | OK (1267 módulos) |
+
+**Nada foi escrito na planilha real** nesta sessão: o `backend/.env` de dev segue com a chave da
+Service Account **revogada** (pendência aberta desde 26/07). Por isso, tudo que depende de ver o app
+rodando continua pendente de teste manual.
+
+### Roteiro de publicação (na ordem)
+
+1. **Repor a credencial de dev** — trocar `GOOGLE_CREDENTIALS_JSON` no `backend/.env` pelo JSON da
+   chave rotacionada. Sem isso o `npm run dev` sobe mas não lê a planilha.
+2. **Testar no navegador** (`npm run dev` no `frontend/` + backend): criar a primeira movimentação
+   — é o que faz o `initSheets` criar a aba **`CAIXA`** —, conferir o saldo corrido, os multi-filtros
+   com chips, o drill-down do gráfico e a tela logado como usuário de **leitura**.
+3. **Commit + tag** `v1.7.0` (a `version` do `desktop/package.json` e a tag têm de bater, senão o
+   workflow aborta de propósito) → GitHub Actions → publicar o Release (rascunho) para o auto-update
+   do Windows enxergar.
+4. **Web (VM):** `git pull` + `pm2 restart kampeki`; **`npm run build` no Windows + `scp` do `dist`**
+   (o destino termina em `/frontend/`, não em `/frontend/dist`).
+5. **Só então**, se for usar perfis: acrescentar `USUARIOS_JSON` ao `.env` **da VM** (aspas simples,
+   uma linha) e `pm2 restart kampeki` de novo.
+
+> Lembrete que já custou caro antes: **publicar release não atualiza a web, e atualizar a web não
+> atualiza o desktop.** São dois destinos a partir do mesmo commit.
+
+### Pendências herdadas (não tocadas nesta sessão)
+
+- 🔴 **CORS ainda com wildcard** (`app.use(cors())`) — aberto desde a 1.5.2, com o app na internet.
+- **`.env` local de dev com a chave revogada** (item 1 acima).
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
+- **v1.6.2 nunca foi publicada:** se a tag `v1.6.2` não saiu, a 1.7.0 leva junto o rate limit do
+  login, a responsividade de telefone, a sidebar e a correção do zoom — e a VM precisa de
+  **`TRUST_PROXY=1`** no `.env`, senão o limitador conta todos os visitantes no mesmo balde.

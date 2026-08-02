@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 
-import { authRequired } from './middleware/auth.js';
+import { authRequired, escritaRequerAdmin } from './middleware/auth.js';
 import { initSheets, getCellUsage } from './services/sheets.js';
 import { carregar as carregarSubcategorias } from './services/subcategoria.js';
 
@@ -15,6 +15,7 @@ import tagRoutes from './routes/tag.js';
 import itensRoutes from './routes/itens.js';
 import custosRoutes from './routes/custos.js';
 import folhaRoutes from './routes/folha.js';
+import caixaRoutes from './routes/caixa.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -83,12 +84,17 @@ app.get('/api/meta/cell-usage', authRequired, async (req, res, next) => {
   }
 });
 
-// Rotas protegidas por JWT.
-app.use('/api/fornecedor', authRequired, fornecedorRoutes);
-app.use('/api/tag', authRequired, tagRoutes);
-app.use('/api/itens', authRequired, itensRoutes);
-app.use('/api/custos', authRequired, custosRoutes);
-app.use('/api/folha', authRequired, folhaRoutes);
+// Rotas protegidas por JWT. `escritaRequerAdmin` vem logo depois do
+// authRequired: consultar (GET) é liberado a qualquer usuário autenticado;
+// lançar/editar/excluir exige perfil 'admin'.
+const protegidas = [authRequired, escritaRequerAdmin];
+
+app.use('/api/fornecedor', protegidas, fornecedorRoutes);
+app.use('/api/tag', protegidas, tagRoutes);
+app.use('/api/itens', protegidas, itensRoutes);
+app.use('/api/custos', protegidas, custosRoutes);
+app.use('/api/folha', protegidas, folhaRoutes);
+app.use('/api/caixa', protegidas, caixaRoutes);
 
 // --- Frontend estático (produção / app empacotado) ------------------------
 // Quando há um build do frontend disponível, o próprio Express o serve na mesma

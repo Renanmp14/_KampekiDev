@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampeki Finance — Notas da versão 1.7.0</title>
+<style>html{background:#0e1b18}@media(prefers-color-scheme:light){html{background:#efe7dd}}body{margin:0}</style>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de;
+    --text:#173229; --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --olive-soft:rgba(111,125,51,.14); --teal-soft:rgba(62,118,128,.12);
+    --ring:rgba(224,106,84,.45);
+    --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+      --muted:#9bb0a7; --border:#2a4e44;
+      --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+      --primary-soft:rgba(255,139,124,.14);
+      --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+      --olive-soft:rgba(191,203,127,.16); --teal-soft:rgba(107,163,172,.16);
+      --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de; --text:#173229;
+    --muted:#5c7168; --border:#e2d6c7; --primary:#e06a54; --primary-ink:#173229;
+    --primary-fill:#ff8b7c; --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --olive-soft:rgba(111,125,51,.14); --teal-soft:rgba(62,118,128,.12);
+    --ring:rgba(224,106,84,.45); --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+    --muted:#9bb0a7; --border:#2a4e44; --primary:#ff8b7c; --primary-ink:#123029;
+    --primary-fill:#ff8b7c; --primary-soft:rgba(255,139,124,.14);
+    --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+    --olive-soft:rgba(191,203,127,.16); --teal-soft:rgba(107,163,172,.16);
+    --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    padding:clamp(20px,5vw,64px) 20px 72px;
+  }
+  .wrap{max-width:940px; margin:0 auto}
+  .brandbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:clamp(30px,6vw,56px)}
+  .wordmark{font-weight:800; letter-spacing:.26em; font-size:.82rem; text-transform:uppercase; color:var(--text)}
+  .wordmark span{color:var(--primary)}
+  .stamp{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .eyebrow{font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); margin:0 0 14px}
+  h1{font-size:clamp(2.1rem,6vw,3.4rem); line-height:1.03; font-weight:800; letter-spacing:-.028em; text-wrap:balance; margin:0 0 18px}
+  h1 .accent{color:var(--primary)}
+  .lede{font-size:clamp(1.02rem,2.3vw,1.24rem); color:var(--muted); max-width:64ch; margin:0 0 24px}
+  .meta{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:8px}
+  .pill{display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:.82rem; padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface)}
+  .pill.version{background:var(--primary-fill); color:var(--primary-ink); border-color:transparent}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--olive)}
+
+  .sec-label{font-size:12px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin:0 0 18px; display:flex; align-items:center; gap:12px}
+  .sec-label::after{content:""; flex:1; height:1px; background:var(--border)}
+  section{margin:clamp(40px,7vw,64px) 0}
+
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px}
+  .tile{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 18px 20px; box-shadow:var(--shadow)}
+  .tile .k{font-size:1.5rem; line-height:1}
+  .tile h4{margin:12px 0 6px; font-size:1rem; font-weight:700; letter-spacing:-.01em}
+  .tile p{margin:0; font-size:.9rem; color:var(--muted)}
+  .tile.destaque{border-color:var(--primary); box-shadow:0 0 0 1px var(--primary), var(--shadow)}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:clamp(22px,3.4vw,34px); box-shadow:var(--shadow); margin:18px 0}
+  .card h3{font-size:clamp(1.2rem,2.5vw,1.5rem); font-weight:800; letter-spacing:-.02em; margin:0 0 10px}
+  .card p{margin:0 0 12px}
+  .card p:last-child{margin-bottom:0}
+  .card .os-head{display:flex; align-items:center; gap:12px; margin:0 0 16px}
+  .os-badge{display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:11px; background:var(--primary-soft); font-size:1.3rem}
+  .card.hero{border-color:var(--primary)}
+
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:760px){ .cols{grid-template-columns:1fr} }
+
+  ol.steps{margin:0; padding:0; list-style:none; counter-reset:s}
+  ol.steps li{position:relative; padding:0 0 16px 44px; counter-increment:s}
+  ol.steps li::before{content:counter(s); position:absolute; left:0; top:-2px; width:30px; height:30px; border-radius:50%; background:var(--primary-fill); color:var(--primary-ink); font-weight:800; font-size:.9rem; display:flex; align-items:center; justify-content:center}
+  ol.steps li::after{content:""; position:absolute; left:14px; top:30px; bottom:2px; width:2px; background:var(--border)}
+  ol.steps li:last-child{padding-bottom:0}
+  ol.steps li:last-child::after{display:none}
+  ol.steps b{font-weight:700}
+
+  ul.plain{margin:0; padding-left:20px; color:var(--muted)}
+  ul.plain li{margin-bottom:7px}
+  ul.plain li:last-child{margin-bottom:0}
+
+  .kpirow{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:4px 0 18px}
+  .kpi{background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px}
+  .kpi .lbl{font-size:.7rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+  .kpi .val{font-size:1.15rem; font-weight:800; margin-top:5px; letter-spacing:-.02em}
+  .kpi .hint{font-size:.78rem; color:var(--muted); margin-top:4px}
+  .v-in{color:var(--olive)} .v-out{color:var(--primary)} .v-sal{color:var(--teal)}
+
+  table.demo{width:100%; border-collapse:collapse; font-size:.87rem; margin:2px 0 4px}
+  table.demo th{text-align:left; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; padding:8px 10px; border-bottom:1px solid var(--border)}
+  table.demo td{padding:9px 10px; border-bottom:1px solid var(--border)}
+  table.demo tr:last-child td{border-bottom:0}
+  table.demo .num{text-align:right; white-space:nowrap}
+  .tag{display:inline-block; padding:2px 9px; border-radius:999px; font-size:.72rem; font-weight:700}
+  .tag-in{background:var(--olive-soft); color:var(--olive)}
+  .tag-out{background:var(--primary-soft); color:var(--primary)}
+  .scroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+
+  .chips{display:flex; flex-wrap:wrap; gap:7px; margin:10px 0 2px}
+  .chip{display:inline-flex; align-items:center; gap:7px; font-size:.8rem; font-weight:600; padding:5px 11px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border)}
+  .chip .x{color:var(--muted); font-weight:700}
+
+  code,.mono{font-family:var(--mono); font-size:.9em}
+  .path{display:block; font-family:var(--mono); font-size:.86rem; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin:8px 0; overflow-x:auto; white-space:nowrap}
+  .callout{border-left:4px solid var(--teal); background:var(--surface-2); border-radius:0 12px 12px 0; padding:14px 16px; margin:16px 0; font-size:.94rem}
+  .callout.warn{border-left-color:var(--primary)}
+  .callout.good{border-left-color:var(--olive)}
+  .callout b{font-weight:700}
+  .callout p{margin:0 0 8px} .callout p:last-child{margin:0}
+  .kbd{font-family:var(--mono); font-size:.82rem; background:var(--surface); border:1px solid var(--border); border-bottom-width:2px; border-radius:6px; padding:1px 7px}
+  .foot{margin-top:56px; padding-top:22px; border-top:1px solid var(--border); color:var(--muted); font-size:.85rem}
+</style>
+
+<div class="page">
+<div class="wrap">
+
+  <div class="brandbar">
+    <div class="wordmark">KAM<span>PEKI</span> · FINANCE</div>
+    <div class="stamp">Notas da versão · 02 / 08 / 2026</div>
+  </div>
+
+  <p class="eyebrow">Notas da versão</p>
+  <h1>Versão 1.7.0 — <span class="accent">chegou o Caixa</span></h1>
+  <p class="lede">
+    Esta versão traz um módulo inteiramente novo para controlar o
+    <b>dinheiro físico</b>: o que entra, o que sai, de quem veio, para quem foi —
+    e quanto sobrou. Além dele, o sistema passa a aceitar <b>mais de um usuário</b>,
+    com a opção de dar acesso apenas de consulta a quem não deve lançar.
+  </p>
+  <div class="meta">
+    <span class="pill version"><span class="dot"></span> v1.7.0</span>
+    <span class="pill">💵 Novo módulo</span>
+    <span class="pill">🪟 Windows</span>
+    <span class="pill">🌐 Web</span>
+  </div>
+
+  <!-- ===== O que muda ===== -->
+  <section>
+    <p class="sec-label">O que muda</p>
+    <div class="tiles">
+      <div class="tile destaque"><div class="k">💵</div><h4>Módulo Caixa</h4><p>Nova seção no menu para lançar entradas e saídas de dinheiro em espécie.</p></div>
+      <div class="tile"><div class="k">📊</div><h4>Saldo sempre à vista</h4><p>Saldo inicial, saldo atual e o saldo linha a linha, calculados sozinhos.</p></div>
+      <div class="tile"><div class="k">🔎</div><h4>Filtros combinados</h4><p>Vários meses, vários dias e várias pessoas ao mesmo tempo, em qualquer filtro.</p></div>
+      <div class="tile"><div class="k">👥</div><h4>Vários usuários</h4><p>Agora dá para ter mais de um login — e restringir quem pode lançar.</p></div>
+    </div>
+  </section>
+
+  <!-- ===== CAIXA — tópico principal ===== -->
+  <section>
+    <p class="sec-label">O destaque desta versão — módulo Caixa</p>
+
+    <div class="card hero">
+      <div class="os-head"><span class="os-badge">💵</span><h3 style="margin:0">Para que serve</h3></div>
+      <p>O Caixa controla o <b>dinheiro físico</b> — aquele que passa pela mão, fora
+      das notas e da folha. É um módulo <b>independente</b>: não se mistura com Custos,
+      Itens nem Folha, e nada do que você lançar aqui aparece nos dashboards deles.</p>
+      <p style="color:var(--muted); margin-bottom:0">Cada movimentação responde quatro perguntas:
+      <b>quando</b>, <b>entrou ou saiu</b>, <b>quanto</b> e <b>o que foi</b> — mais uma
+      opcional, mas que vale muito a pena preencher: <b>de quem veio</b> (ou para quem foi).</p>
+    </div>
+
+    <div class="card">
+      <h3>Como lançar</h3>
+      <p>Menu lateral → seção <b>Caixa</b> → botão <b>“+ Nova Movimentação”</b>.</p>
+      <ol class="steps">
+        <li><b>Data</b> — já vem preenchida com o dia de hoje; troque se o dinheiro entrou/saiu em outra data.</li>
+        <li><b>Entrada ou Saída</b> — um clique. O botão fica verde para entrada e coral para saída.</li>
+        <li><b>Descrição</b> — o que foi essa movimentação. É obrigatório, e é o que você vai ler daqui a três meses tentando lembrar.</li>
+        <li><b>Valor</b> — sempre positivo. Quem decide se soma ou subtrai é o tipo escolhido acima.</li>
+        <li><b>Origem</b> (se for entrada) ou <b>Destino</b> (se for saída) — de quem veio / para quem foi. É opcional, mas é o que alimenta os dois gráficos de pessoas.</li>
+      </ol>
+      <div class="callout good">
+        <b>O campo de pessoa sugere quem você já usou.</b> Comece a digitar e ele mostra
+        os nomes já registrados — assim “João” não vira “joão” e “JOAO” em três lançamentos
+        diferentes. Se for alguém novo, é só digitar o nome.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>A tabela e o saldo</h3>
+      <p>Cada linha mostra a movimentação e, na última coluna, <b>quanto havia no caixa
+      naquele momento</b> — o saldo vai correndo sozinho, de baixo para cima:</p>
+      <div class="scroll">
+        <table class="demo">
+          <thead>
+            <tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Pessoa</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Saldo</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>02/08/2026</td><td><span class="tag tag-out">Saída</span></td><td>Compra de gelo</td><td>Mercado Central</td><td class="num">—</td><td class="num v-out">R$ 80,00</td><td class="num">R$ 1.170,00</td></tr>
+            <tr><td>01/08/2026</td><td><span class="tag tag-in">Entrada</span></td><td>Venda do balcão</td><td>Caixa do salão</td><td class="num v-in">R$ 450,00</td><td class="num">—</td><td class="num">R$ 1.250,00</td></tr>
+            <tr><td>31/07/2026</td><td><span class="tag tag-out">Saída</span></td><td>Táxi da entrega</td><td>Motoboy</td><td class="num">—</td><td class="num v-out">R$ 35,00</td><td class="num">R$ 800,00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--muted); font-size:.9rem; margin-top:14px">
+      Acima da tabela ficam os quatro números do período:</p>
+      <div class="kpirow">
+        <div class="kpi"><div class="lbl">Entradas</div><div class="val v-in">R$ 450,00</div></div>
+        <div class="kpi"><div class="lbl">Saídas</div><div class="val v-out">R$ 115,00</div></div>
+        <div class="kpi"><div class="lbl">Saldo inicial</div><div class="val">R$ 835,00</div><div class="hint">antes do período filtrado</div></div>
+        <div class="kpi"><div class="lbl">Saldo atual</div><div class="val v-sal">R$ 1.170,00</div><div class="hint">o que há no caixa</div></div>
+      </div>
+      <div class="callout">
+        <b>O saldo é do caixa, não do filtro.</b> Se você filtrar só as saídas, ou só
+        as movimentações de uma pessoa, os totais de Entradas e Saídas acompanham o
+        filtro — mas o <b>Saldo atual continua sendo o dinheiro que existe de verdade</b>,
+        contando tudo. É proposital: um “saldo” que mudasse conforme o filtro não seria
+        saldo nenhum. Quando isso acontece, o painel da direita avisa na tela.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Filtros — vários de uma vez</h3>
+      <p>Ano, Mês, Dia e Pessoa aceitam <b>mais de uma escolha ao mesmo tempo</b>. Cada
+      valor escolhido vira uma etiqueta abaixo do campo, e você tira clicando no ✕:</p>
+      <div class="chips">
+        <span class="chip">Junho/2026 <span class="x">✕</span></span>
+        <span class="chip">Julho/2026 <span class="x">✕</span></span>
+        <span class="chip">Agosto/2026 <span class="x">✕</span></span>
+      </div>
+      <ul class="plain" style="margin-top:16px">
+        <li>A tela <b>abre sem filtro nenhum</b>, mostrando o caixa inteiro. Filtrar é escolha sua.</li>
+        <li>O filtro de <b>Dia</b> só aparece quando há <b>um único mês</b> selecionado — o mesmo dia em meses diferentes seria ambíguo.</li>
+        <li><b>Limpar filtros</b> devolve tudo ao estado inicial de uma vez.</li>
+        <li>Escolher <b>meses separados</b> (junho e agosto, sem julho) funciona: a tabela mostra só os dois, e o saldo continua contando julho — porque o dinheiro passou por lá.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Os quatro gráficos</h3>
+      <div class="cols">
+        <div>
+          <div class="os-head" style="margin-bottom:10px"><span class="os-badge">📊</span><b>Entradas × Saídas</b></div>
+          <p style="color:var(--muted); font-size:.92rem; margin:0">Compara o que entrou e o que saiu.
+          Com um mês selecionado, mostra <b>dia a dia</b>; sem mês, mostra <b>mês a mês</b>.
+          <b>Clicar numa barra filtra a tela inteira</b> — e clicar de novo desfaz.</p>
+        </div>
+        <div>
+          <div class="os-head" style="margin-bottom:10px"><span class="os-badge">📈</span><b>Evolução do saldo</b></div>
+          <p style="color:var(--muted); font-size:.92rem; margin:0">A linha do dinheiro ao longo do
+          tempo. Se em algum momento o caixa ficar <b>negativo</b>, aquele ponto aparece
+          marcado em vermelho — fácil de achar.</p>
+        </div>
+        <div>
+          <div class="os-head" style="margin-bottom:10px"><span class="os-badge">🟢</span><b>De onde mais entrou</b></div>
+          <p style="color:var(--muted); font-size:.92rem; margin:0">As 10 maiores origens do dinheiro,
+          com valor e percentual. Só aparece quem teve o campo <b>Origem</b> preenchido.</p>
+        </div>
+        <div>
+          <div class="os-head" style="margin-bottom:10px"><span class="os-badge">🔴</span><b>Para onde mais saiu</b></div>
+          <p style="color:var(--muted); font-size:.92rem; margin:0">O espelho do anterior: os 10 maiores
+          destinos. É aqui que costuma aparecer o gasto que ninguém tinha notado.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Começando do jeito certo</h3>
+      <p>Se a caixinha <b>já tem dinheiro hoje</b>, o sistema não tem como adivinhar quanto —
+      ele só sabe somar o que for lançado. Então o primeiro lançamento deve ser o que já existe:</p>
+      <ol class="steps">
+        <li>Conte o dinheiro que está na caixinha agora.</li>
+        <li>Lance uma <b>Entrada</b> com a descrição <b>“Saldo inicial”</b>, na data em que você começou a usar o módulo.</li>
+        <li>Daí em diante, lance normalmente. O saldo passa a bater com o dinheiro real.</li>
+      </ol>
+      <div class="callout warn">
+        <b>Só um detalhe:</b> esse lançamento de abertura conta como <b>entrada</b> nos totais
+        e no gráfico de origens do período em que foi lançado. É o custo de fazer pelo caminho
+        simples — se um dia isso incomodar, dá para criar um campo separado só para a abertura.
+      </div>
+      <div class="callout">
+        <b>Na planilha:</b> uma aba nova chamada <b>CAIXA</b> é criada <b>sozinha</b> assim que
+        você salva a primeira movimentação. Nenhuma aba existente é alterada.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Usuários ===== -->
+  <section>
+    <p class="sec-label">Também nesta versão — vários usuários</p>
+    <div class="card">
+      <div class="os-head"><span class="os-badge">👥</span><h3 style="margin:0">Acesso total ou só consulta</h3></div>
+      <p>Até agora existia um único login. Agora é possível ter <b>vários</b>, cada um
+      com um de dois níveis:</p>
+      <div class="cols">
+        <div>
+          <div class="os-head" style="margin-bottom:10px"><span class="os-badge">🛠️</span><b>Administrador</b></div>
+          <p style="color:var(--muted); margin:0">Faz tudo: lança, edita, exclui, importa
+          planilhas e notas. É o acesso que existe hoje.</p>
+        </div>
+        <div>
+          <div class="os-head" style="margin-bottom:10px"><span class="os-badge">👁️</span><b>Consulta</b></div>
+          <p style="color:var(--muted); margin:0">Vê tudo — telas, dashboards, relatórios em
+          PDF — mas <b>não lança nem altera nada</b>. Os botões de novo, editar, excluir e
+          importar simplesmente não aparecem para essa pessoa.</p>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:20px">
+        <b>Seu login continua igual.</b> Nada muda para quem já usa o sistema: o usuário
+        de hoje segue entrando com a mesma senha e com acesso total. Os usuários extras
+        são acrescentados na configuração, quando você quiser.
+      </div>
+      <div class="callout warn">
+        <p><b>Onde a restrição vale de verdade:</b> na <b>versão web</b> (acesso pelo
+        navegador), o controle fica no servidor e não há como contornar.</p>
+        <p>No <b>aplicativo instalado</b>, o sistema roda na máquina da própria pessoa, que
+        tem acesso ao arquivo de configuração — ali o perfil evita <b>engano</b>, não impede
+        quem realmente quiser burlar. Por isso, quem deve ter acesso restrito deve usar o
+        <b>endereço web</b>, e não o instalador.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Como atualizar ===== -->
+  <section>
+    <p class="sec-label">Como receber esta versão</p>
+    <div class="cols">
+      <div class="card" style="margin:0">
+        <div class="os-head"><span class="os-badge">🪟</span><h3 style="margin:0">Windows</h3></div>
+        <p style="color:var(--muted); margin:0"><b>Automático.</b> Abra o app: ele baixa a
+        versão nova em segundo plano e instala quando você fecha. Na próxima abertura, o
+        rodapé já mostra <b>v1.7.0</b> e o <b>Caixa</b> aparece no menu. Seu login e seus
+        dados permanecem. Se quiser antecipar, use <b>Sistema → Configurações →
+        “🔄 Verificar atualizações”</b>.</p>
+      </div>
+      <div class="card" style="margin:0">
+        <div class="os-head"><span class="os-badge">🌐</span><h3 style="margin:0">Web (navegador)</h3></div>
+        <p style="color:var(--muted); margin:0"><b>Nada a fazer.</b> Basta recarregar a
+        página. Se o menu Caixa não aparecer de primeira, force a recarga com
+        <span class="kbd">Ctrl</span> + <span class="kbd">F5</span>
+        (no Mac, <span class="kbd">⌘</span> + <span class="kbd">⇧</span> + <span class="kbd">R</span>).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Primeiros passos ===== -->
+  <section>
+    <p class="sec-label">Primeiros passos sugeridos</p>
+    <div class="card">
+      <ol class="steps">
+        <li>Abra <b>Caixa</b> no menu lateral e lance o <b>“Saldo inicial”</b> com o dinheiro que já está na caixinha.</li>
+        <li>Lance as movimentações do dia, preenchendo <b>Origem/Destino</b> — é o que faz os gráficos de pessoas valerem alguma coisa.</li>
+        <li>Depois de uma ou duas semanas, abra os gráficos <b>“Para onde mais saiu dinheiro”</b> e veja se o retrato bate com a sua percepção.</li>
+        <li>Ao fim do mês, compare o <b>Saldo atual</b> da tela com o dinheiro contado na mão. Se der diferença, algo não foi lançado.</li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="foot">
+    Kampeki Finance · versão 1.7.0 · notas da versão.<br>
+    Em caso de dúvida, entre em contato com o responsável pelo sistema.
+  </div>
+
+</div>
+</div>
+</body>
+</html>

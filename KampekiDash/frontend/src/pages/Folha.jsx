@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { folhaApi, tagApi } from '../api/resources.js';
+import { podeEscrever } from '../api/client.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { brl, toNum } from '../utils/format.js';
@@ -18,6 +19,8 @@ function brToMonth(v) {
 }
 
 export default function Folha() {
+  // Perfil de consulta não vê os controles de escrita (o backend também barra).
+  const escrever = podeEscrever();
   const [folha, setFolha] = useState([]);
   const [tags, setTags] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -117,7 +120,7 @@ export default function Folha() {
       <h1 className="page-title">Folha</h1>
 
       <div className="toolbar">
-        <button className="btn" onClick={abrirNovo}>+ Novo lançamento</button>
+        {escrever && <button className="btn" onClick={abrirNovo}>+ Novo lançamento</button>}
         <div className="spacer" />
         <div className="field" style={{ maxWidth: 150 }}>
           <label>Mês/Ano</label>
@@ -171,8 +174,12 @@ export default function Folha() {
                         </span>
                       ) : (
                         <div className="row-actions">
-                          <button className="btn btn-sm btn-ghost" onClick={() => abrirEdicao(r)}>Editar</button>
-                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDel(r)}>Excluir</button>
+                          {escrever && (
+                            <>
+                              <button className="btn btn-sm btn-ghost" onClick={() => abrirEdicao(r)}>Editar</button>
+                              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDel(r)}>Excluir</button>
+                            </>
+                          )}
                         </div>
                       )}
                     </td>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import ImportModal from './ImportModal.jsx';
 import ImportResult from './ImportResult.jsx';
+import { podeEscrever } from '../api/client.js';
 
 // CRUD genérico para cadastros de campo único (Fornecedor, Tag).
 // importConfig (opcional): { hint, parse, onImport } habilita o botão de importação.
@@ -9,6 +10,8 @@ import ImportResult from './ImportResult.jsx';
 export default function SimpleCrudPage({
   title, fieldLabel, fieldKey, api, importConfig, searchable = false,
 }) {
+  // Perfil de consulta não vê os controles de escrita (o backend também barra).
+  const escrever = podeEscrever();
   const [items, setItems] = useState([]);
   const [value, setValue] = useState('');
   const [query, setQuery] = useState('');
@@ -79,18 +82,20 @@ export default function SimpleCrudPage({
       <h1 className="page-title">{title}</h1>
 
       <div className="card">
-        <form className="form-row" onSubmit={adicionar}>
-          <div className="field">
-            <label>{fieldLabel}</label>
-            <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={fieldLabel} />
-          </div>
-          <button className="btn" type="submit">Adicionar</button>
-          {importConfig && (
-            <button type="button" className="btn btn-ghost" onClick={() => setShowImport(true)}>
-              Importar planilha
-            </button>
-          )}
-        </form>
+        {escrever && (
+          <form className="form-row" onSubmit={adicionar}>
+            <div className="field">
+              <label>{fieldLabel}</label>
+              <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={fieldLabel} />
+            </div>
+            <button className="btn" type="submit">Adicionar</button>
+            {importConfig && (
+              <button type="button" className="btn btn-ghost" onClick={() => setShowImport(true)}>
+                Importar planilha
+              </button>
+            )}
+          </form>
+        )}
         {error && <div className="error-msg">{error}</div>}
       </div>
 
@@ -132,7 +137,7 @@ export default function SimpleCrudPage({
                             <button className="btn btn-sm" onClick={() => salvarEdicao(it.UUID)}>Salvar</button>
                             <button className="btn btn-sm btn-ghost" onClick={() => setEditing(null)}>Cancelar</button>
                           </>
-                        ) : (
+                        ) : escrever && (
                           <>
                             <button className="btn btn-sm btn-ghost" onClick={() => { setEditing(it.UUID); setEditValue(it[fieldKey]); }}>Editar</button>
                             <button className="btn btn-sm btn-danger" onClick={() => setConfirm(it)}>Excluir</button>
