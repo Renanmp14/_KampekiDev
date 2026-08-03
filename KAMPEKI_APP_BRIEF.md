@@ -2843,6 +2843,59 @@ rodando continua pendente de teste manual.
 - 🔴 **CORS ainda com wildcard** (`app.use(cors())`) — aberto desde a 1.5.2, com o app na internet.
 - **`.env` local de dev com a chave revogada** (item 1 acima).
 - **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
-- **v1.6.2 nunca foi publicada:** se a tag `v1.6.2` não saiu, a 1.7.0 leva junto o rate limit do
-  login, a responsividade de telefone, a sidebar e a correção do zoom — e a VM precisa de
-  **`TRUST_PROXY=1`** no `.env`, senão o limitador conta todos os visitantes no mesmo balde.
+- ~~**v1.6.2 nunca foi publicada**~~ — **corrigido**: a consulta à API do GitHub mostrou o release
+  `v1.6.2` **publicado em 26/07/2026**. A suposição estava errada. Continua valendo o lembrete de
+  que a VM precisa de **`TRUST_PROXY=1`** no `.env` para o limitador de login enxergar o IP real
+  atrás do Caddy.
+
+
+---
+
+## Atualizações — 02/08/2026 (parte 3) — **a 1.7.0 está no ar**
+
+> A versão foi publicada e entrou em produção no mesmo dia. Esta seção registra o que foi
+> **comprovado por verificação direta**, não relatado — no espírito do resto do documento.
+
+### Evidências coletadas
+
+| O quê | Como foi verificado | Resultado |
+|---|---|---|
+| **Commit** | `git log` | `0655aa2` — *"Desktop 1.7.0: Criação do Módulo de Caixa e Aplicação de um modelo de RLS"*, com os **24 arquivos** da sessão (incluindo as notas da versão) |
+| **Árvore de trabalho** | `git status` | limpa; `main` sincronizada com `origin/main` |
+| **Tag** | `git ls-remote --tags origin` | `v1.7.0` publicada, apontando para `0655aa2` |
+| **Release do desktop** | API do GitHub | **publicado** (não é rascunho) em `2026-08-02T20:58:36Z`, com **6 arquivos** — o auto-update do Windows enxerga |
+| **Backend web** | `GET /api/version` | **`{"version":"1.7.0"}`** |
+| **Saúde da web** | `GET /api/health` | `{"ok":true}` |
+| **Frontend web** | bundle servido × build local | **`assets/index-CWcmSTcV.js` idêntico** nos dois — o `dist` foi enviado de fato |
+
+> A conferência do **bundle** foi feita de propósito: `/api/version` vem do backend (que sobe com o
+> `git pull`) e **continuaria mostrando 1.7.0 mesmo com o frontend antigo no ar** — é exatamente o
+> erro operacional que este documento vinha alertando desde 26/07. Comparar o nome do arquivo de
+> assets (que muda a cada build) é o que prova que a tela nova chegou ao servidor.
+
+### O que isto significa
+
+- **Web:** o módulo **Caixa** e o controle de perfis estão disponíveis em
+  <https://kampeki.duckdns.org> para quem abrir a página (recarregando, se o menu não aparecer).
+- **Windows:** o release publicado faz o app instalado se atualizar sozinho para a 1.7.0 na próxima
+  abertura. Também dá para forçar em **Sistema → Configurações → "🔄 Verificar atualizações"**.
+- **Desktop e `.env`:** nada precisou mudar no arquivo de configuração das máquinas — o fallback
+  `ADMIN_EMAIL`/`ADMIN_PASSWORD` mantém o login de sempre com acesso de administrador.
+
+### O que segue **não** verificado (exige credencial ou acesso à VM)
+
+- **Aba `CAIXA` na planilha** — ela é criada pelo `initSheets` no boot e o cabeçalho é sincronizado,
+  mas isso não foi observado. Conferir abrindo a planilha ou lançando a primeira movimentação.
+- **`USUARIOS_JSON` na VM** — se ainda não foi acrescentado, o sistema segue com **um único usuário
+  admin** (comportamento anterior). O código está no ar; falta só a configuração.
+- **`TRUST_PROXY=1` na VM** — sem ele, o limitador de tentativas de login (v1.6.2) conta todos os
+  visitantes num balde só.
+- **Teste manual das telas** — Caixa lançando de verdade na planilha, e a aparência de um usuário
+  com perfil de **leitura**.
+
+### Pendências que permanecem
+
+- 🔴 **CORS ainda com wildcard** (`app.use(cors())`) — aberto desde a **1.5.2**, com o app na
+  internet. É a pendência de segurança mais antiga em aberto.
+- **`.env` local de dev com a chave revogada** — `npm run dev` sobe mas não lê a planilha.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
