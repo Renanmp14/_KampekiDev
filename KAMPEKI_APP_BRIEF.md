@@ -2899,3 +2899,196 @@ rodando continua pendente de teste manual.
   internet. É a pendência de segurança mais antiga em aberto.
 - **`.env` local de dev com a chave revogada** — `npm run dev` sobe mas não lê a planilha.
 - **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
+
+---
+
+## Atualizações — 03/08/2026 — versão 1.7.1 — **Caixa: dado sempre atual, botão de atualizar e telefone**
+
+> Três frentes no mesmo módulo, todas disparadas por uso real: (1) o Caixa **não espelhava** o que
+> outra pessoa lançava; (2) faltava um **refresh** sem F5 e sem sair e voltar do módulo; (3) a tela
+> **não estava adaptada ao telefone** — e, ao adaptá-la, apareceu um defeito estrutural que fazia a
+> **página inteira** rolar na horizontal em vez da tabela.
+>
+> `desktop/package.json` e `frontend/package.json` em **1.7.1**.
+
+### 1. 🔴 Bug — o Caixa só lia a planilha uma vez
+
+**Sintoma relatado:** "quando eu crio um registro ele aparece perfeitamente; quando outra pessoa, ou o
+desktop, ou outro backend mexe, não espelha."
+
+**Causa (comprovada no código, não deduzida):** `services/caixa.js` era o **único módulo transacional
+com cache**. O `listar()` devolvia `getCache('caixa')` e só voltava à planilha depois de um
+`invalidate()`; e `services/cache.js` é um `Map` puro — **sem TTL, sem timestamp**.
+
+O ponto que fecha o diagnóstico: `invalidate()` apaga o `Map` **do processo que recebeu a escrita**, e
+este app roda em **vários processos independentes** — o backend da VM (web) e um backend **embutido em
+cada instalação do desktop** (`desktop/main.js:91-99`). Um cache em memória não tem como saber de uma
+mudança feita fora dele.
+
+**Alcance real da falha** (mais estreito do que o relato sugeria — vale registrar):
+
+| Cenário | Espelhava? |
+|---|---|
+| Duas pessoas **no navegador** (web ↔ web) | ✅ Sim — mesmo processo pm2, `invalidate()` compartilhado |
+| **Desktop ↔ web** | ❌ Não — dois processos, dois `Map` |
+| **Desktop ↔ desktop** (duas máquinas) | ❌ Não |
+| Edição **direta na planilha** do Google | ❌ Não — nenhum `invalidate()` é disparado |
+| Backend **local de dev** ↔ qualquer outro | ❌ Não |
+
+**Correção:** o cache saiu do Caixa. `listar()` lê a planilha **em toda chamada**, como `custos.js:46`
+e `folha.js:39` sempre fizeram. Saíram o `setCache`, os três `invalidate()` de
+`criar`/`atualizar`/`remover` (viraram código morto), o import e a constante `CACHE_KEY`.
+
+**Decisão de escopo — `cache.js` fica, e os outros módulos não foram tocados.** `fornecedor.js:11`,
+`tag.js:11` e `itens.js:14` têm **o mesmo padrão** de cache sem TTL, e a mesma armadilha vale para eles
+(um fornecedor criado no desktop não aparece no select da web até reiniciar o processo). Foi avaliado e
+**deliberadamente deixado como está**, por decisão do gestor: são cadastros, mudam pouco, e ali o cache
+tem função real (3.420 itens + 773 fornecedores lidos em várias telas). Fica registrado como **defeito
+conhecido e aceito**, não como esquecimento.
+
+> **Regra geral que sai daqui:** cache em memória é incompatível com deploy multiprocesso sem um canal
+> de invalidação entre os processos. Se alguém quiser reintroduzi-lo no Caixa "para otimizar", o
+> comentário no `listar()` explica por que não.
+
+### 2. Botão "↻ Atualizar"
+
+Ao lado do "+ Nova Movimentação", agrupados num `.caixa-acoes`. Três decisões:
+
+- **Disponível também para o perfil `leitura`.** O "+ Nova" está atrás de `{escrever && …}`; o
+  Atualizar ficou **fora**, porque é leitura pura — e quem só consulta é justamente quem mais precisa
+  ver o lançamento que outra pessoa acabou de fazer.
+- **Mostra o horário da última leitura** (`atualizado 14:32:07`). Sem isso, clicar quando nada mudou não
+  dá sinal nenhum de que a busca aconteceu, e o botão pareceria quebrado.
+- **`carregar()` passou a limpar o erro anterior.** Antes, um erro de rede ficava na tela mesmo depois
+  de uma releitura bem-sucedida — com um refresh na mão do usuário, isso apareceria na hora.
+
+### 3. Telefone (iPhone 14 — 390 × 844)
+
+O que estava **de fato quebrado** eram os dois gráficos de barra horizontal ("De onde mais entrou" /
+"Para onde mais saiu"). A conta em 390px:
+
+| | Antes | Depois |
+|---|---|---|
+| Largura do card | 338px | 338px |
+| Eixo de nomes (`YAxis width`) | 110px | 72px |
+| Margem do rótulo (`right`) | 130px | 74px |
+| **Sobra para a barra** | **93px** | **187px** |
+
+Com 93px as barras eram quase invisíveis. O rótulo encolheu junto (`R$ 1.234,56 · 45,2%` →
+`R$ 1,2k · 45%`), que é o que permite cortar a margem pela metade.
+
+**Isso exigiu um arquivo novo.** O Recharts recebe largura de eixo, margem e altura em **props de
+JavaScript** — nada disso é estilo, então a media query do `styles.css` **não alcança**. Daí
+`utils/useMediaQuery.js` com `useTelaEstreita()`, fixado nos **mesmos 520px** do bloco "Telefone" do
+CSS, de propósito: dois pontos de corte diferentes criariam uma faixa em que o CSS já empilhou mas o
+gráfico ainda se acha no desktop.
+
+Demais ajustes: **KPIs em 2 colunas** (empilhados, empurrariam a tabela para muito abaixo da dobra);
+eixo do gráfico 1 com mês abreviado (`Ago/26` no lugar de `Agosto/2026`); `minTickGap` maior no gráfico
+2; alturas 280 → 230; alternador Entrada/Saída com alvo de toque de 40px (ele **não** é `.btn`, então a
+regra global de toque da 1.6.2 não o alcançava).
+
+### 4. 🔴 Bug — a página inteira rolava na horizontal, em vez da tabela
+
+**Pedido:** "a tabela deve mexer sem ter de mexer a tela toda, igual o Dash de Custos."
+
+**Causa:** não era a tabela, era o **container**. `.caixa-layout` usa `minmax(0, 7fr)` no desktop, mas
+em `≤1100px` vira `grid-template-columns: 1fr` — que é `minmax(auto, 1fr)`. Item de grid nasce com
+`min-width: auto`, então o card **se recusava a encolher** abaixo da largura da tabela: em vez de a
+tabela rolar dentro do `.table-wrap`, ela esticava o card, esticava o `.main`, e a página passava a
+rolar.
+
+É **a mesma armadilha já documentada** no `styles.css:147` para o `.main` ("sem ele, um filho largo
+estoura a largura da janela e a sidebar escorre para fora"). O `.main` foi protegido na época; o grid do
+Caixa, criado depois, não.
+
+> **Registro honesto:** o `white-space: nowrap` introduzido nesta mesma sessão (item 3) aumentou a
+> largura mínima da tabela e **agravou** o sintoma. Parte do que o gestor viu foi regressão da própria
+> rodada.
+
+**Correção** — duas linhas resolvem, o resto é consequência:
+
+```css
+.caixa-layout > * { min-width: 0; }
+.caixa-graficos > * { min-width: 0; }
+```
+
+A segunda é **preventiva**: a grade dos 4 gráficos tem a mesma armadilha, e o `ResponsiveContainer` mede
+o pai — um pai que não encolhe deixa o gráfico largo para sempre. Classe própria (`.caixa-graficos`) para
+**não** alterar o `.grid-2` usado pelas outras telas.
+
+**E a tabela passou a rolar nos dois eixos dentro do card**, como a de detalhe do Dash Custos:
+`max-height` de 520px (55dvh no telefone), **cabeçalho fixo** no topo, **linha de Totais fixa** embaixo,
+e **coluna de Ações fixa à direita** via `sticky-actions` — a mesma classe que o Custos já usava, então
+Editar/Excluir nunca somem na rolagem horizontal.
+
+#### Erro de especificidade pego na verificação
+
+A regra que impede a linha "Nenhuma movimentação" (`colSpan={8}`) de ser tratada como coluna fixa estava
+escrita como `.caixa-tabela .caixa-vazio` — **(0,2,0)**, que **perde** para `.sticky-actions
+td:last-child` — **(0,2,1)**. Não teria efeito nenhum. Corrigida para
+`.caixa-tabela.sticky-actions td.caixa-vazio` (0,3,1).
+
+Achado ao **calcular** a especificidade dos 4 pares de regras em que a correção depende de um vencer o
+outro, em vez de confiar na conta de cabeça — os outros três estavam certos.
+
+### Changelog técnico — 1.7.1 (por arquivo)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/caixa.js` | `listar()` **sem cache** — lê a planilha em toda chamada. Saíram `getCache`/`setCache`, os três `invalidate(CACHE_KEY)`, o import de `cache.js` e a constante `CACHE_KEY`. Comentário no `listar()` registra **por que** este módulo não cacheia (deploy multiprocesso). |
+| `src/services/cache.js` | **Inalterado** — segue servindo Fornecedor, Tag, Itens, Custos e Subcategoria. A chave `'caixa'` não era usada em nenhum outro lugar, então a remoção ficou autocontida. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/useMediaQuery.js` | **Novo** — `useMediaQuery(query)` e `useTelaEstreita()` (520px). Existe porque o Recharts é dimensionado por props JS, fora do alcance da media query. |
+| `src/pages/Caixa.jsx` | Botão "↻ Atualizar" + horário da última leitura; `carregar()` limpa o erro anterior; `MESES_ABREV`/`rotuloMesCurto` e `labelCurto`/`rotuloCurto` para eixos e rótulos no telefone; os 4 gráficos passam a depender de `estreita` (altura, `fontSize`, `YAxis width`, margem, `dataKey` do rótulo); classes `caixa-kpis`, `caixa-graficos`, `caixa-tabela`, `caixa-table-wrap`, `sticky-actions`, `col-desc`, `caixa-vazio`. |
+| `src/styles.css` | `min-width: 0` em `.caixa-layout > *` e `.caixa-graficos > *` (**a correção do scroll da página**); `.caixa-table-wrap` com `max-height` + rolagem vertical; cabeçalho e rodapé fixos; z-index dos cantos; `.caixa-acoes`/`.caixa-atualizado`; `nowrap` nas células com exceção da Descrição; bloco `≤520px` do Caixa (KPIs em 2 colunas, ações em largura total, `55dvh` na tabela, alternador com alvo de toque). Nenhuma classe de outra tela foi alterada. |
+| `desktop/package.json`, `frontend/package.json` | `version` 1.7.0 → **1.7.1**. |
+
+### Validação
+
+- **Serviço do Caixa exercitado de verdade — 10/10.** O `services/caixa.js` **real** rodado com dublês
+  da camada de planilha (mesmas assinaturas de `sheets.js`): `listar()` chamado 3× bate na planilha
+  **3×** (com cache era 1×); registro **criado**, **editado** e **excluído fora do processo** aparecem na
+  leitura seguinte; `criar`/`atualizar`/`remover` locais seguem refletindo; e o comportamento preservado
+  — ordenação data desc com empate por `_row`, derivação de `MES_ANO`/`ANO`, `TIPO` legado não
+  derrubando a listagem, as 8 rejeições de payload inválido, `atualizar` com UUID inexistente não
+  gravando.
+- **Controle contra a versão anterior — 7 dos 10 falharam.** O mesmo teste rodado contra o `caixa.js`
+  extraído do git (com cache), para provar que ele **pega o bug** e não passa por tautologia. O detalhe
+  que fecha o caso: o teste `criar/atualizar/remover locais` **passou** na versão antiga — exatamente o
+  sintoma relatado ("quando eu crio, aparece; quando outro mexe, não").
+- **Especificidade CSS calculada** nos 4 pares de regras dependentes: todos corretos após a correção. O
+  empate proposital `.grid-4` × `.caixa-kpis` (ambos 0,1,0) é decidido pela ordem no arquivo — conferido:
+  linha 763 contra 187.
+- **Varredura confirmando que nenhuma prop fixa de desktop sobrou** nos gráficos (`fontSize={12}`,
+  `height={280}`, `width={110}`, `right: 130`, `dataKey="rotulo"`, `minTickGap={24}`): zero ocorrências,
+  os 4 `ResponsiveContainer` cobertos.
+- Ponto de corte 520px conferido nos dois lugares (CSS e `useTelaEstreita`).
+- `node --check` OK em `caixa.js`; `vite build` OK.
+- **NÃO exercitado:**
+  - **a aparência renderizada** — nenhuma das mudanças de CSS/gráfico foi vista na tela. Conferir no
+    DevTools em modo iPhone 14 e, de preferência, no aparelho: se a página **não** rola mais na
+    horizontal (arrastar o fundo fora do card não deve mover nada), se cabeçalho e Totais grudam ao rolar
+    a tabela, e se os KPIs em 2 colunas aguentam um valor grande (`R$ 123.456,78`);
+  - **a escrita real na planilha** — o `backend/.env` de dev segue com a chave revogada.
+
+### Pendências em aberto
+
+- **Teste manual do espelhamento** — o teste decisivo: lançar no desktop e dar F5 na web (ou o
+  contrário) e ver refletir na hora. Depende de repor o `GOOGLE_CREDENTIALS_JSON` do `.env` local.
+- **Revisão visual** dos itens 3 e 4 (telefone e rolagem da tabela), feita pelo gestor.
+- **Deploy da 1.7.1 — os dois destinos.** Houve mudança de **backend e de frontend**: na VM `git pull` +
+  `pm2 restart kampeki` **e** `npm run build` no Windows + `scp` do `dist` (o destino termina em
+  `/frontend/`, **não** em `/frontend/dist`); para o Windows, tag `v1.7.1` + release.
+- **Cache sem TTL em Fornecedor/Tag/Itens** — defeito conhecido e **aceito** (ver item 1). Reabrir só se
+  alguém passar a editar esses cadastros por dois caminhos ao mesmo tempo.
+- 🔴 **CORS ainda com wildcard** (`app.use(cors())`) — aberto desde a **1.5.2**. Segue sendo a pendência
+  de segurança mais antiga.
+- **`.env` local de dev com a chave revogada** — `npm run dev` sobe mas não lê a planilha.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
