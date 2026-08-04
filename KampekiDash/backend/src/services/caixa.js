@@ -7,11 +7,9 @@
 import {
   getObjects, appendRow, updateRowByUuid, deleteRowByUuid,
 } from './sheets.js';
-import { getCache, setCache, invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 
 const TAB = 'CAIXA';
-const CACHE_KEY = 'caixa';
 
 export const TIPOS = ['entrada', 'saida'];
 
@@ -97,11 +95,15 @@ function chaveData(data) {
  * Desempate dentro do mesmo dia: ordem de gravação na planilha (_row) — o UUID
  * é aleatório (v4) e não ordena nada, e é a ordem da linha que torna o saldo
  * acumulado reproduzível.
+ *
+ * SEM CACHE, de propósito (igual a custos.js e folha.js): lê a planilha em toda
+ * chamada. Um cache em memória só é invalidado no processo que recebeu a escrita,
+ * e este app roda em VÁRIOS processos independentes — o backend da VM (web) e um
+ * backend embutido por instalação do desktop. Com cache, um lançamento feito no
+ * desktop (ou direto na planilha) nunca aparecia nos outros até reiniciar o
+ * processo. O dado do Caixa é dinheiro em espécie: precisa estar sempre atual.
  */
 export async function listar() {
-  const cached = getCache(CACHE_KEY);
-  if (cached) return cached;
-
   const objs = await getObjects(TAB);
   const list = objs
     .filter((o) => o.UUID)
@@ -127,7 +129,6 @@ export async function listar() {
       return b._row - a._row; // mesmo dia: gravação mais recente primeiro
     });
 
-  setCache(CACHE_KEY, list);
   return list;
 }
 
@@ -147,7 +148,6 @@ export async function criar(payload) {
   const uuid = newUuid();
   const { registro, linha } = montarLinha(uuid, payload);
   await appendRow(TAB, linha);
-  invalidate(CACHE_KEY);
   return registro;
 }
 
@@ -155,13 +155,11 @@ export async function atualizar(uuid, payload) {
   if (!uuid) throw new Error('UUID é obrigatório');
   const { registro, linha } = montarLinha(uuid, payload);
   await updateRowByUuid(TAB, uuid, linha); // lança se o UUID não existir
-  invalidate(CACHE_KEY);
   return registro;
 }
 
 export async function remover(uuid) {
   if (!uuid) throw new Error('UUID é obrigatório');
   await deleteRowByUuid(TAB, uuid);
-  invalidate(CACHE_KEY);
   return { ok: true };
 }

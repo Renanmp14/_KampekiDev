@@ -13,6 +13,7 @@ import { brl, brlCompact, toNum } from '../utils/format.js';
 import {
   chaveMes, saldoCorrido, inicioKeyDe, saldoAntesDe,
 } from '../utils/caixaCalc.js';
+import { useTelaEstreita } from '../utils/useMediaQuery.js';
 
 // Cores da marca (mesmas do :root do styles.css).
 const OLIVA = '#bfcb7f'; // entradas
@@ -25,6 +26,13 @@ const TODOS = '(todos)';
 const MESES_NOME = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+// Abreviação para o eixo do gráfico no telefone: "Agosto/2026" não cabe em
+// ~28px por rótulo, "Ago/26" cabe.
+const MESES_ABREV = [
+  'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+  'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
 ];
 
 const emptyForm = {
@@ -61,6 +69,11 @@ const rotuloMes = (mesAno) => {
   return m ? `${MESES_NOME[parseInt(m[1], 10) - 1]}/${m[2]}` : mesAno;
 };
 
+const rotuloMesCurto = (mesAno) => {
+  const m = String(mesAno || '').match(/^(\d{2})\/(\d{4})$/);
+  return m ? `${MESES_ABREV[parseInt(m[1], 10) - 1]}/${m[2].slice(2)}` : mesAno;
+};
+
 const tooltipProps = {
   contentStyle: { background: '#16302b', border: '1px solid #2c4a43', borderRadius: 6 },
   itemStyle: { color: '#f1f3f5' },
@@ -85,9 +98,14 @@ function Chips({ valores, rotulo = (v) => v, onRemove }) {
 export default function Caixa() {
   // Perfil de consulta não vê os controles de escrita (o backend também barra).
   const escrever = podeEscrever();
+  // Gráficos são dimensionados por props JS — precisam saber do telefone.
+  const estreita = useTelaEstreita();
   const [lista, setLista] = useState([]); // backend: mais recente primeiro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Horário da última leitura: sem ele, clicar em "Atualizar" quando nada mudou
+  // não dá sinal nenhum de que a busca aconteceu.
+  const [atualizadoEm, setAtualizadoEm] = useState('');
 
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
@@ -111,8 +129,12 @@ export default function Caixa() {
 
   async function carregar() {
     setLoading(true);
+    setError(''); // uma releitura bem-sucedida tem de limpar o erro anterior
     try {
       setLista(await caixaApi.listar());
+      setAtualizadoEm(new Date().toLocaleTimeString('pt-BR', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -286,8 +308,10 @@ export default function Caixa() {
       const key = porDia ? dd : r.MES_ANO;
       if (!key) return;
       const label = porDia ? `${dd}/${String(r.MES_ANO || '').slice(0, 2)}` : rotuloMes(r.MES_ANO);
+      // No telefone o eixo usa a forma abreviada (por dia o rótulo já é curto).
+      const labelCurto = porDia ? label : rotuloMesCurto(r.MES_ANO);
       const ordem = porDia ? dd : chaveMes(r.MES_ANO);
-      if (!mapa.has(key)) mapa.set(key, { key, label, ordem, entrada: 0, saida: 0 });
+      if (!mapa.has(key)) mapa.set(key, { key, label, labelCurto, ordem, entrada: 0, saida: 0 });
       const alvo = mapa.get(key);
       if (r.TIPO === 'entrada') alvo.entrada += toNum(r.VALOR);
       else alvo.saida += toNum(r.VALOR);
@@ -314,6 +338,9 @@ export default function Caixa() {
     return arr.map((d) => ({
       ...d,
       rotulo: `${brl(d.total)} · ${base ? ((d.total / base) * 100).toFixed(1) : '0,0'}%`,
+      // Versão enxuta para o telefone: o rótulo cheio exige ~130px de margem à
+      // direita, o que não sobra em 390px de tela.
+      rotuloCurto: `${brlCompact(d.total)} · ${base ? Math.round((d.total / base) * 100) : 0}%`,
     }));
   };
   const origens = useMemo(() => porPessoa('entrada'), [filtrados]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -491,12 +518,28 @@ export default function Caixa() {
         ) : null}
 
         <div className="spacer" />
-        {escrever && (
-          <button className="btn btn-caixa-novo" onClick={abrirNovo}>+ Nova Movimentação</button>
-        )}
+        <div className="caixa-acoes">
+          {/* Releitura da planilha sem F5 (navegador) e sem sair e voltar do
+              módulo (desktop). É LEITURA: fica disponível também para o perfil
+              de consulta, que é justamente quem mais precisa ver o dado novo. */}
+          <button
+            className="btn btn-ghost"
+            onClick={carregar}
+            disabled={loading}
+            title="Buscar de novo as movimentações na planilha"
+          >
+            {loading ? '↻ Atualizando...' : '↻ Atualizar'}
+          </button>
+          {escrever && (
+            <button className="btn btn-caixa-novo" onClick={abrirNovo}>+ Nova Movimentação</button>
+          )}
+          {atualizadoEm && (
+            <span className="caixa-atualizado">{`atualizado ${atualizadoEm}`}</span>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-4" style={{ marginBottom: 18 }}>
+      <div className="grid grid-4 caixa-kpis" style={{ marginBottom: 18 }}>
         <div className="kpi">
           <div className="kpi-label">Entradas</div>
           <div className="kpi-value" style={{ color: OLIVA }}>{brl(totalEntradas)}</div>
@@ -527,13 +570,13 @@ export default function Caixa() {
               {` — ${linhas.length} lançamento(s)`}
             </span>
           </h3>
-          <div className="table-wrap">
-            <table>
+          <div className="table-wrap caixa-table-wrap">
+            <table className="caixa-tabela sticky-actions">
               <thead>
                 <tr>
                   <th>Data</th>
                   <th>Tipo</th>
-                  <th>Descrição</th>
+                  <th className="col-desc">Descrição</th>
                   <th>Pessoa</th>
                   <th style={{ textAlign: 'right' }}>Entrada</th>
                   <th style={{ textAlign: 'right' }}>Saída</th>
@@ -553,7 +596,7 @@ export default function Caixa() {
                           {entrada ? 'Entrada' : 'Saída'}
                         </span>
                       </td>
-                      <td>{r.DESCRICAO}</td>
+                      <td className="col-desc">{r.DESCRICAO}</td>
                       <td>{r.PESSOA || ''}</td>
                       <td style={{ textAlign: 'right', color: entrada ? OLIVA : undefined }}>
                         {entrada ? brl(r.VALOR) : '—'}
@@ -578,7 +621,7 @@ export default function Caixa() {
                 })}
                 {linhas.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="muted">
+                    <td colSpan={8} className="muted caixa-vazio">
                       {loading ? 'Carregando...' : 'Nenhuma movimentação no período.'}
                     </td>
                   </tr>
@@ -627,7 +670,7 @@ export default function Caixa() {
         </div>
       </div>
 
-      <div className="grid grid-2" style={{ marginTop: 18 }}>
+      <div className="grid grid-2 caixa-graficos" style={{ marginTop: 18 }}>
         <div className="card">
           <h3 className="card-title">
             {mesUnico ? 'Entradas × Saídas por dia' : 'Entradas × Saídas por mês'}
@@ -638,17 +681,17 @@ export default function Caixa() {
           {porPeriodo.length === 0 ? (
             <p className="muted">Sem movimentações no período.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={estreita ? 230 : 280}>
               <BarChart data={porPeriodo} style={{ cursor: 'pointer' }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
-                <XAxis dataKey="label" stroke="#93a39b" fontSize={12} />
-                <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
+                <XAxis dataKey={estreita ? 'labelCurto' : 'label'} stroke="#93a39b" fontSize={estreita ? 10 : 12} />
+                <YAxis stroke="#93a39b" fontSize={estreita ? 10 : 12} tickFormatter={brlCompact} width={estreita ? 52 : 60} />
                 <Tooltip
                   {...tooltipProps}
                   formatter={(v, name) => [brl(v), name]}
                   cursor={{ fill: 'rgba(255,255,255,0.08)' }}
                 />
-                <Legend />
+                <Legend wrapperStyle={estreita ? { fontSize: 11 } : undefined} />
                 <Bar dataKey="entrada" name="Entrada" fill={OLIVA} radius={[4, 4, 0, 0]} onClick={cliqueNoPeriodo}>
                   {porPeriodo.map((d) => (
                     <Cell key={d.key} fillOpacity={destacado(d.key) ? 1 : 0.35} />
@@ -669,11 +712,11 @@ export default function Caixa() {
           {evolucao.length === 0 ? (
             <p className="muted">Sem movimentações no período.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={estreita ? 230 : 280}>
               <AreaChart data={evolucao}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" />
-                <XAxis dataKey="label" stroke="#93a39b" fontSize={12} minTickGap={24} />
-                <YAxis stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
+                <XAxis dataKey="label" stroke="#93a39b" fontSize={estreita ? 10 : 12} minTickGap={estreita ? 44 : 24} />
+                <YAxis stroke="#93a39b" fontSize={estreita ? 10 : 12} tickFormatter={brlCompact} width={estreita ? 52 : 60} />
                 <Tooltip {...tooltipProps} formatter={(v) => [brl(v), 'Saldo']} />
                 <Area
                   type="monotone"
@@ -697,14 +740,14 @@ export default function Caixa() {
           {origens.length === 0 ? (
             <p className="muted">Nenhuma origem registrada</p>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, origens.length * 34 + 40)}>
-              <BarChart data={origens} layout="vertical" margin={{ top: 5, right: 130, bottom: 5, left: 5 }}>
+            <ResponsiveContainer width="100%" height={Math.max(estreita ? 170 : 200, origens.length * (estreita ? 30 : 34) + 40)}>
+              <BarChart data={origens} layout="vertical" margin={{ top: 5, right: estreita ? 74 : 130, bottom: 5, left: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" horizontal={false} />
-                <XAxis type="number" stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
-                <YAxis type="category" dataKey="pessoa" stroke="#93a39b" fontSize={12} width={110} />
+                <XAxis type="number" stroke="#93a39b" fontSize={estreita ? 10 : 12} tickFormatter={brlCompact} />
+                <YAxis type="category" dataKey="pessoa" stroke="#93a39b" fontSize={estreita ? 10 : 12} width={estreita ? 72 : 110} />
                 <Tooltip {...tooltipProps} formatter={(v) => [brl(v), 'Entradas']} cursor={{ fill: 'rgba(255,255,255,0.08)' }} />
                 <Bar dataKey="total" fill={OLIVA} radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="rotulo" position="right" fill="#e9ebe6" fontSize={12} />
+                  <LabelList dataKey={estreita ? 'rotuloCurto' : 'rotulo'} position="right" fill="#e9ebe6" fontSize={estreita ? 10 : 12} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -716,14 +759,14 @@ export default function Caixa() {
           {destinos.length === 0 ? (
             <p className="muted">Nenhum destino registrado</p>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, destinos.length * 34 + 40)}>
-              <BarChart data={destinos} layout="vertical" margin={{ top: 5, right: 130, bottom: 5, left: 5 }}>
+            <ResponsiveContainer width="100%" height={Math.max(estreita ? 170 : 200, destinos.length * (estreita ? 30 : 34) + 40)}>
+              <BarChart data={destinos} layout="vertical" margin={{ top: 5, right: estreita ? 74 : 130, bottom: 5, left: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2c4a43" horizontal={false} />
-                <XAxis type="number" stroke="#93a39b" fontSize={12} tickFormatter={brlCompact} />
-                <YAxis type="category" dataKey="pessoa" stroke="#93a39b" fontSize={12} width={110} />
+                <XAxis type="number" stroke="#93a39b" fontSize={estreita ? 10 : 12} tickFormatter={brlCompact} />
+                <YAxis type="category" dataKey="pessoa" stroke="#93a39b" fontSize={estreita ? 10 : 12} width={estreita ? 72 : 110} />
                 <Tooltip {...tooltipProps} formatter={(v) => [brl(v), 'Saídas']} cursor={{ fill: 'rgba(255,255,255,0.08)' }} />
                 <Bar dataKey="total" fill={CORAL} radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="rotulo" position="right" fill="#e9ebe6" fontSize={12} />
+                  <LabelList dataKey={estreita ? 'rotuloCurto' : 'rotulo'} position="right" fill="#e9ebe6" fontSize={estreita ? 10 : 12} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

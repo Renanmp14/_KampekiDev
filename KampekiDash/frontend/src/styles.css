@@ -659,6 +659,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   align-items: start;
 }
 
+/* CRÍTICO — mesma razão do min-width: 0 do .main (ver comentário lá em cima).
+   Item de grid nasce com min-width: auto, então o card se recusa a encolher
+   abaixo da largura da tabela: em vez de a tabela rolar dentro do .table-wrap,
+   ela estoura o card, estoura o .main e a PÁGINA INTEIRA passa a rolar na
+   horizontal. No desktop o minmax(0, …) acima já resolvia; na faixa de ≤1100px
+   a coluna vira 1fr (= minmax(auto, 1fr)) e o problema reaparecia. */
+.caixa-layout > * { min-width: 0; }
+
+/* Mesma armadilha na grade dos 4 gráficos: o ResponsiveContainer do Recharts
+   mede o pai, e um pai que não encolhe deixa o gráfico largo demais para sempre.
+   Classe própria para não alterar o .grid-2 usado pelas outras telas. */
+.caixa-graficos > * { min-width: 0; }
+
 .caixa-kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
 .badge-entrada { background: rgba(191, 203, 127, 0.20); color: #d7e0a6; }
@@ -668,6 +681,36 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
    padrão, para não competir com os botões destrutivos da linha. */
 .btn-caixa-novo { background: var(--olive); color: var(--on-primary); }
 .btn-caixa-novo:hover { background: #cbd694; }
+
+/* Grupo "↻ Atualizar" + "+ Nova Movimentação" + horário da última leitura.
+   Agrupados para se moverem juntos quando a toolbar quebra em várias linhas. */
+.caixa-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.caixa-atualizado { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* Descrição é a única coluna que pode quebrar em várias linhas; o resto fica
+   numa linha só para os valores não se partirem ao rolar na horizontal. */
+.caixa-tabela th, .caixa-tabela td { white-space: nowrap; }
+.caixa-tabela .col-desc { white-space: normal; min-width: 150px; }
+
+/* A tabela rola nos DOIS eixos dentro do próprio card, como a tabela de detalhe
+   do Dash Custos — a página não se mexe. O teto de altura é o que impede a
+   lista de empurrar os gráficos para centenas de pixels abaixo. */
+.caixa-table-wrap { max-height: 520px; overflow-y: auto; }
+
+/* Com rolagem vertical interna, cabeçalho e linha de totais têm de ficar à
+   vista — senão some a referência de qual coluna é qual e quanto dá a soma. */
+.caixa-tabela thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+.caixa-tabela tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--surface); }
+
+/* Cantos: a célula de Ações fica presa também à direita (.sticky-actions), então
+   é fixa nos dois eixos ao mesmo tempo e precisa vencer as vizinhas. */
+.caixa-tabela.sticky-actions thead th:last-child,
+.caixa-tabela.sticky-actions tfoot td:last-child { z-index: 3; }
+
+/* A linha de "nenhuma movimentação" tem colspan e ocupa a largura toda: não pode
+   ser tratada como a coluna fixa de Ações. Precisa de especificidade maior que a
+   de `.sticky-actions td:last-child` (0,2,1) — daí o seletor completo. */
+.caixa-tabela.sticky-actions td.caixa-vazio { position: static; box-shadow: none; }
 
 .caixa-resumo { display: flex; flex-direction: column; gap: 10px; }
 .caixa-resumo-linha {
@@ -703,4 +746,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 1100px) {
   .caixa-layout { grid-template-columns: 1fr; }
+}
+
+/* ---------- Caixa no telefone (iPhone 14 = 390 × 844) ---------- */
+/* Mesmo ponto de corte do bloco "Telefone" acima e do useTelaEstreita(), que
+   cuida do que é prop de JS nos gráficos (largura de eixo, margem, altura). */
+@media (max-width: 520px) {
+  /* O grupo de ações ocupa a linha inteira, com os botões dividindo o espaço —
+     alvos de toque largos em vez de dois botõezinhos espremidos num canto. */
+  .caixa-acoes { flex: 1 1 100%; }
+  .caixa-acoes .btn { flex: 1 1 auto; }
+  .caixa-atualizado { flex: 1 1 100%; text-align: right; }
+
+  /* Os 4 KPIs em duas colunas: empilhados (regra geral de .grid-4 em ≤680px)
+     empurrariam a tabela para bem abaixo da dobra. Cabem em 2 × ~175px. */
+  .caixa-kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .caixa-kpis .kpi { padding: 11px; }
+  .caixa-kpis .kpi-value { font-size: 17px; }
+  .caixa-kpis .kpi-label { font-size: 11px; letter-spacing: 0.3px; }
+
+  /* A tabela rola dentro do .table-wrap (padrão do app); a descrição não pode
+     ficar tão larga a ponto de dobrar essa rolagem. */
+  .caixa-tabela .col-desc { min-width: 120px; }
+
+  /* Altura relativa à tela do aparelho: 520px fixos comeriam quase toda a
+     área útil de um iPhone 14. dvh acompanha a barra de endereço entrando e
+     saindo, como o resto do app já faz. */
+  .caixa-table-wrap { max-height: 55dvh; }
+
+  /* Alternador Entrada/Saída: altura de toque confortável (a regra global de
+     alvos ≥40px vale para .btn, e estes botões não são .btn). */
+  .caixa-tipo { padding: 12px 10px; font-size: 15px; }
+
+  .caixa-resumo-total { font-size: 14px; }
 }
