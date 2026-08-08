@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampeki Finance — Notas da versão 1.8.0</title>
+<style>html{background:#0e1b18}@media(prefers-color-scheme:light){html{background:#efe7dd}}body{margin:0}</style>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de;
+    --text:#173229; --muted:#5c7168; --border:#e2d6c7;
+    --primary:#e06a54; --primary-ink:#173229; --primary-fill:#ff8b7c;
+    --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --olive-soft:rgba(111,125,51,.14); --teal-soft:rgba(62,118,128,.12);
+    --ring:rgba(224,106,84,.45);
+    --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+      --muted:#9bb0a7; --border:#2a4e44;
+      --primary:#ff8b7c; --primary-ink:#123029; --primary-fill:#ff8b7c;
+      --primary-soft:rgba(255,139,124,.14);
+      --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+      --olive-soft:rgba(191,203,127,.16); --teal-soft:rgba(107,163,172,.16);
+      --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#efe7dd; --surface:#fbf8f2; --surface-2:#f1e9de; --text:#173229;
+    --muted:#5c7168; --border:#e2d6c7; --primary:#e06a54; --primary-ink:#173229;
+    --primary-fill:#ff8b7c; --primary-soft:rgba(224,106,84,.12);
+    --teal:#3e7680; --olive:#6f7d33; --sand:#d7c4b6; --wine:#7a3a3a;
+    --olive-soft:rgba(111,125,51,.14); --teal-soft:rgba(62,118,128,.12);
+    --ring:rgba(224,106,84,.45); --shadow:0 18px 40px -24px rgba(23,50,41,.45);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1b18; --surface:#16302a; --surface-2:#1e3d34; --text:#e7ede9;
+    --muted:#9bb0a7; --border:#2a4e44; --primary:#ff8b7c; --primary-ink:#123029;
+    --primary-fill:#ff8b7c; --primary-soft:rgba(255,139,124,.14);
+    --teal:#6ba3ac; --olive:#bfcb7f; --sand:#d7c4b6; --wine:#c98080;
+    --olive-soft:rgba(191,203,127,.16); --teal-soft:rgba(107,163,172,.16);
+    --ring:rgba(255,139,124,.5); --shadow:0 24px 50px -28px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    padding:clamp(20px,5vw,64px) 20px 72px;
+  }
+  .wrap{max-width:940px; margin:0 auto}
+  .brandbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:clamp(30px,6vw,56px)}
+  .wordmark{font-weight:800; letter-spacing:.26em; font-size:.82rem; text-transform:uppercase; color:var(--text)}
+  .wordmark span{color:var(--primary)}
+  .stamp{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .eyebrow{font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); margin:0 0 14px}
+  h1{font-size:clamp(2.1rem,6vw,3.4rem); line-height:1.03; font-weight:800; letter-spacing:-.028em; text-wrap:balance; margin:0 0 18px}
+  h1 .accent{color:var(--primary)}
+  .lede{font-size:clamp(1.02rem,2.3vw,1.24rem); color:var(--muted); max-width:64ch; margin:0 0 24px}
+  .meta{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:8px}
+  .pill{display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:.82rem; padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface)}
+  .pill.version{background:var(--primary-fill); color:var(--primary-ink); border-color:transparent}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--olive)}
+
+  .sec-label{font-size:12px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin:0 0 18px; display:flex; align-items:center; gap:12px}
+  .sec-label::after{content:""; flex:1; height:1px; background:var(--border)}
+  section{margin:clamp(40px,7vw,64px) 0}
+
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px}
+  .tile{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 18px 20px; box-shadow:var(--shadow)}
+  .tile .k{font-size:1.5rem; line-height:1}
+  .tile h4{margin:12px 0 6px; font-size:1rem; font-weight:700; letter-spacing:-.01em}
+  .tile p{margin:0; font-size:.9rem; color:var(--muted)}
+  .tile.destaque{border-color:var(--primary); box-shadow:0 0 0 1px var(--primary), var(--shadow)}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:clamp(22px,3.4vw,34px); box-shadow:var(--shadow); margin:18px 0}
+  .card h3{font-size:clamp(1.2rem,2.5vw,1.5rem); font-weight:800; letter-spacing:-.02em; margin:0 0 10px}
+  .card p{margin:0 0 12px}
+  .card p:last-child{margin-bottom:0}
+  .card .os-head{display:flex; align-items:center; gap:12px; margin:0 0 16px}
+  .os-badge{display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:11px; background:var(--primary-soft); font-size:1.3rem}
+  .card.hero{border-color:var(--primary)}
+
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:760px){ .cols{grid-template-columns:1fr} }
+
+  ol.steps{margin:0; padding:0; list-style:none; counter-reset:s}
+  ol.steps li{position:relative; padding:0 0 16px 44px; counter-increment:s}
+  ol.steps li::before{content:counter(s); position:absolute; left:0; top:-2px; width:30px; height:30px; border-radius:50%; background:var(--primary-fill); color:var(--primary-ink); font-weight:800; font-size:.9rem; display:flex; align-items:center; justify-content:center}
+  ol.steps li::after{content:""; position:absolute; left:14px; top:30px; bottom:2px; width:2px; background:var(--border)}
+  ol.steps li:last-child{padding-bottom:0}
+  ol.steps li:last-child::after{display:none}
+  ol.steps b{font-weight:700}
+
+  ul.plain{margin:0; padding-left:20px; color:var(--muted)}
+  ul.plain li{margin-bottom:7px}
+  ul.plain li:last-child{margin-bottom:0}
+
+  .kpirow{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:4px 0 18px}
+  .kpi{background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px}
+  .kpi .lbl{font-size:.7rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+  .kpi .val{font-size:1.15rem; font-weight:800; margin-top:5px; letter-spacing:-.02em}
+  .kpi .hint{font-size:.78rem; color:var(--muted); margin-top:4px}
+  .v-in{color:var(--olive)} .v-out{color:var(--primary)} .v-sal{color:var(--teal)}
+
+  table.demo{width:100%; border-collapse:collapse; font-size:.87rem; margin:2px 0 4px}
+  table.demo th{text-align:left; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; padding:8px 10px; border-bottom:1px solid var(--border)}
+  table.demo td{padding:9px 10px; border-bottom:1px solid var(--border)}
+  table.demo tr:last-child td{border-bottom:0}
+  table.demo .num{text-align:right; white-space:nowrap}
+  .tag{display:inline-block; padding:2px 9px; border-radius:999px; font-size:.72rem; font-weight:700}
+  .tag-in{background:var(--olive-soft); color:var(--olive)}
+  .tag-out{background:var(--primary-soft); color:var(--primary)}
+  .tag-wait{background:var(--teal-soft); color:var(--teal)}
+  .scroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+
+  .chips{display:flex; flex-wrap:wrap; gap:7px; margin:10px 0 2px}
+  .chip{display:inline-flex; align-items:center; gap:7px; font-size:.8rem; font-weight:600; padding:5px 11px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border)}
+  .chip .x{color:var(--muted); font-weight:700}
+
+  code,.mono{font-family:var(--mono); font-size:.9em}
+  .path{display:block; font-family:var(--mono); font-size:.86rem; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin:8px 0; overflow-x:auto; white-space:nowrap}
+  .callout{border-left:4px solid var(--teal); background:var(--surface-2); border-radius:0 12px 12px 0; padding:14px 16px; margin:16px 0; font-size:.94rem}
+  .callout.warn{border-left-color:var(--primary)}
+  .callout.good{border-left-color:var(--olive)}
+  .callout b{font-weight:700}
+  .callout p{margin:0 0 8px} .callout p:last-child{margin:0}
+  .kbd{font-family:var(--mono); font-size:.82rem; background:var(--surface); border:1px solid var(--border); border-bottom-width:2px; border-radius:6px; padding:1px 7px}
+  .foot{margin-top:56px; padding-top:22px; border-top:1px solid var(--border); color:var(--muted); font-size:.85rem}
+
+  /* Mini calendário ilustrativo desta versão */
+  .mini{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin:10px 0 4px; min-width:520px}
+  .mini .h{font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; font-weight:700}
+  .mini .d{background:var(--surface-2); border:1px solid var(--border); border-radius:9px; min-height:70px; padding:5px}
+  .mini .d.hoje{border-color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary)}
+  .mini .n{font-size:.7rem; color:var(--muted); font-weight:700}
+  .mini .c{display:block; font-size:.66rem; padding:2px 5px; border-radius:5px; margin-top:3px; background:var(--primary-soft); border:1px solid var(--primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mini .c.feito{opacity:.55}
+  .mini .c.custo{background:rgba(215,196,182,.22); border-color:var(--sand)}
+  .mini .more{font-size:.64rem; color:var(--muted); display:block; margin-top:4px}
+  .legenda{display:flex; flex-wrap:wrap; gap:16px; font-size:.8rem; color:var(--muted); margin-top:12px}
+  .legenda i{display:inline-block; width:22px; height:11px; border-radius:4px; vertical-align:middle; margin-right:6px}
+  .sw-rec{background:var(--primary-soft); border:1px solid var(--primary)}
+  .sw-feito{background:var(--primary-soft); border:1px solid var(--primary); opacity:.55}
+  .sw-custo{background:rgba(215,196,182,.22); border:1px solid var(--sand)}
+</style>
+
+<div class="page">
+<div class="wrap">
+
+  <div class="brandbar">
+    <div class="wordmark">KAM<span>PEKI</span> · FINANCE</div>
+    <div class="stamp">Notas da versão · 07 / 08 / 2026</div>
+  </div>
+
+  <p class="eyebrow">Notas da versão</p>
+  <h1>Versão 1.8.0 — <span class="accent">chegou o Recorrentes</span></h1>
+  <p class="lede">
+    Aluguel, internet, sistema, contador, assinaturas: os custos que se repetem
+    todo mês agora ficam cadastrados <b>uma vez</b> e aparecem num <b>calendário</b>,
+    com data e valor. Quando vencem, você lança tudo <b>com um clique</b> — depois de
+    conferir. E a tela de Custos, que estava pesada, abre bem mais rápido.
+  </p>
+  <div class="meta">
+    <span class="pill version"><span class="dot"></span> v1.8.0</span>
+    <span class="pill">🗓 Novo módulo</span>
+    <span class="pill">⚡ Custos mais rápido</span>
+    <span class="pill">🪟 Windows</span>
+    <span class="pill">🌐 Web</span>
+  </div>
+
+  <!-- ===== O que muda ===== -->
+  <section>
+    <p class="sec-label">O que muda</p>
+    <div class="tiles">
+      <div class="tile destaque"><div class="k">🗓</div><h4>Módulo Recorrentes</h4><p>Cadastre o custo fixo uma vez e veja todas as próximas datas num calendário.</p></div>
+      <div class="tile"><div class="k">✅</div><h4>Colocar em dia</h4><p>O que venceu entra em Custos de uma vez só — sempre com prévia antes de gravar.</p></div>
+      <div class="tile"><div class="k">✋</div><h4>Nada acontece sozinho</h4><p>O sistema nunca lança sem você mandar. Ele apenas avisa o que está vencido.</p></div>
+      <div class="tile"><div class="k">⚡</div><h4>Custos mais leve</h4><p>A listagem abre com os 100 lançamentos mais recentes; filtrou, mostra tudo.</p></div>
+    </div>
+  </section>
+
+  <!-- ===== RECORRENTES — tópico principal ===== -->
+  <section>
+    <p class="sec-label">O destaque desta versão — módulo Recorrentes</p>
+
+    <div class="card hero">
+      <div class="os-head"><span class="os-badge">🗓</span><h3 style="margin:0">Para que serve</h3></div>
+      <p>Todo mês existe um punhado de custos que você já sabe que vão acontecer:
+      o <b>aluguel no dia 5</b>, a <b>internet no dia 10</b>, o <b>contador no dia 20</b>.
+      Hoje eles são digitados um a um, e vez ou outra algum passa batido.</p>
+      <p>No Recorrentes você cadastra cada um <b>uma única vez</b>, dizendo de quanto em
+      quanto tempo se repete. O sistema projeta as datas futuras num calendário e,
+      quando chega o vencimento, avisa que há coisa a lançar.</p>
+      <p style="color:var(--muted); margin-bottom:0"><b>O lançamento continua sendo um custo comum.</b>
+      Quando você manda lançar, nasce uma linha normal na tela de Custos — que entra nos
+      dashboards, nos relatórios e no backup como qualquer outra.</p>
+    </div>
+
+    <div class="card">
+      <h3>Como cadastrar um custo fixo</h3>
+      <p>Menu lateral → seção <b>Recorrentes</b> → botão <b>“+ Nova recorrência”</b>.</p>
+      <ol class="steps">
+        <li><b>Descrição</b> — o nome que você vai ver no calendário. Ex.: “Aluguel Canoas”, “Internet”, “Contador”.</li>
+        <li><b>Fornecedor</b> — opcional, com busca por digitação entre os que já existem.</li>
+        <li><b>Item</b> — obrigatório, escolhido entre os itens já cadastrados. É dele que saem a subcategoria, a categoria e a tag do lançamento.</li>
+        <li><b>Quantidade e valor unitário</b> — o total é a multiplicação dos dois, como em qualquer custo.</li>
+        <li><b>Nº da nota</b> — opcional. Em branco, o lançamento sai como <span class="mono">Sem Nota</span>.</li>
+        <li><b>Frequência</b> — de quanto em quanto tempo se repete (as opções estão logo abaixo).</li>
+        <li><b>Dia base</b> — para as frequências mensais ou maiores: em que dia do mês cai. Ex.: dia 5.</li>
+        <li><b>Data de início</b> e, se houver, <b>data de fim</b>. Sem data de fim, a recorrência segue indefinidamente.</li>
+      </ol>
+      <div class="callout good">
+        <b>A classificação segue o item, sempre.</b> Se um dia você reclassificar o item
+        (trocar a subcategoria, por exemplo), as <b>próximas</b> ocorrências já saem com a
+        classificação nova — sem precisar mexer na recorrência.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>As nove frequências</h3>
+      <div class="chips">
+        <span class="chip">Todo dia</span>
+        <span class="chip">A cada 3 dias</span>
+        <span class="chip">A cada 5 dias</span>
+        <span class="chip">Toda semana</span>
+        <span class="chip">A cada 2 semanas</span>
+        <span class="chip">Todo mês</span>
+        <span class="chip">A cada 3 meses</span>
+        <span class="chip">A cada 6 meses</span>
+        <span class="chip">Todo ano</span>
+      </div>
+      <p style="margin-top:14px; color:var(--muted)">Nas frequências <b>mensais ou maiores</b>,
+      quem manda é o <b>dia base</b>. Nas menores que um mês, o ciclo simplesmente conta os
+      dias a partir da data de início.</p>
+      <div class="callout">
+        <b>E o dia 31 nos meses que não têm dia 31?</b> Cai no <b>último dia do mês</b> —
+        30/04, 28/02 — e <b>volta ao dia 31</b> no mês seguinte que tiver. Fevereiro não
+        “puxa” a recorrência para o dia 28 pelo resto da vida. Ano bissexto também é tratado.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>O calendário</h3>
+      <p>A tela abre no mês corrente, e você navega com <b>‹ Anterior</b>, <b>Próximo ›</b> e
+      <b>Hoje</b>. Há três visões: <b>Mês</b>, <b>Semana</b> e <b>Dia</b>.</p>
+
+      <div class="scroll">
+        <div class="mini">
+          <div class="h">Dom</div><div class="h">Seg</div><div class="h">Ter</div><div class="h">Qua</div><div class="h">Qui</div><div class="h">Sex</div><div class="h">Sáb</div>
+          <div class="d"><span class="n">2</span></div>
+          <div class="d"><span class="n">3</span></div>
+          <div class="d"><span class="n">4</span></div>
+          <div class="d"><span class="n">5</span><span class="c feito">✓ Aluguel Canoas</span></div>
+          <div class="d"><span class="n">6</span></div>
+          <div class="d hoje"><span class="n">7</span><span class="c">Contador</span><span class="c custo">Peixaria</span><span class="c custo">Hortifruti</span><span class="more">+4 lançamentos</span></div>
+          <div class="d"><span class="n">8</span></div>
+          <div class="d"><span class="n">9</span></div>
+          <div class="d"><span class="n">10</span><span class="c">Internet</span></div>
+          <div class="d"><span class="n">11</span></div>
+          <div class="d"><span class="n">12</span></div>
+          <div class="d"><span class="n">13</span></div>
+          <div class="d"><span class="n">14</span><span class="c">Sistema</span></div>
+          <div class="d"><span class="n">15</span></div>
+        </div>
+      </div>
+      <div class="legenda">
+        <span><i class="sw-rec"></i>recorrente a lançar</span>
+        <span><i class="sw-feito"></i>já lançado (✓)</span>
+        <span><i class="sw-custo"></i>custo avulso</span>
+      </div>
+
+      <p style="margin-top:16px"><b>Clique num lançamento</b> para ver o detalhe: fornecedor,
+      item, classificação, quantidade, valor unitário e total. <b>Clique em qualquer outro
+      ponto do dia</b> para abrir a lista completa daquele dia — útil quando há muitos, já
+      que a célula mostra os primeiros e resume o resto em “+N lançamentos”. Se o dia estiver
+      vazio, ele diz isso claramente.</p>
+
+      <p><b>No telefone</b>, a visão mês vira uma grade compacta no estilo do Calendário do
+      iPhone: os dias lado a lado, semana a semana, e um <b>ponto colorido</b> no dia que tem
+      lançamento — coral quando há algo a lançar, esmaecido quando já foi lançado, areia quando
+      é custo avulso. O dia de hoje fica marcado com um círculo. Toque no dia para ver a lista
+      completa dele.</p>
+
+      <div class="callout">
+        <b>O interruptor “Mostrar todos os custos”</b> traz para o calendário também os custos
+        <b>avulsos</b> do período — os que você lançou à mão ou importou. Assim dá para ver o
+        mês inteiro: o que é fixo e o que não é, lado a lado. As recorrências sempre aparecem
+        primeiro dentro de cada dia.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Colocar em dia — o único jeito de lançar</h3>
+      <p>Quando alguma ocorrência vence, aparece uma faixa no topo da página:</p>
+      <div class="kpirow">
+        <div class="kpi"><div class="lbl">Faixa de aviso</div><div class="val v-out">⚠ 3 vencidas</div><div class="hint">aguardando lançamento</div></div>
+        <div class="kpi"><div class="lbl">Valor</div><div class="val">R$ 4.850,00</div><div class="hint">soma do que está pendente</div></div>
+        <div class="kpi"><div class="lbl">Ação</div><div class="val v-sal">Colocar em dia</div><div class="hint">abre a prévia</div></div>
+      </div>
+      <p>O botão <b>não lança direto</b>: ele abre uma <b>prévia</b> com tudo o que seria
+      gravado — data, descrição, item, fornecedor, quantidade, valor unitário e total —
+      para você conferir antes. Só então o botão <b>“Lançar N ocorrência(s)”</b> grava.</p>
+
+      <div class="scroll">
+        <table class="demo">
+          <thead>
+            <tr><th>Data</th><th>Descrição</th><th>Item</th><th class="num">Qtd</th><th class="num">V. Unit</th><th class="num">Total</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>05/08/2026</td><td>Aluguel Canoas</td><td>ALUGUEL CANOAS</td><td class="num">1</td><td class="num">R$ 3.500,00</td><td class="num">R$ 3.500,00</td></tr>
+            <tr><td>07/08/2026</td><td>Contador</td><td>ADVOGADO / CONTABILIDADE</td><td class="num">1</td><td class="num">R$ 1.100,00</td><td class="num">R$ 1.100,00</td></tr>
+            <tr><td>10/08/2026</td><td>Internet</td><td>INTERNET</td><td class="num">1</td><td class="num">R$ 250,00</td><td class="num">R$ 250,00</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout good">
+        <b>Cada uma entra na sua própria data.</b> Se você ficou duas semanas sem abrir o
+        sistema e três recorrências venceram, todas são lançadas — cada uma com a data em que
+        venceu, não com a data de hoje. O mês fecha certo.
+      </div>
+      <div class="callout">
+        <b>Clicar duas vezes não duplica.</b> O sistema sabe exatamente quais ocorrências já
+        viraram custo. Mandar “colocar em dia” de novo, sem nada novo vencido, simplesmente
+        não faz nada.
+      </div>
+      <div class="callout warn">
+        <b>Nada é lançado automaticamente.</b> Foi uma decisão de projeto: dinheiro só entra
+        na planilha quando alguém manda. Em compensação, <b>é preciso abrir o módulo de vez em
+        quando</b> — a faixa de aviso existe justamente para isso. Uma olhada por semana basta.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Quando um mês foge da regra</h3>
+      <p>Nem todo mês é igual. O módulo trata os dois casos comuns sem que você precise
+      desfazer a recorrência:</p>
+      <div class="cols">
+        <div>
+          <p><b>“Este mês não vai ter.”</b><br>
+          <span style="color:var(--muted)">Abra a ocorrência no calendário e escolha
+          <b>“Pular esta data”</b>. Ela fica riscada no calendário — para você lembrar de
+          que foi você quem pulou — e não vira custo. Dá para reativar depois.</span></p>
+        </div>
+        <div>
+          <p><b>“Este mês veio diferente.”</b><br>
+          <span style="color:var(--muted)">Abra a ocorrência, clique em <b>Editar</b> e
+          escolha <b>“Só esta data”</b>. Você ajusta quantidade, valor e nº da nota apenas
+          daquela vez; as demais seguem como estavam.</span></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Alterar, cancelar, excluir</h3>
+      <p>Ao clicar em <b>Editar</b> numa ocorrência, o sistema pergunta o que você quer mudar:</p>
+      <ul class="plain">
+        <li><b>Só esta data</b> — vira uma exceção, como acima.</li>
+        <li><b>Esta e todas as seguintes</b> — altera a recorrência. Vale do próximo vencimento em diante.</li>
+      </ul>
+      <div class="callout good" style="margin-top:16px">
+        <b>O que já foi lançado nunca muda.</b> Se o aluguel sobe de R$ 3.500 para R$ 3.800,
+        você edita a recorrência e as próximas saem com o valor novo — mas os meses que já
+        foram lançados continuam com o valor de quando aconteceram, tanto em Custos quanto no
+        calendário. Ao abrir uma ocorrência antiga, o sistema mostra o valor <b>efetivamente
+        lançado</b> e avisa quando ele difere do valor atual da recorrência.
+      </div>
+      <p style="margin-top:16px"><b>Cancelar</b> (⛔) encerra a recorrência a partir de uma
+      data que você escolhe — inclusive uma data futura, e até lá ela continua lançando
+      normalmente. <b>Excluir</b> (🗑) apaga o cadastro. Em nenhum dos dois casos os custos já
+      lançados são apagados: eles são lançamentos reais e permanecem no histórico.</p>
+    </div>
+
+    <div class="card">
+      <h3>A lista de recorrências</h3>
+      <p>Abaixo do calendário fica a tabela com tudo o que está cadastrado: descrição, item,
+      frequência, valor, início, fim, <b>próximo vencimento</b> e situação (ativa ou
+      encerrada). Ela tem <b>busca</b> por descrição, item ou fornecedor, e filtros de
+      <b>frequência</b> e <b>situação</b> — para achar rápido quando a lista crescer.</p>
+      <div class="scroll">
+        <table class="demo">
+          <thead>
+            <tr><th>Descrição</th><th>Frequência</th><th class="num">Valor</th><th>Próximo</th><th>Situação</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Aluguel Canoas</td><td>Todo mês · dia 5</td><td class="num">R$ 3.500,00</td><td>05/09/2026</td><td><span class="tag tag-in">Ativa</span></td></tr>
+            <tr><td>Internet</td><td>Todo mês · dia 10</td><td class="num">R$ 250,00</td><td>10/08/2026</td><td><span class="tag tag-in">Ativa</span></td></tr>
+            <tr><td>Licença antiga</td><td>Todo ano · dia 1</td><td class="num">R$ 900,00</td><td>—</td><td><span class="tag tag-out">Encerrada</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Quem pode mexer</h3>
+      <p>Quem tem acesso <b>apenas de consulta</b> vê o calendário, abre os detalhes e
+      acompanha o que está por vencer — mas não vê os botões de criar, editar, cancelar nem
+      o de lançar. Mesma regra dos outros módulos.</p>
+    </div>
+  </section>
+
+  <!-- ===== Custos mais rápido ===== -->
+  <section>
+    <p class="sec-label">Também nesta versão</p>
+    <div class="card">
+      <div class="os-head"><span class="os-badge">⚡</span><h3 style="margin:0">A tela de Custos abre bem mais rápido</h3></div>
+      <p>A base já passa de <b>sete mil lançamentos</b>, e montar todos eles na tela deixava a
+      abertura lenta — sem servir para nada, porque ninguém lê a milésima linha.</p>
+      <p>Agora, <b>sem filtro</b>, a listagem mostra os <b>100 lançamentos mais recentes</b>,
+      com um aviso discreto embaixo do título. <b>Assim que você aplica qualquer filtro</b>
+      — mês, dia, categoria, subcategoria, fornecedor, tag, nº da nota ou item — o limite
+      some e você vê <b>todos</b> os que casam com a busca.</p>
+      <div class="callout">
+        <b>O total e a contagem nunca mentem.</b> Eles continuam somando o conjunto inteiro
+        que você filtrou, não apenas as linhas que estão na tela. E o seletor do cabeçalho
+        marca só as linhas exibidas — não dá para selecionar sem querer milhares de registros
+        invisíveis.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Como atualizar ===== -->
+  <section>
+    <p class="sec-label">Como atualizar</p>
+    <div class="cols">
+      <div class="card" style="margin:0">
+        <div class="os-head"><span class="os-badge">🪟</span><h3 style="margin:0">Windows</h3></div>
+        <p style="color:var(--muted); margin:0"><b>Automático.</b> Abra o app: ele baixa a
+        versão nova em segundo plano e instala quando você fecha. Na próxima abertura, o
+        rodapé mostra <b>v1.8.0</b> e a seção <b>Recorrentes</b> aparece no menu. Seu login e
+        seus dados permanecem. Para antecipar, use <b>Sistema → Configurações →
+        “🔄 Verificar atualizações”</b>.</p>
+      </div>
+      <div class="card" style="margin:0">
+        <div class="os-head"><span class="os-badge">🌐</span><h3 style="margin:0">Web (navegador)</h3></div>
+        <p style="color:var(--muted); margin:0"><b>Nada a fazer.</b> Basta recarregar a
+        página. Se o menu Recorrentes não aparecer de primeira, force a recarga com
+        <span class="kbd">Ctrl</span> + <span class="kbd">F5</span>
+        (no Mac, <span class="kbd">⌘</span> + <span class="kbd">⇧</span> + <span class="kbd">R</span>).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Primeiros passos ===== -->
+  <section>
+    <p class="sec-label">Primeiros passos sugeridos</p>
+    <div class="card">
+      <ol class="steps">
+        <li>Abra <b>Recorrentes</b> e cadastre <b>um</b> custo fixo que você conhece de cor — o aluguel, por exemplo. Confira se ele aparece no calendário na data certa.</li>
+        <li>Cadastre os demais: internet, sistema, contador, seguros, assinaturas. Leva alguns minutos e é feito uma vez só.</li>
+        <li>Quando aparecer a faixa <b>“ocorrências vencidas”</b>, clique em <b>Colocar em dia</b>, <b>confira a prévia</b> e lance.</li>
+        <li>Vá até a tela de <b>Custos</b> e veja os lançamentos lá, normais como qualquer outro — inclusive nos dashboards.</li>
+        <li>Crie o hábito de abrir o módulo <b>uma vez por semana</b>. Como nada é lançado sozinho, essa olhada é o que mantém o mês em dia.</li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="foot">
+    Kampeki Finance · versão 1.8.0 · notas da versão.<br>
+    Em caso de dúvida, entre em contato com o responsável pelo sistema.
+  </div>
+
+</div>
+</div>
+</body>
+</html>

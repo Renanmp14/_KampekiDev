@@ -610,8 +610,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .nav-link { padding: 11px 12px; }
   .filtro-chip button { padding: 2px 4px; font-size: 15px; }
 
-  /* Modais ocupam a tela de cima para baixo (centralizar corta o conteúdo alto). */
-  .modal-backdrop { padding: 10px; align-items: flex-start; }
+  /* Modais CENTRALIZADOS também no telefone. O `align-items: flex-start` daqui
+     existia porque centralizar um item mais alto que a tela corta o topo — mas
+     isso não acontece: o `.modal` abaixo tem teto de altura e rolagem própria,
+     então ele nunca é maior que o backdrop. Colado no topo, um modal curto
+     (detalhe de um lançamento) ficava jogado no canto, com a tela vazia embaixo. */
+  .modal-backdrop { padding: 10px; }
   .modal {
     padding: 16px;
     max-height: calc(100dvh - 20px);
@@ -779,4 +783,208 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .caixa-tipo { padding: 12px 10px; font-size: 15px; }
 
   .caixa-resumo-total { font-size: 14px; }
+}
+
+/* ---------- Recorrentes (calendário de custos fixos) ---------- */
+
+/* Faixa de vencidas: o contrapeso do gatilho manual. Sem ela, "ninguém clica,
+   nada é lançado" viraria um silêncio caro. */
+.rec-faixa {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px;
+  background: rgba(215, 196, 182, 0.14); border: 1px solid var(--sand);
+  border-radius: var(--radius); color: var(--text);
+}
+.rec-aviso-ok {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius);
+  background: rgba(191, 203, 127, 0.14); border: 1px solid var(--olive);
+  font-size: 13px;
+}
+.rec-aviso-ok button {
+  background: none; border: none; color: var(--text); cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 0 4px;
+}
+
+.rec-toolbar { align-items: center; gap: 12px; }
+.rec-nav { display: flex; align-items: center; gap: 6px; }
+.rec-periodo { font-weight: 600; min-width: 150px; text-align: center; }
+.rec-visoes { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.rec-visao {
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+  padding: 7px 14px; font-size: 13px; font-family: inherit;
+}
+.rec-visao.ativa { background: var(--primary); color: var(--on-primary); font-weight: 600; }
+.rec-hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; line-height: 1.5; }
+.rec-acoes { white-space: nowrap; }
+
+/* Grade do mês. `min-width: 0` nos filhos pela mesma razão registrada no .main e
+   no .caixa-layout: item de grid nasce com min-width auto, e um chip de nome
+   longo esticaria a célula, a página e levaria a sidebar embora. */
+.cal-grade { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-grade > * { min-width: 0; }
+.cal-cabecalho {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--muted); text-align: center; padding-bottom: 4px;
+}
+.cal-celula {
+  min-height: 108px; padding: 6px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface-2);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.cal-celula-vazia { background: transparent; border-color: transparent; min-height: 0; }
+.cal-hoje { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.cal-numero { font-size: 12px; color: var(--muted); font-weight: 600; }
+.cal-eventos { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+
+/* Chip de evento */
+.cal-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  width: 100%; text-align: left; cursor: pointer; font-family: inherit;
+  padding: 4px 7px; border-radius: 6px; font-size: 12px;
+  background: rgba(255, 139, 124, 0.18); border: 1px solid rgba(255, 139, 124, 0.55);
+  color: var(--text); min-width: 0;
+}
+.cal-chip:hover { background: rgba(255, 139, 124, 0.3); }
+.cal-chip-custo { background: rgba(215, 196, 182, 0.16); border-color: rgba(215, 196, 182, 0.5); }
+.cal-chip-custo:hover { background: rgba(215, 196, 182, 0.28); }
+.cal-chip-lancado { opacity: 0.62; }
+.cal-chip-pulado { opacity: 0.5; text-decoration: line-through; }
+.cal-chip-titulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chip-marca { margin-right: 4px; }
+.cal-chip-valor { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* Semana e dia */
+.cal-semana { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-semana > * { min-width: 0; }
+.cal-semana-dia {
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+  padding: 8px; min-height: 150px;
+}
+.cal-semana-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.cal-semana-nome { font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.cal-dia-total { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.cal-vazio { color: var(--muted); font-size: 13px; padding: 18px 0; text-align: center; }
+.cal-vazio-dia { color: var(--muted); font-size: 12px; }
+
+/* Grade compacta do telefone, no modelo do Calendário do iPhone: os dias lado a
+   lado e um ponto colorido no dia que tem lançamento. Em ~50px de coluna não cabe
+   chip nenhum — o ponto informa, e o toque abre o dia inteiro. */
+.cal-mini { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-mini-h {
+  text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted); padding-bottom: 6px;
+}
+.cal-mini-dia {
+  aspect-ratio: 1 / 1; min-height: 44px; /* alvo de toque confortável */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: transparent; border: none; border-radius: 10px; padding: 0;
+  color: var(--muted); font-family: inherit; cursor: pointer;
+}
+.cal-mini-dia.tem { background: var(--surface-2); color: var(--text); }
+.cal-mini-n {
+  font-size: 15px; line-height: 1; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+}
+/* Hoje é um círculo cheio, como no iPhone — vale mesmo sem lançamento no dia. */
+.cal-mini-dia.hoje .cal-mini-n { background: var(--primary); color: var(--on-primary); font-weight: 700; }
+.cal-mini-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+.cal-mini-dot.feito { opacity: 0.45; }        /* só recorrente já lançado */
+.cal-mini-dot.custo { background: var(--sand); } /* só custo avulso */
+
+.rec-legenda { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+.rec-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.rec-legenda i.cal-chip { width: 22px; height: 11px; padding: 0; display: inline-block; }
+
+/* Dialog de detalhe */
+.rec-linha { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.rec-linha:last-of-type { border-bottom: none; }
+.rec-linha-rotulo { color: var(--muted); min-width: 120px; }
+.rec-linha-valor { flex: 1; }
+.rec-escopo { display: flex; flex-direction: column; gap: 10px; }
+.rec-escopo-opcao {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  text-align: left; width: 100%; padding: 12px 14px; height: auto;
+}
+.rec-escopo-opcao .rec-hint { margin: 0; }
+
+@media (max-width: 820px) {
+  .cal-semana { grid-template-columns: 1fr; }
+  .cal-semana-dia { min-height: 0; }
+}
+
+@media (max-width: 520px) {
+  .rec-toolbar { gap: 10px; }
+  .rec-nav { flex: 1 1 100%; justify-content: space-between; }
+  .rec-periodo { min-width: 0; }
+  .rec-visoes { flex: 1 1 100%; }
+  .rec-visao { flex: 1; padding: 11px 8px; } /* alvo de toque confortável */
+  .rec-faixa .btn { flex: 1 1 auto; }
+  .rec-linha-rotulo { min-width: 96px; }
+}
+
+/* Aviso do limite de exibição da listagem de Custos. Tom secundário de
+   propósito: é informação, não alerta — nada está errado. */
+.custos-limite-nota {
+  display: block; font-weight: 400; font-size: 12px; color: var(--muted); margin-top: 4px;
+}
+
+/* Interruptor "Mostrar todos os custos" — o checkbox nativo destoava do tema
+   (é desenhado pelo SO, como acontecia com o <datalist> antes do SearchableSelect). */
+.rec-switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
+.rec-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.rec-switch-track {
+  position: relative; width: 42px; height: 23px; border-radius: 999px; flex: none;
+  background: var(--surface-2); border: 1px solid var(--border); transition: background 0.16s, border-color 0.16s;
+}
+.rec-switch-thumb {
+  position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--muted); transition: transform 0.16s, background 0.16s;
+}
+.rec-switch input:checked + .rec-switch-track { background: rgba(255, 139, 124, 0.28); border-color: var(--primary); }
+.rec-switch input:checked + .rec-switch-track .rec-switch-thumb { transform: translateX(19px); background: var(--primary); }
+.rec-switch input:focus-visible + .rec-switch-track { outline: 2px solid var(--primary); outline-offset: 2px; }
+.rec-switch-label { font-size: 13px; color: var(--muted); }
+.rec-switch input:checked ~ .rec-switch-label { color: var(--text); }
+
+/* "+N lançamentos" no rodapé da célula: a célula inteira é clicável e abre o dia. */
+.cal-mais { font-size: 11px; color: var(--muted); padding: 1px 2px; }
+.cal-celula[role="button"], .cal-semana-dia[role="button"] { cursor: pointer; }
+.cal-celula[role="button"]:hover, .cal-semana-dia[role="button"]:hover { border-color: var(--primary); }
+
+/* Barra de filtros da tabela de recorrências (não afeta o calendário). */
+.rec-filtros { margin-bottom: 12px; align-items: flex-end; }
+
+/* Tabelas do módulo: a célula não quebra em duas linhas — a rolagem acontece
+   DENTRO do .table-wrap (padrão do app), não na página. Descrição e item podem
+   ser longos, então ganham teto próprio em vez de esticar a tabela inteira. */
+.rec-tabela td, .rec-tabela th { white-space: nowrap; }
+.rec-tabela .rec-col-larga { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 520px) {
+  /* O empurrão para a direita não faz sentido quando tudo empilha. */
+  .rec-toolbar .spacer { display: none; }
+  .rec-toolbar > .btn { flex: 1 1 100%; }
+  .rec-toolbar .muted { flex: 1 1 100%; }
+  .rec-switch { flex: 1 1 100%; }
+  .rec-switch-label { font-size: 14px; }
+
+  /* Chip com alvo de toque confortável — a regra global de 40px vale para .btn,
+     e o chip não é .btn. Vale para a dialog do dia e para a visão semana. */
+  .cal-chip { padding: 9px 10px; font-size: 13px; }
+  .cal-mais { font-size: 12px; padding: 4px 2px; }
+
+  /* Descrição/item ocupando 260px empurrariam a rolagem horizontal longe demais
+     numa tela de 390px. */
+  .rec-tabela .rec-col-larga { max-width: 150px; }
+
+  /* A dialog de detalhe fica legível empilhando rótulo e valor. */
+  .rec-linha { flex-direction: column; gap: 2px; padding: 7px 0; }
+  .rec-linha-rotulo { min-width: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+}
+
+/* Legenda no telefone: os marcadores da grade são pontos, não chips — mostrar
+   retângulos ali explicaria a tela errada. */
+@media (max-width: 520px) {
+  .rec-legenda i.cal-chip { width: 10px; height: 10px; border-radius: 50%; }
 }

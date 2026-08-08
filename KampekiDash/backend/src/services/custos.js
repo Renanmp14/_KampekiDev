@@ -4,7 +4,7 @@ import {
 } from './sheets.js';
 import { invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
-import { derivarCamposData, ultimoDiaDoMes } from '../utils/date.js';
+import { derivarCamposData, ultimoDiaDoMes, dataParaMs } from '../utils/date.js';
 import { exigeTag, categoriaDe } from '../utils/switch-categoria.js';
 import { buscarPorUuid as buscarItem } from './itens.js';
 import { listar as listarFornecedores } from './fornecedor.js';
@@ -43,8 +43,26 @@ function resolverTotal(qtd, valorUnit, totalInformado) {
   return +(qtd * valorUnit).toFixed(2);
 }
 
-export async function listar() {
-  return getObjects(TAB);
+/**
+ * Lista os custos. `dataInicio`/`dataFim` (DD/MM/YYYY) são OPCIONAIS e recortam
+ * por DATA_NOTA — usados pelo calendário de Recorrentes para carregar só o
+ * intervalo visível. Sem eles o comportamento é o de sempre: devolve tudo.
+ *
+ * O ganho é de payload e de renderização, não de leitura: a planilha é lida
+ * inteira de qualquer forma (a API do Sheets não filtra por valor).
+ */
+export async function listar({ dataInicio, dataFim } = {}) {
+  const rows = await getObjects(TAB);
+  const de = dataParaMs(dataInicio);
+  const ate = dataParaMs(dataFim);
+  if (Number.isNaN(de) && Number.isNaN(ate)) return rows;
+  return rows.filter((c) => {
+    const t = dataParaMs(c.DATA_NOTA);
+    if (Number.isNaN(t)) return false; // sem data válida não cabe num intervalo
+    if (!Number.isNaN(de) && t < de) return false;
+    if (!Number.isNaN(ate) && t > ate) return false;
+    return true;
+  });
 }
 
 // Monta a linha de custo a partir do payload, derivando todos os campos.

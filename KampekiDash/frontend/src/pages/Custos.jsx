@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   custosApi, fornecedorApi, itensApi, tagApi,
 } from '../api/resources.js';
@@ -28,6 +29,18 @@ const emptyForm = {
 };
 
 const norm = (s) => String(s || '').trim().toUpperCase();
+
+// Sem filtro, a listagem mostra só os lançamentos mais recentes: a base passa de
+// 7 mil linhas e montar todas trava a tela sem servir a ninguém. Qualquer filtro
+// ativo remove o limite — aí a pessoa procura algo específico e precisa ver tudo.
+const LIMITE_SEM_FILTRO = 100;
+
+// Data POR VALOR, para ordenar. DD/MM/YYYY como texto ordena errado
+// ("02/01/2026" viria antes de "10/12/2025").
+function dataMs(br) {
+  const m = String(br || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? Date.UTC(+m[3], +m[2] - 1, +m[1]) : 0;
+}
 
 // "2026-06-13" (input date) -> "13/06/2026"
 function isoToBr(iso) {
@@ -166,15 +179,18 @@ export default function Custos() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Filtros da listagem.
-  const [fMesAnos, setFMesAnos] = useState([]); // multi-seleção de Mês/Ano (chips)
-  const [fDia, setFDia] = useState(''); // dia (DD) — só disponível com 1 Mês/Ano escolhido
+  // Filtros da listagem. Podem chegar pela URL (?mes=MM/YYYY&dia=DD&item=...) —
+  // é assim que o "Ver em Custos" do calendário de Recorrentes cai já filtrado
+  // na linha certa, em vez de despejar a base inteira.
+  const [params] = useSearchParams();
+  const [fMesAnos, setFMesAnos] = useState(() => (params.get('mes') ? [params.get('mes')] : [])); // multi-seleção de Mês/Ano (chips)
+  const [fDia, setFDia] = useState(() => params.get('dia') || ''); // dia (DD) — só disponível com 1 Mês/Ano escolhido
   const [fCategoria, setFCategoria] = useState('');
   const [fSubcats, setFSubcats] = useState([]); // multi-seleção de subcategorias
   const [fFornecedor, setFFornecedor] = useState('');
   const [fTag, setFTag] = useState('');
   const [fNota, setFNota] = useState('');
-  const [fItem, setFItem] = useState('');
+  const [fItem, setFItem] = useState(() => params.get('item') || '');
 
   // Seleção / edição em massa.
   const [selected, setSelected] = useState(() => new Set());
@@ -553,13 +569,24 @@ export default function Custos() {
     setFDia('');
   }
 
+  // Total e contagem continuam sobre o conjunto filtrado INTEIRO: o limite é de
+  // exibição, e um total que mudasse com o corte de tela seria mentira.
   const totalFiltrado = filtrados.reduce((s, c) => s + toNum(c.VALOR_TOTAL), 0);
 
+  // --- Limite de exibição ---------------------------------------------------
+  const semFiltroAtivo = !fMesAnos.length && !fDia && !fCategoria.trim() && !fSubcats.length
+    && !fFornecedor.trim() && !fTag.trim() && !fNota.trim() && !fItem.trim();
+  const registrosExibidos = semFiltroAtivo
+    ? [...filtrados].sort((a, b) => dataMs(b.DATA_NOTA) - dataMs(a.DATA_NOTA)).slice(0, LIMITE_SEM_FILTRO)
+    : filtrados; // com filtro, mantém a ordem da planilha (como sempre foi)
+
   // --- Seleção em massa -----------------------------------------------------
-  const uuidsFiltrados = filtrados.map((c) => c.UUID);
-  const selecionadosVisiveis = uuidsFiltrados.filter((u) => selected.has(u));
-  const todosVisiveisSelecionados = uuidsFiltrados.length > 0
-    && selecionadosVisiveis.length === uuidsFiltrados.length;
+  // O checkbox do cabeçalho marca apenas as linhas RENDERIZADAS: marcar 7 mil
+  // registros invisíveis e sair aplicando edição em massa neles seria perigoso.
+  const uuidsRenderizados = registrosExibidos.map((c) => c.UUID);
+  const selecionadosVisiveis = uuidsRenderizados.filter((u) => selected.has(u));
+  const todosVisiveisSelecionados = uuidsRenderizados.length > 0
+    && selecionadosVisiveis.length === uuidsRenderizados.length;
 
   function toggleUm(uuid) {
     setSelected((prev) => {
@@ -573,9 +600,9 @@ export default function Custos() {
     setSelected((prev) => {
       const next = new Set(prev);
       if (todosVisiveisSelecionados) {
-        uuidsFiltrados.forEach((u) => next.delete(u));
+        uuidsRenderizados.forEach((u) => next.delete(u));
       } else {
-        uuidsFiltrados.forEach((u) => next.add(u));
+        uuidsRenderizados.forEach((u) => next.add(u));
       }
       return next;
     });
@@ -747,6 +774,11 @@ export default function Custos() {
         <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 className="card-title" style={{ margin: 0 }}>
             {filtrados.length} lançamentos · Total {brl(totalFiltrado)}
+            {semFiltroAtivo && filtrados.length > LIMITE_SEM_FILTRO && (
+              <span className="custos-limite-nota">
+                Exibindo os {LIMITE_SEM_FILTRO} lançamentos mais recentes. Aplique um filtro para ver todos.
+              </span>
+            )}
           </h3>
           {escrever && selected.size > 0 && (
             <div className="row-actions" style={{ alignItems: 'center', gap: 8 }}>
@@ -767,7 +799,7 @@ export default function Custos() {
                       type="checkbox"
                       checked={todosVisiveisSelecionados}
                       onChange={toggleTodosVisiveis}
-                      title="Selecionar todos os filtrados"
+                      title="Selecionar os lançamentos exibidos"
                     />
                   </th>
                   <th>Data</th>
@@ -784,7 +816,7 @@ export default function Custos() {
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map((c) => (
+                {registrosExibidos.map((c) => (
                   <tr key={c.UUID} className={selected.has(c.UUID) ? 'selected-row' : ''}>
                     <td>
                       <input
@@ -815,7 +847,7 @@ export default function Custos() {
                     </td>
                   </tr>
                 ))}
-                {filtrados.length === 0 && <tr><td colSpan={12} className="empty">Nenhum lançamento.</td></tr>}
+                {registrosExibidos.length === 0 && <tr><td colSpan={12} className="empty">Nenhum lançamento.</td></tr>}
               </tbody>
             </table>
           </div>

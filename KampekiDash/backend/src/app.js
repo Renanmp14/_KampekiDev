@@ -16,6 +16,7 @@ import itensRoutes from './routes/itens.js';
 import custosRoutes from './routes/custos.js';
 import folhaRoutes from './routes/folha.js';
 import caixaRoutes from './routes/caixa.js';
+import recorrentesRoutes from './routes/recorrentes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -95,6 +96,7 @@ app.use('/api/itens', protegidas, itensRoutes);
 app.use('/api/custos', protegidas, custosRoutes);
 app.use('/api/folha', protegidas, folhaRoutes);
 app.use('/api/caixa', protegidas, caixaRoutes);
+app.use('/api/recorrentes', protegidas, recorrentesRoutes);
 
 // --- Frontend estático (produção / app empacotado) ------------------------
 // Quando há um build do frontend disponível, o próprio Express o serve na mesma

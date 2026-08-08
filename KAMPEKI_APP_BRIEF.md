@@ -3092,3 +3092,384 @@ outro, em vez de confiar na conta de cabeça — os outros três estavam certos.
   de segurança mais antiga.
 - **`.env` local de dev com a chave revogada** — `npm run dev` sobe mas não lê a planilha.
 - **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
+
+---
+
+## Atualizações — 07/08/2026 — versão 1.8.0 — **Custos Recorrentes + paginação em Custos**
+
+> Implementa o `FEATURE_CUSTOS_RECORRENTES.md`. Duas entregas independentes: o **módulo de
+> recorrentes** (templates de custo fixo + calendário) e o **limite de exibição** na listagem de
+> Custos. O documento da feature foi conferido linha a linha contra o código antes de escrever
+> qualquer coisa, e a seção "Ajustes acordados — parte 2" registra o que mudou nessa conferência.
+>
+> `desktop/package.json` e `frontend/package.json` em **1.8.0**.
+
+### Como funciona o módulo
+
+Um **template** em `CUSTOS_RECORRENTES` descreve o custo fixo (item, valor, frequência, dia base,
+início e fim). O calendário projeta as ocorrências, e **nada é lançado sozinho**: quando alguém
+clica em **"Colocar em dia"**, tudo o que venceu vira linha em `CUSTOS`, **cada uma na sua própria
+data**, depois de uma prévia. A página abre com uma faixa *"N ocorrências vencidas aguardando
+lançamento"* — o contrapeso obrigatório de um gatilho manual.
+
+### As três decisões que sustentam o desenho
+
+**1. `DATA_CORTE` separa o piso da trava.** A decisão original tinha uma contradição: se a trava de
+duplicidade passa a ser "existe linha em `CUSTOS` para esta data?", um template com `DATA_INICIO` no
+passado geraria todas as ocorrências antigas; mas usar o `ULTIMO_LANCAMENTO` como piso faria um custo
+excluído na tela **nunca mais** ser gerado — justamente o que a coluna nova queria consertar. Os dois
+papéis foram separados em três campos:
+
+| Campo | Papel |
+|---|---|
+| `DATA_CORTE` (novo, em `CUSTOS_RECORRENTES`) | **Piso imutável.** Última ocorrência anterior a hoje no momento da criação. Nada antes dela é gerado, nunca. |
+| `UUID_RECORRENTE` (novo, 17ª coluna de `CUSTOS`) | **Trava real.** `uuid-do-template` + `\|` + `DD/MM/YYYY` — idempotência por ocorrência. |
+| `ULTIMO_LANCAMENTO` | **Atalho de leitura.** Pinta o ✓ no calendário sem varrer `CUSTOS`. Não trava nada. |
+
+Resultado, coberto por teste: nada retroativo **e** um custo gerado que for excluído na tela volta à
+prévia no próximo clique.
+
+**2. A classificação vem do item, não do template.** Gravar sub/categoria congeladas brigaria com a
+regra da 1.4.1 ("o item é a fonte da verdade", com back-fill ao reclassificar): cada processamento
+reintroduziria a classe antiga. O template guarda o **UUID** do item (estável contra renomeação) e,
+na hora de gravar, resolve para `DESCRICAO_ITEM` + subcategoria, categoria e **tag atuais do item**.
+As colunas de classificação do template ficam como cópia só para exibir no calendário.
+
+**3. Cancelar não é o mesmo que inativar.** Gravar `DATA_FIM` **e** `ATIVO = "nao"` juntos, como
+dizia a spec, pararia o processamento na hora e comeria as ocorrências entre hoje e a data escolhida
+— o oposto de "cancelar a partir de 20/09". Agora o cancelamento grava `DATA_FIM` na véspera da data
+escolhida e só marca `ATIVO = "nao"` **quando essa data já passou**; o template sai de circulação
+sozinho quando `DATA_FIM < hoje`. Exceções posteriores ao fim são removidas.
+
+### Outras correções da spec pegas na conferência
+
+- **`ITEM` passou a ser obrigatório** no template (a spec o marcava como opcional). `CUSTOS.ITEM` é
+  obrigatório e é dele que saem classificação e tag — um template sem item geraria custo sem
+  classificação e sem como classificar.
+- **Bug de algoritmo:** filtrar as datas com `> DATA_INICIO` nunca lançaria a primeira ocorrência. O
+  correto é `>=`.
+- **`NUM_NOTA` vazio vira `"Sem Nota"`** — `montarLinha` rejeita nota vazia; é a convenção do import.
+- **Exceções ganharam a coluna `ACAO`** (`alterar` / `pular`): sem ela não existia o caso real "este
+  mês não lança". O `POST` de exceção é **upsert** por (template, data) — duas linhas para a mesma
+  data deixariam o resultado à mercê da ordem de leitura da planilha.
+- **`GET /api/recorrentes/pendentes`** (novo): a spec só tinha o `POST /processar`, mas a prévia e a
+  faixa de vencidas precisam calcular **sem gravar**.
+- A 1ª coluna da aba de exceções se chama **`UUID`** (não `UUID_EXCECAO`): todas as primitivas do
+  `sheets.js` localizam a linha por esse campo.
+
+### 🔴 `alargarColunas` — o boot que quase quebrava
+
+`sheets.js` tinha `ensureRowCapacity`, mas **nada equivalente para colunas**, e o `initSheets` grava
+o cabeçalho com `values.update` em `A1`. Uma aba `CUSTOS` cuja grade tivesse exatamente 16 colunas
+faria a 17ª estourar a grade e **derrubar o boot — na web e em toda instalação desktop de uma vez**.
+Abas criadas pelo Google nascem com 26 colunas, então provavelmente passaria; como a planilha não é
+verificável daqui (chave de dev revogada), entrou um guard: uma leitura de metadados e, se preciso,
+um único `batchUpdate` alargando a grade das abas defasadas.
+
+### Detalhe favorável que vale registrar
+
+`montarLinha` devolve **15 colunas** numa aba que agora tem **17**, e o `values.update` escreve só de
+`A` até `O`. É por isso que editar um custo pela tela nunca apagou a `CHAVE_NFE` — e o
+`UUID_RECORRENTE` herda a mesma proteção de graça: **editar um custo gerado preserva o rastro**. Por
+isso o serviço novo monta a própria linha em vez de reaproveitar o `montarLinha` (que, além disso,
+rejeita nota vazia); mexer nele para devolver 17 colunas quebraria essa preservação.
+
+### Matemática de recorrência duplicada de propósito
+
+O cálculo das ocorrências precisa existir nos dois lados: no backend para gerar, no frontend para
+desenhar o calendário sem uma ida ao servidor a cada troca de mês. O backend não pode importar de
+`frontend/src` (essa pasta não é empacotada junto dele no Electron), então são dois arquivos
+espelhados — `backend/src/utils/recorrencia.js` (canônico) e `frontend/src/utils/recorrentesCalc.js`.
+Contra a deriva silenciosa, a validação inclui um **teste de paridade** que roda a mesma bateria nos
+dois módulos e exige resultado idêntico.
+
+Duas armadilhas tratadas no cálculo: **aritmética por índice de mês** (somar meses no índice e só
+então resolver o dia — somar sobre a data já encurtada faria um template do dia 31 cair no dia 28
+para sempre depois de um fevereiro) e **salto direto** até a janela visível (um template diário de
+2015 não pode custar milhares de iterações para desenhar agosto de 2026).
+
+### PARTE 1 — limite de exibição na listagem de Custos
+
+Sem filtro, a tabela renderiza só os **100 lançamentos mais recentes** (`DATA_NOTA` desc, com
+comparador **por valor** — `DD/MM/YYYY` como texto ordena errado), com uma nota discreta abaixo do
+título. Qualquer filtro ativo remove o limite e mantém a ordem da planilha, como sempre foi.
+**Total e contagem seguem sobre o conjunto filtrado inteiro** (um total que mudasse com o corte de
+tela seria mentira) e o **checkbox do cabeçalho marca só as linhas renderizadas** — marcar 7 mil
+registros invisíveis e sair aplicando edição em massa neles seria perigoso.
+
+De quebra, a tela passou a aceitar `?mes=MM/YYYY&dia=DD&item=...` na URL: é assim que o "Ver em
+Custos" do calendário cai já filtrado na linha certa.
+
+### Changelog técnico — 1.8.0 (por arquivo)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/recorrencia.js` | **Novo** — núcleo puro: `FREQUENCIAS`, `calcularOcorrencias`, `aplicarExcecoes`, `dataCorteInicial`, `proximaData`, `ultimoDiaMes` e helpers de data por valor. |
+| `src/services/recorrentes.js` | **Novo** — CRUD de templates e exceções (upsert), `pendentes()` (prévia sem gravar), `processar()` (idempotente, um `appendRows` + um `batchUpdate`), `cancelar()`. Sem cache, pela regra da 1.7.1. |
+| `src/routes/recorrentes.js` | **Novo** — rotas de caminho fixo antes de `/:uuid`; `POST /:uuid/cancelar` e `DELETE /:uuid` (exclusão definitiva). |
+| `src/services/sheets.js` | `CUSTOS` ganhou `UUID_RECORRENTE` (17ª); novas abas `CUSTOS_RECORRENTES` (com `DATA_CORTE`) e `CUSTOS_RECORRENTES_EXCECOES` (com `ACAO`); novo `alargarColunas()` chamado no `initSheets` antes da sincronia de cabeçalho. |
+| `src/services/custos.js` | `listar({ dataInicio, dataFim })` — recorte opcional e retrocompatível por `DATA_NOTA`. |
+| `src/utils/date.js` | Novo `dataParaMs()` (comparação de datas por valor). |
+| `src/routes/custos.js` | `GET /` repassa `dataInicio`/`dataFim`. |
+| `src/app.js` | Registra `/api/recorrentes` em `protegidas` — o perfil `leitura` já cai no 403 por método. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/recorrentesCalc.js` | **Novo** — espelho do núcleo do backend (ver acima). |
+| `src/pages/Recorrentes.jsx` | **Novo** — calendário (mês/semana/dia), faixa de vencidas, prévia, tabela de recorrências cadastradas, cancelamento e exclusão. |
+| `src/components/CalendarioMensal.jsx` | **Novo** — grade de 7 colunas; no telefone vira lista de dias com evento (célula de ~50px não comporta chip). |
+| `src/components/CalendarioSemanal.jsx`, `CalendarioDiario.jsx` | **Novos** — visões semana e dia. |
+| `src/components/ChipEvento.jsx` | **Novo** — chip compartilhado pelas três visões; ocorrência pulada aparece **riscada** em vez de sumir. |
+| `src/components/RecorrenteForm.jsx` | **Novo** — criação/edição do template (combos pesquisáveis de item e fornecedor; sub/categoria/tag só exibidas, pois vêm do item). |
+| `src/components/RecorrenteDialog.jsx` | **Novo** — detalhe do evento; a edição pergunta o escopo (**só esta data** → exceção; **esta e as seguintes** → template) e oferece pular/reativar a data. |
+| `src/pages/Custos.jsx` | Limite de 100 sem filtro + nota; seleção do cabeçalho restrita às linhas renderizadas; filtros iniciais vindos da URL (`?mes&dia&item`). |
+| `src/api/resources.js` | Novo `recorrentesApi`; `custosApi.listarPeriodo`. |
+| `src/App.jsx`, `src/components/Layout.jsx` | Rota `/recorrentes` e seção própria 🗓 na sidebar (precedente do Caixa). |
+| `src/styles.css` | Bloco `.cal-*` / `.rec-*` (calendário, chips, dialog, faixa) com `min-width: 0` nos filhos das grades — a mesma armadilha da 1.7.1 — e bloco ≤520px; `.custos-limite-nota`. |
+
+### Validação
+
+- **Funções puras — 169/169**, contra os módulos reais, com oráculo independente para as frequências
+  em dias: fevereiro, dia 31 sem deriva, 29/02 em bissexto e nos anos comuns, virada de ano,
+  `DATA_FIM`, janelas de um dia, `DATA_CORTE` nos quatro casos de borda, exceções `alterar`/`pular`,
+  e o salto rápido (500 janelas de um template diário de 2015 em 12ms).
+- **Paridade backend × frontend — 112 comparações** sobre 16 templates × 6 janelas: resultado
+  idêntico nos dois módulos.
+- **Serviço real contra dublês da camada de planilha — 86/86** (a mesma técnica da 1.7.1): a linha
+  gravada tem as 17 colunas nas posições certas, item resolvido para descrição, `"Sem Nota"`,
+  `CHAVE_NFE` vazia, `UUID_RECORRENTE` correto; **idempotência** (processar duas vezes não duplica);
+  **custo excluído volta à prévia** enquanto o `ULTIMO_LANCAMENTO` continua preenchido; acumulado de
+  4 semanas em um único `appendRows`; exceções; classificação lida do item **depois** de o item ser
+  reclassificado; item apagado vira erro sem derrubar os outros templates; cancelamento com data
+  futura mantendo o template ativo e com data passada inativando; edição preservando `DATA_CORTE` e
+  `ULTIMO_LANCAMENTO`; e as 12 rejeições de payload inválido.
+- `node --check` OK nos 8 arquivos do backend; `vite build` OK (1276 módulos; único aviso é o de
+  tamanho de chunk, pré-existente).
+- **NÃO exercitado:** a escrita real na planilha (o `backend/.env` de dev segue com a chave
+  revogada) e a **aparência renderizada** — nenhuma tela nova foi vista no navegador.
+
+### Pendências em aberto
+
+- **Teste manual no navegador** (`npm run dev`): criar uma recorrência, ver o calendário nas três
+  visões, clicar em "Colocar em dia" e conferir a linha na planilha com o `UUID_RECORRENTE`
+  preenchido; excluir esse custo e ver a data voltar à prévia; testar no iPhone a lista compacta.
+- **Repor o `GOOGLE_CREDENTIALS_JSON`** do `.env` local — é o que destrava o teste acima.
+- **Conferir a criação das duas abas novas e da 17ª coluna** no primeiro boot (o `alargarColunas`
+  cuida da grade, mas isso não foi observado contra a planilha real).
+- **Deploy da 1.8.0 — os dois destinos.** Houve mudança de backend e de frontend: na VM `git pull` +
+  `pm2 restart kampeki` **e** `npm run build` no Windows + `scp` do `dist` (o destino termina em
+  `/frontend/`, **não** em `/frontend/dist`); para o Windows, tag `v1.8.0` + release.
+- 🔴 **CORS ainda com wildcard** — aberto desde a **1.5.2**.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
+
+### Ajustes pós-revisão do gestor (mesma sessão, 1.8.0)
+
+Quatro pontos levantados ao ver a tela funcionando. Tudo frontend.
+
+**1. 🔴 O calendário reescrevia o passado ao editar a recorrência.** Este era o problema sensível:
+ao alterar o valor de um template, as ocorrências **já lançadas** passavam a exibir o valor novo,
+embora em `CUSTOS` estivesse gravado o antigo. A causa é que cada chip calculava
+`QTD × VALOR_UNIT` **do template atual**, sem olhar o que foi de fato gravado.
+
+Corrigido na raiz, não com aviso: os custos do intervalo visível passaram a ser buscados
+**sempre** (antes, só com a flag "mostrar todos os custos" ligada) e são indexados pelo
+`UUID_RECORRENTE`. Uma ocorrência com linha correspondente em `CUSTOS` exibe **o que está gravado**
+— valor, quantidade, fornecedor, nota e classificação —; as futuras seguem o template. Quando os
+dois divergem, o detalhe explica: *"os valores acima são os efetivamente lançados nesta data; a
+recorrência hoje prevê R$ X"*.
+
+Dois ganhos de tabela: o ✓ deixou de ser heurística (`data <= ULTIMO_LANCAMENTO` cruzado com a lista
+de pendentes) e passou a ser fato — **existe linha, foi lançado** —, e ligar a flag ficou
+instantâneo, porque ela agora só decide se os custos **não recorrentes** também aparecem. O preço é
+uma chamada a `GET /custos?dataInicio&dataFim` por troca de período; correção de valor exibido vale
+mais que a requisição.
+
+> Limitação registrada: se alguém editar a **data** de um custo gerado direto na tela de Custos, o
+> `UUID_RECORRENTE` continua apontando para a data original e a ocorrência volta a aparecer como não
+> lançada.
+
+**2. Teto de chips por dia, com o dia completo a um clique.** Com a flag ligada, um dia de compras
+enchia a célula e esticava a linha inteira da grade. Agora a célula do mês mostra no máximo **3**
+lançamentos (a coluna da semana, 6) e um rodapé "+N lançamentos"; **clicar em qualquer ponto do dia**
+abre a dialog com a lista completa — inclusive em dia vazio, que responde "Nenhum lançamento neste
+dia" em vez de não fazer nada. Como a lista de cada dia já chega com os **recorrentes primeiro**, o
+corte nunca esconde uma recorrência para mostrar um custo avulso. O chip para a propagação do clique,
+senão abriria o evento e o dia ao mesmo tempo.
+
+**3. Filtros na tabela de recorrências.** Busca por descrição/item/fornecedor, frequência e situação
+(ativas/encerradas), com contador `X de Y` e "Limpar filtros". O **calendário ficou intacto**, como
+pedido: ele é a visão do período, não uma lista filtrável.
+
+**4. Interruptor no lugar do checkbox.** "Mostrar todos os custos" virou um switch no tema da marca
+(`.rec-switch`) — o checkbox nativo é desenhado pelo SO e destoava, o mesmo motivo que levou o
+`<datalist>` a virar `SearchableSelect` na 1.7.
+
+Validação: `vite build` OK (1276 módulos). Backend inalterado neste ajuste.
+
+### Volta na dialog e passada de telefone (1.8.0)
+
+**"← Voltar ao dia".** Abrir um lançamento a partir da lista do dia fechava a lista, e o único
+caminho era "Fechar" — que devolvia a pessoa ao calendário, perdendo o dia que ela estava
+conferindo. A dialog passou a receber o dia de origem e mostra **"← Voltar ao dia"** quando veio de
+lá (quando o clique foi direto num chip do calendário, o botão não aparece — não há para onde
+voltar). Mesma lição do `DrillPeriodoModal` da 1.5.3: caminho de volta explícito, não só o Fechar.
+
+**Telefone.** O módulo já nascia com os dois pontos de corte do app (≤820px a semana vira coluna
+única; ≤520px a visão mês vira lista de dias, via `useTelaEstreita`, fixada nos **mesmos 520px** do
+CSS — a armadilha da 1.7.1). O bloco global de ≤520px já cuidava de campos em largura total, modais
+de tela cheia, `font-size: 16px` nos inputs (sem o zoom automático do iOS) e alvos de toque nos
+`.btn`. Faltava o que é específico do módulo, agora incluído:
+
+- toolbar sem o empurrão para a direita (o `.spacer` some) e com botão, switch e total em largura
+  total;
+- **alvos de toque** no chip de evento e no cabeçalho do dia — nenhum dos dois é `.btn`, então a
+  regra global de 40px não os alcançava (o mesmo detalhe que o alternador do Caixa exigiu na 1.7.1);
+- tabelas do módulo com `white-space: nowrap` e teto de largura em Descrição/Item: a rolagem fica
+  **dentro** do `.table-wrap`, nunca na página;
+- linhas da dialog empilhando rótulo e valor, que em 390px é o que mantém a leitura confortável.
+
+`vite build` OK. **Não verificado:** a aparência renderizada — nada disso foi visto num aparelho nem
+no DevTools; é o mesmo item que já consta nas pendências da versão.
+
+---
+
+## Fechamento da sessão 07/08/2026 — **onde o trabalho parou** (1.8.0)
+
+> Ponto exato de retomada: **o código está pronto e a versão subida para 1.8.0, mas nada foi
+> commitado**. O gestor está na **bateria de teste manual** antes de publicar para o cliente. Tudo
+> abaixo existe na working tree.
+
+### Estado
+
+| Frente | Situação |
+|---|---|
+| Backend (recorrentes + coluna nova + filtro de período) | **Pronto**, `node --check` OK |
+| Frontend (módulo Recorrentes + paginação de Custos) | **Pronto**, `vite build` OK (1276 módulos) |
+| `desktop/package.json` e `frontend/package.json` | **1.8.0** |
+| Commit / tag / release | **Não feitos** — é o passo seguinte ao teste |
+| Notas da versão para o cliente | `ReleaseNotes/ReleaseNotes_1.8.0_Kampeki_Finance.html` (**nova**) |
+
+**Arquivos novos (11):** `backend/src/utils/recorrencia.js`, `backend/src/services/recorrentes.js`,
+`backend/src/routes/recorrentes.js`, `frontend/src/utils/recorrentesCalc.js`,
+`frontend/src/pages/Recorrentes.jsx`, `frontend/src/components/` → `CalendarioMensal.jsx`,
+`CalendarioSemanal.jsx`, `CalendarioDiario.jsx`, `ChipEvento.jsx`, `RecorrenteForm.jsx`,
+`RecorrenteDialog.jsx`.
+
+**Alterados (11):** `backend/src/services/sheets.js`, `backend/src/services/custos.js`,
+`backend/src/utils/date.js`, `backend/src/routes/custos.js`, `backend/src/app.js`,
+`frontend/src/pages/Custos.jsx`, `frontend/src/api/resources.js`, `frontend/src/App.jsx`,
+`frontend/src/components/Layout.jsx`, `frontend/src/styles.css`, mais os dois `package.json`.
+
+### O que já está provado — e o que **não** está
+
+Provado por teste automatizado: **169/169** nas funções puras, **112** comparações de paridade
+backend × frontend, **86/86** no serviço real contra dublês da planilha (incluindo idempotência e o
+custo excluído voltando à prévia). Compilação verde nos dois lados.
+
+**Não exercitado, e é exatamente o que a bateria de teste cobre:** a **escrita real na planilha** (o
+`backend/.env` de dev segue com a chave revogada) e a **aparência renderizada** — nenhuma tela nova
+foi vista em navegador ou aparelho.
+
+### Bateria de teste — roteiro sugerido
+
+Pré-requisito: repor o `GOOGLE_CREDENTIALS_JSON` no `backend/.env` (chave rotacionada). Sem isso o
+app sobe mas não lê a planilha.
+
+**1. Primeiro boot (estrutura da planilha)** — subir o backend e conferir na planilha: as abas
+`CUSTOS_RECORRENTES` e `CUSTOS_RECORRENTES_EXCECOES` criadas com cabeçalho, e a coluna
+**`UUID_RECORRENTE`** como 17ª de `CUSTOS`. É o passo que exercita o `alargarColunas`.
+
+**2. Ciclo completo de uma recorrência** — cadastrar uma mensal com data de início **no passado** →
+conferir que **nada retroativo** aparece pendente → "Colocar em dia" → conferir na planilha a linha
+com `UUID_RECORRENTE` preenchido, `VALOR_TOTAL` certo e a classificação vinda do item.
+
+**3. Idempotência** — clicar em "Colocar em dia" de novo: deve lançar **zero**.
+
+**4. Custo excluído volta** — apagar em Custos o lançamento gerado e recarregar Recorrentes: a data
+precisa **voltar à prévia** (é o teste do `UUID_RECORRENTE` como trava real).
+
+**5. O passado não muda** — editar o valor da recorrência e conferir que a ocorrência **já lançada**
+segue exibindo o valor antigo no calendário, com o aviso de divergência no detalhe, enquanto as
+futuras já mostram o novo.
+
+**6. Exceções** — "Pular esta data" (a ocorrência fica riscada e não é lançada) e "Só esta data"
+(valor próprio numa ocorrência, sem afetar as demais).
+
+**7. Cancelamento** — cancelar a partir de uma **data futura**: a recorrência precisa continuar
+lançando até lá; cancelar a partir de uma data passada encerra na hora.
+
+**8. Custos** — abrir a tela sem filtro (100 linhas + nota, total e contagem sobre o conjunto
+inteiro) e com filtro (some o limite). Conferir o "Ver em Custos" a partir do calendário, que chega
+com mês/dia/item já filtrados.
+
+**9. Telefone (iPhone 14 ou DevTools)** — visão mês como lista de dias, chips e cabeçalho de dia
+confortáveis ao toque, **página sem rolagem horizontal** (arrastar o fundo fora do card não deve
+mover nada) e a dialog do dia cabendo na tela.
+
+### Depois do teste — publicação
+
+1. Commit dos 22 arquivos + a documentação.
+2. `git tag -a v1.8.0` e push da tag → GitHub Actions → **publicar** o release (rascunho não
+   atualiza ninguém).
+3. **Web (VM):** `git pull` + `pm2 restart kampeki` **e** `npm run build` no Windows + `scp` do
+   `dist` (destino termina em `/frontend/`, **não** em `/frontend/dist`). Houve mudança de backend
+   **e** de frontend — os dois destinos precisam ser atualizados.
+4. Enviar ao cliente o `ReleaseNotes_1.8.0_Kampeki_Finance.html`.
+
+### Pendências herdadas (não tocadas nesta sessão)
+
+- 🔴 **CORS ainda com wildcard** (`app.use(cors())`) — aberto desde a **1.5.2**; é a pendência de
+  segurança mais antiga, e o app está na internet.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do DuckDNS.
+- **Cache sem TTL** em Fornecedor/Tag/Itens — defeito conhecido e aceito desde a 1.7.1.
+
+### Correções da bateria de teste no telefone (1.8.0)
+
+Dois defeitos vistos no aparelho, ambos de apresentação.
+
+**1. A visão mês escondia os dias sem lançamento.** A lista compacta do telefone só desenhava os
+dias **com** evento, então o mês aparecia furado (as datas simplesmente sumiam) e um mês sem nada
+virava uma única frase. Agora ela lista **todos os dias do mês**, como a visão semana sempre fez:
+dia vazio aparece com "—", em tom mais discreto e com menos altura, para 31 linhas não virarem uma
+parede. Tocar em qualquer dia — cheio ou vazio — abre a lista completa dele. Some o estado de
+expandir/recolher: com a dialog do dia, ele virou um caminho a mais para a mesma informação.
+
+**2. Os modais ficavam colados no topo.** O bloco de ≤520px trazia
+`.modal-backdrop { align-items: flex-start }`, com o comentário de que centralizar cortaria o
+conteúdo alto. A premissa não se sustenta aqui: o `.modal` tem `max-height: calc(100dvh - 20px)` e
+rolagem própria, então **nunca é mais alto que o backdrop** — não há o que cortar. O efeito
+colateral era um modal curto (o detalhe de um lançamento) jogado no canto de cima, com meia tela
+vazia embaixo. Voltou a centralizar, herdando a regra base; o teto de altura e a rolagem interna
+continuam valendo para os modais longos.
+
+`vite build` OK. Backend inalterado.
+
+### Visão mês no telefone — grade no modelo do Calendário do iPhone (1.8.0)
+
+A lista vertical de dias (mesmo mostrando todos, como no ajuste anterior) obrigava a rolar o mês
+inteiro para achar uma data. Trocada por uma **grade compacta**, no modelo do app Calendário do
+iPhone: os dias **lado a lado, semana a semana**, cada célula com o número e, quando há lançamento,
+um **ponto colorido** embaixo. Tocar no dia abre a lista completa dele (a dialog que já existia).
+
+O ponto tem cor por **prioridade**, não por contagem — o que ainda vai ser lançado fala mais alto
+que o que já foi:
+
+| Cor | Significa |
+|---|---|
+| Coral | há recorrente **a lançar** naquele dia |
+| Coral esmaecido | só recorrente **já lançado** |
+| Areia | só **custo avulso** (com a flag ligada) |
+
+O dia de hoje ganha o círculo cheio, como no iPhone — inclusive quando não tem nada. Células com
+`aspect-ratio: 1/1` e mínimo de 44px dão o alvo de toque; em 390px a coluna fica com ~50px, onde
+**nenhum chip caberia** — é justamente por isso que o marcador é um ponto, em vez de tentar caber o
+incabível. A legenda do rodapé vira bolinha no telefone, para explicar a tela que está à frente.
+
+As regras da lista anterior (`.cal-lista-mobile`, `.cal-dia-mobile*`) foram **removidas** do
+`styles.css` junto com o código que as usava — nada de CSS órfão (verificado: zero referências).
+
+`vite build` OK. Backend inalterado. As notas da versão ganharam um parágrafo descrevendo essa tela.

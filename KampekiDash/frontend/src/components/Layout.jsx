@@ -25,6 +25,13 @@ const caixa = [
   { to: '/caixa', label: 'Caixa' },
 ];
 
+// Recorrentes tem tela própria (calendário) e regra própria de lançamento, então
+// ganha seção em vez de virar mais um item de "Lançamentos" — mesmo precedente do
+// Caixa.
+const recorrentes = [
+  { to: '/recorrentes', label: 'Recorrentes' },
+];
+
 const saidas = [
   { to: '/saida', label: 'Saída (Backup mensal)' },
 ];
@@ -39,6 +46,7 @@ const sistema = [
 const secoes = [
   { titulo: 'Dashboards', icone: '📊', itens: dashboards },
   { titulo: 'Lançamentos', icone: '✏️', itens: lancamentos },
+  { titulo: 'Recorrentes', icone: '🗓', itens: recorrentes },
   { titulo: 'Caixa', icone: '💵', itens: caixa },
   { titulo: 'Backup', icone: '💾', itens: saidas },
   { titulo: 'Sistema', icone: '⚙️', itens: sistema },

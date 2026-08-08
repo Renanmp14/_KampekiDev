@@ -62,3 +62,17 @@ export function ultimoDiaDoMes(mesAno) {
 export function nomeMes(mesNum) {
   return MESES_PT[mesNum - 1] || '';
 }
+
+// Converte DD/MM/YYYY em milissegundos UTC, para comparar datas POR VALOR.
+// Comparar as strings direto ordena errado ("02/01/2026" < "10/12/2025" como
+// texto). Aceita dia/mês com um dígito só — a planilha é editável à mão — e
+// devolve NaN em vez de lançar, porque quem chama está filtrando, não validando.
+export function dataParaMs(str) {
+  const m = String(str ?? '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return NaN;
+  const dia = parseInt(m[1], 10);
+  const mes = parseInt(m[2], 10);
+  const ano = parseInt(m[3], 10);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return NaN;
+  return Date.UTC(ano, mes - 1, dia);
+}

@@ -3,8 +3,13 @@ import * as service from '../services/custos.js';
 
 const router = Router();
 
+// ?dataInicio=DD/MM/YYYY&dataFim=DD/MM/YYYY são opcionais (recorte por DATA_NOTA,
+// usado pelo calendário de Recorrentes). Sem eles, devolve tudo, como antes.
 router.get('/', async (req, res, next) => {
-  try { res.json(await service.listar()); } catch (e) { next(e); }
+  try {
+    const { dataInicio, dataFim } = req.query;
+    res.json(await service.listar({ dataInicio, dataFim }));
+  } catch (e) { next(e); }
 });
 
 router.post('/', async (req, res, next) => {

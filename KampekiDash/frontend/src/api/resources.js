@@ -45,6 +45,11 @@ export const itensApi = {
 };
 export const custosApi = {
   ...crud('/custos'),
+  // Recorte por DATA_NOTA (DD/MM/YYYY) — usado pelo calendário de Recorrentes
+  // para carregar só o intervalo visível em vez da base inteira.
+  listarPeriodo: (dataInicio, dataFim) => api.get(
+    `/custos?dataInicio=${encodeURIComponent(dataInicio)}&dataFim=${encodeURIComponent(dataFim)}`,
+  ),
   // extra pode conter { fallbackMesAno } para datar linhas sem data.
   importar: (rows, extra = {}) => api.post('/custos/import', { rows, ...extra }),
   // notas: [{ CHAVE_NFE, NUM_NOTA, DATA_NOTA, FORNECEDOR, itens: [...] }]
@@ -62,3 +67,22 @@ export const custosApi = {
   classificarLoteVariado: (body) => api.post('/custos/classificar-lote-variado', body),
 };
 export const folhaApi = crud('/folha');
+
+// Custos recorrentes: templates, exceções pontuais e o "colocar em dia".
+// Não existe gatilho automático — nada é lançado sem alguém clicar em processar.
+export const recorrentesApi = {
+  ...crud('/recorrentes'),
+  frequencias: () => api.get('/recorrentes/frequencias'),
+  // Prévia (leitura pura): o que seria lançado agora + a contagem de vencidas.
+  pendentes: () => api.get('/recorrentes/pendentes'),
+  // uuids opcional restringe a um ou mais templates.
+  processar: (uuids) => api.post('/recorrentes/processar', uuids ? { uuids } : {}),
+  // Cancelamento a partir de uma data (default hoje): grava DATA_FIM na véspera.
+  cancelar: (uuid, aPartirDe) => api.post(`/recorrentes/${uuid}/cancelar`, { aPartirDe }),
+  excecoes: (template) => api.get(
+    template ? `/recorrentes/excecoes?template=${encodeURIComponent(template)}` : '/recorrentes/excecoes',
+  ),
+  // Upsert por (template, data): salvar duas vezes na mesma data substitui.
+  salvarExcecao: (body) => api.post('/recorrentes/excecoes', body),
+  removerExcecao: (uuid) => api.del(`/recorrentes/excecoes/${uuid}`),
+};

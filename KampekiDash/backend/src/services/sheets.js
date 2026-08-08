@@ -13,7 +13,7 @@ export const TABS = {
   CUSTOS: [
     'UUID', 'DATA_NOTA', 'NUM_NOTA', 'MES_ANO', 'MES_NUM', 'ANO',
     'DIA_MES_ANO', 'FORNECEDOR', 'ITEM', 'SUB_CATEGORIA', 'CATEGORIA',
-    'QTD', 'VALOR_UNIT', 'VALOR_TOTAL', 'TAG', 'CHAVE_NFE',
+    'QTD', 'VALOR_UNIT', 'VALOR_TOTAL', 'TAG', 'CHAVE_NFE', 'UUID_RECORRENTE',
   ],
   FOLHA: [
     'UUID', 'MES_ANO', 'MES_NUM', 'ANO', 'TAG', 'ITEM_FOLHA', 'VALOR', 'OBSERVACAO',
@@ -21,6 +21,25 @@ export const TABS = {
   // Caixa (dinheiro físico) — módulo desacoplado: não se relaciona com CUSTOS,
   // ITENS ou FOLHA. MES_ANO/ANO não são gravados: derivam de DATA na leitura.
   CAIXA: ['UUID', 'DATA', 'TIPO', 'DESCRICAO', 'VALOR', 'PESSOA'],
+  // Templates de custo recorrente. ITEM guarda o UUID do item (estável contra
+  // renomeação); SUB_CATEGORIA/CATEGORIA/TAG são cópia só para exibir no
+  // calendário — na gravação do custo valem os do item, que é a fonte da verdade.
+  // DATA_CORTE é o piso imutável (segura o retroativo) e ULTIMO_LANCAMENTO é só
+  // atalho de leitura; a trava de duplicidade é o UUID_RECORRENTE em CUSTOS.
+  CUSTOS_RECORRENTES: [
+    'UUID', 'DESCRICAO', 'FORNECEDOR', 'ITEM', 'SUB_CATEGORIA', 'CATEGORIA', 'TAG',
+    'QTD', 'VALOR_UNIT', 'NUM_NOTA', 'FREQUENCIA', 'DIA_BASE', 'DATA_INICIO',
+    'DATA_FIM', 'DATA_CORTE', 'ULTIMO_LANCAMENTO', 'ATIVO',
+  ],
+  // Exceções pontuais de um template numa data específica. ACAO: 'alterar'
+  // (sobrepõe os campos) ou 'pular' (aquela ocorrência não acontece).
+  // A 1ª coluna se chama UUID (e não UUID_EXCECAO, como rascunhado na spec)
+  // porque TODAS as primitivas daqui — findRowByUuid, updateRowByUuid,
+  // deleteRowsByUuid, updateCellsByUuid — localizam a linha pelo campo `UUID`.
+  CUSTOS_RECORRENTES_EXCECOES: [
+    'UUID', 'UUID_TEMPLATE', 'DATA_EXCECAO', 'ACAO', 'DESCRICAO', 'FORNECEDOR',
+    'ITEM', 'SUB_CATEGORIA', 'CATEGORIA', 'TAG', 'QTD', 'VALOR_UNIT', 'NUM_NOTA',
+  ],
 };
 
 // Converte índice de coluna (0-based) em letra(s) A1 (0->A, 26->AA).
@@ -79,6 +98,35 @@ export async function getCellUsage() {
   return { used, limit, sheets: detalhe };
 }
 
+// Expande, numa só chamada, a grade de todas as abas cuja largura é menor que o
+// número de colunas definido em TABS. Não encolhe nada nem toca em dados.
+async function alargarColunas() {
+  const sheets = await getSheets();
+  const spreadsheetId = getSpreadsheetId();
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets(properties(sheetId,title,gridProperties(columnCount)))',
+  });
+  const requests = [];
+  for (const s of meta.data.sheets || []) {
+    const { title, sheetId } = s.properties;
+    const necessarias = TABS[title]?.length;
+    if (!necessarias) continue; // aba fora do TABS: não é nossa, não mexe
+    const atual = s.properties.gridProperties?.columnCount || 0;
+    if (atual >= necessarias) continue;
+    requests.push({
+      updateSheetProperties: {
+        properties: { sheetId, gridProperties: { columnCount: necessarias } },
+        fields: 'gridProperties.columnCount',
+      },
+    });
+    console.log(`[initSheets] Aba ${title}: grade alargada de ${atual} para ${necessarias} colunas.`);
+  }
+  if (requests.length) {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  }
+}
+
 // Cria as abas faltantes com seus cabeçalhos. Não modifica dados existentes.
 export async function initSheets() {
   const sheets = await getSheets();
@@ -99,6 +147,14 @@ export async function initSheets() {
   } else {
     console.log('[initSheets] Todas as abas já existem.');
   }
+
+  // Alarga a GRADE das abas que não têm colunas suficientes para o cabeçalho
+  // canônico. O values.update não cria colunas além da grade existente (mesma
+  // limitação que motivou o ensureRowCapacity): sem esta passagem, acrescentar
+  // uma coluna em TABS — como o UUID_RECORRENTE em CUSTOS — faria a sincronia do
+  // cabeçalho estourar a grade e derrubar o boot, na web e em toda instalação
+  // desktop de uma vez. Uma leitura de metadados + no máximo um batchUpdate.
+  await alargarColunas();
 
   // Sincroniza o cabeçalho (linha 1) de TODAS as abas com a definição canônica
   // em TABS. Garante que colunas adicionadas posteriormente (ex.: CHAVE_NFE em
