@@ -3473,3 +3473,403 @@ As regras da lista anterior (`.cal-lista-mobile`, `.cal-dia-mobile*`) foram **re
 `styles.css` junto com o código que as usava — nada de CSS órfão (verificado: zero referências).
 
 `vite build` OK. Backend inalterado. As notas da versão ganharam um parágrafo descrevendo essa tela.
+
+---
+
+## Atualizações — 08/08/2026 — **Fim do cache em memória (dados desatualizados nos cadastros)**
+
+> Sintoma relatado pelo gestor, idêntico na VM e no desktop: **Fornecedor, Tag e Itens
+> ficavam congelados**. O app parecia carregar as tabelas ao abrir e só buscar de novo
+> quando ele mesmo alterava algo — enquanto **Custos sempre vinha atualizado**.
+
+### A causa (era exatamente o que o sintoma sugeria)
+
+`services/cache.js` guardava as listas de `fornecedores`, `tags` e `itens` num `Map`
+em memória, **sem TTL**, invalidado à mão a cada escrita. O defeito não é o cache em
+si: é que **a invalidação só acontece no processo que recebeu a escrita**, e o app
+roda em vários processos independentes — a VM da web **mais** um backend embutido em
+**cada** instalação do desktop. Consequência prática:
+
+| Onde a mudança foi feita | Quem via | Quem não via (até reiniciar) |
+|---|---|---|
+| Desktop A | Desktop A | a web e todos os outros desktops |
+| Web (VM) | a web | todos os desktops |
+| Direto na planilha | ninguém | todos |
+
+Custos escapava porque `custos.js` nunca teve cache — é a regra que saiu da 1.7.1 (e
+que `folha`, `caixa` e `recorrentes` já seguiam). Ela simplesmente **nunca tinha sido
+aplicada aos cadastros**.
+
+### Segunda causa, no mesmo sintoma: o catálogo de subcategorias
+
+`categoriaDe()` precisa ser **síncrono** (é chamado no meio do fluxo de custos), então
+o mapa de subcategorias vive em memória (`dynamicMap`, em `utils/switch-categoria.js`)
+e era carregado **uma vez, no boot**. Uma subcategoria criada ou movida em outra
+máquina não aparecia no select — e, pior, podia ser **rejeitada como "Subcategoria
+desconhecida"** ao cadastrar um item.
+
+Como tornar `categoriaDe` assíncrono contaminaria meia dúzia de fluxos, a saída foi
+manter o mapa em memória e **reler a aba nos pontos que dependem dele**:
+`subcategoria.sincronizar()` — leitura barata que, se falhar, **preserva o mapa atual**
+(um mapa um pouco velho é melhor que nenhum).
+
+### Como ficou
+
+- **`services/cache.js` foi apagado.** Nenhum serviço tem cache: todo `listar()` lê a
+  planilha, como Custos sempre fez. Era o pedido literal — "todas as abas devem
+  funcionar como a de Custos".
+- `sincronizar()` roda em `subcategoria.listar()` / `listarGestao()` e em todo fluxo
+  que deriva categoria de subcategoria: `itens.criar/atualizar/atualizarEmMassa/
+  importarLote`, `custos.importarLote` e os três `classificar*` de `custos.js`.
+- `GET /api/itens/subcategorias` virou assíncrona (antes respondia direto da memória,
+  sem tocar na planilha).
+
+**Preço, assumido conscientemente:** abrir uma tela de cadastro passou a custar uma
+leitura da API do Sheets (~1 chamada, algumas centenas de ms) — o mesmo custo que a
+tela de Custos sempre teve. As escritas ganham no máximo uma leitura extra (a aba
+SUBCATEGORIA, pequena). O teto a vigiar é a cota do Google (~60 leituras/min por
+service account); com o uso atual não chega perto. Se um dia incomodar, a saída **não**
+é voltar ao cache local — é TTL curto ou invalidação compartilhada entre processos.
+
+### Changelog técnico — 08/08/2026 (por arquivo, tudo backend)
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/cache.js` | **Removido** |
+| `src/services/fornecedor.js` | `listar()` sem cache; sem `invalidate` |
+| `src/services/tag.js` | idem |
+| `src/services/itens.js` | idem + `sincronizarSubcategorias()` em `criar`, `atualizar`, `atualizarEmMassa` (ramo SUB_CATEGORIA) e `importarLote` |
+| `src/services/custos.js` | Sem `invalidate`; `sincronizarSubcategorias()` em `importarLote`, `classificarItem`, `classificarItensEmLote`, `classificarItensLoteVariado` |
+| `src/services/recorrentes.js` | Sem `invalidate`; comentário da regra atualizado |
+| `src/services/subcategoria.js` | Novo `sincronizar()`; `listar()` virou **async** e relê a aba; `listarGestao()` também |
+| `src/routes/itens.js` | `GET /subcategorias` virou assíncrona |
+
+Frontend **inalterado** — ele nunca guardou lista nenhuma; cada página já buscava
+tudo ao montar (por isso Custos parecia "certo" e o resto não).
+
+### Validação
+
+- Teste com **dublês da camada de planilha** (`node --test --experimental-test-module-mocks`),
+  simulando duas máquinas: leitura repetida vai à planilha nas duas vezes; fornecedor,
+  tag, item e subcategoria criados "por outra máquina" aparecem sem reiniciar; uma
+  subcategoria nova é aceita ao cadastrar item; e mover a subcategoria de categoria em
+  outra máquina passa a valer na hora.
+- O mesmo teste foi rodado **contra o código anterior** (worktree em `HEAD`) e **falha**
+  nos dois pontos — confirma que ele pega o defeito, e não só o passa.
+- `node --check` OK nos 26 arquivos do backend.
+- **NÃO exercitado:** a planilha real (o `.env` de dev segue com a chave revogada).
+
+> Os testes ficaram fora do repositório (foram escritos em pasta temporária). Vale
+> promovê-los a `backend/test/` — seria a primeira suíte versionada do projeto, que a
+> §22.3 do manual técnico aponta como o maior risco para evoluir sozinho.
+
+### Sobre a aba **Folha**, citada no relato
+
+`folha.js` **nunca teve cache** — lê `FOLHA` + `CUSTOS` a cada chamada. O que nela
+podia estar desatualizado era o **select de Tag** (que vinha do cache de tags) e,
+indiretamente, a classificação vinda do catálogo de subcategorias. Ambos entram na
+correção. Se a listagem de Folha ainda parecer velha depois disso, a causa é outra e
+precisa de um caso concreto (o que foi lançado, onde, e o que a tela mostrou).
+
+---
+
+## Atualizações — 08/08/2026 (parte 2) — **Recorrentes com duas telas abertas**
+
+> Cenário relatado: web (VM) e desktop abertos ao mesmo tempo. "Colocar em dia" numa
+> tela lança certo; a outra segue mostrando as ocorrências como pendentes. Clicar nela
+> **não duplica** (a idempotência funcionou — respondeu "0 lançamentos"), mas ao abrir
+> Custos apareceu **um erro e nenhuma linha**, e só fechando o desktop e recarregando a
+> página da VM as coisas voltaram ao normal.
+
+### 1. 🔴 O erro que parecia perda de dados
+
+A idempotência está correta e não foi tocada: a trava é o `UUID_RECORRENTE` em `CUSTOS`,
+verificada na hora do clique, não o estado da tela. Duas telas clicando é justamente o
+caso que ela cobre — e cobriu.
+
+O que estava errado é o que aconteceu **depois**. Sem a mensagem exata não dá para
+cravar a origem da falha, mas a mais provável é a API do Google recusando uma leitura
+num pico (**429**, cota estourada — o limite é por service account, e a VM mais cada
+desktop compartilham a mesma; "colocar em dia" nas duas telas dispara uma rajada de
+leituras) ou uma oscilação 5xx. O tratamento disso é que era ruim, em três camadas:
+
+| Camada | Antes | Agora |
+|---|---|---|
+| Chamada ao Google | uma tentativa; qualquer soluço vira erro | **retentativa com backoff exponencial + jitter** (500ms/1s/2s) para 429, 5xx e quedas de conexão |
+| Resposta da API | 429 do Google virava **HTTP 400** com o texto cru | vira **429/503** com texto claro: *"nenhum dado foi perdido, tente de novo em instantes"* |
+| Tela de Custos | erro ia para o estado dos **modais** (invisível na listagem) e a tabela dizia "Nenhum lançamento" | faixa vermelha acima da tabela, com motivo, a frase que desarma o susto e **"↻ Tentar de novo"**; a tabela vazia passa a dizer *por que* está vazia (erro, filtro ativo, ou realmente vazia) |
+
+**O que NÃO é repetido, de propósito:** `spreadsheets.batchUpdate` — a chamada
+estrutural (`deleteDimension`, `insertDimension`, `addSheet`). Repetir uma exclusão de
+linhas que já tinha funcionado apagaria **outras** linhas. As leituras e os
+`values.update` são repetíveis porque gravam em faixas fixas já calculadas (o projeto
+nunca usa `values.append`), então repetir reescreve as mesmas células.
+
+Também: `fetch` que nem chega ao servidor (backend fora do ar, desktop fechado) deixou
+de mostrar "Failed to fetch" e passa a dizer que é falta de conexão — e que o dado
+continua na planilha.
+
+### 2. A tela não mostrava que já tinha lançado
+
+Defeito real, e a causa é específica: `acao()` chamava `carregar()`, que rebusca
+templates, exceções, itens, fornecedores e **pendentes** — mas **não os custos**. E o ✓
+do calendário vem dos custos (é a regra da própria 1.8.0: "existe linha em `CUSTOS`,
+foi lançado"). Resultado: a faixa de vencidas zerava e os chips continuavam mentindo.
+
+Os custos eram buscados só num `useEffect` preso a `[de, ate]`, que não dispara depois
+de processar. A busca virou `carregarCustos()` e entra em **toda** ação do módulo
+(lançar, editar, cancelar, excluir) — todas mexem em `CUSTOS`.
+
+### 3. Botão "↻ Atualizar"
+
+Igual ao do Caixa (1.7.1), no mesmo par: botão + hora da última leitura ("sem a hora,
+clicar quando nada mudou não dá sinal de que a busca aconteceu"). Relê recorrências,
+pendentes e os custos do período. É **leitura**, então vale também para o perfil de
+consulta — que é justamente quem mais precisa ver o dado novo. É a resposta direta ao
+cenário de duas telas: a que não processou se atualiza sem F5 e sem sair do módulo.
+
+### Changelog técnico — 08/08/2026 (parte 2)
+
+| Arquivo | O que mudou |
+|---|---|
+| `backend/src/config/google.js` | `comRetry()` + `envolverComRetry()`: o cliente do googleapis é devolvido com a **mesma forma**, com retentativa em `values.get/update/batchUpdate` e `spreadsheets.get`. `spreadsheets.batchUpdate` fica de fora |
+| `backend/src/app.js` | Handler de erro traduz 429/5xx do Google em 429/503 com texto próprio. Outros códigos seguem virando 400 **de propósito** (um 401 faria o front achar que a sessão expirou e jogar na tela de login) |
+| `frontend/src/api/client.js` | Falha de rede no `fetch` vira mensagem legível |
+| `frontend/src/pages/Recorrentes.jsx` | `carregarCustos()`; `acao()` recarrega custos junto; botão "↻ Atualizar" + `atualizadoEm` |
+| `frontend/src/pages/Custos.jsx` | Estado `erroCarregar` separado do `error` dos modais; faixa `.load-error` com "Tentar de novo"; mensagem de vazio explica o motivo |
+| `frontend/src/styles.css` | `.load-error*`, `.rec-atualizado` (+ regra de ≤520px) |
+
+### Validação
+
+- **Teste da retentativa** (dublê do `googleapis`, 5 asserções): repete 429/503/`ECONNRESET`
+  até passar; **não** repete erro 400; desiste em 4 tentativas propagando o erro; e
+  **`spreadsheets.batchUpdate` não é repetido nem uma vez** — a asserção que protege
+  contra apagar linha por retentativa.
+- Teste do cache (08/08 parte 1) segue verde; `node --check` OK; `vite build` OK (1276 módulos).
+- **NÃO exercitado:** a planilha real e a aparência das telas novas.
+
+### Pendência ligada a este relato
+
+Se o erro em Custos voltar a acontecer, **a mensagem agora é específica** (429, 503,
+sem conexão, ou outra) e o backend a registra com o status no log. É o que falta para
+fechar o diagnóstico com certeza em vez de probabilidade.
+
+> Limitação conhecida que este ajuste **não** cobre: duas máquinas clicando em "Colocar
+> em dia" no mesmo instante calculam a primeira linha livre de `CUSTOS` separadamente e
+> podem escrever por cima uma da outra (`appendRows` não tem trava). É o "sem controle
+> de concorrência" da §22.2 do manual técnico, inerente a usar planilha como banco.
+
+---
+
+## Atualizações — 09/08/2026 — **Cota do Google estourando (429) — janela de leitura**
+
+> `Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute
+> per user'`. Aparece ao abrir o app numa máquina e, logo em seguida, na outra.
+
+### O que aconteceu — e a parte que é minha
+
+O limite é de **60 leituras por minuto por service account**, e a VM da web mais **cada**
+instalação desktop dividem **a mesma**. Uma tela custa caro: Custos são 7 leituras,
+Recorrentes 10 (a mesma aba lida várias vezes na mesma carga — `CUSTOS` aparece na
+listagem, no "itens a classificar" e no `pendentes`). Somando o boot e duas máquinas
+abrindo em seguida, passa de 60 com folga.
+
+**A remoção do cache (08/08) empurrou isso por cima da linha:** cada tela ganhou ~4
+leituras. O diagnóstico daquele dia estava certo — o cache eterno era um defeito real —,
+mas a conta de cota não foi feita, e o limite por usuário é bem mais apertado do que eu
+supus ao dizer que "o uso atual não chega perto". Não chegava antes; passou a chegar.
+
+### A correção — cortar leitura, não voltar a servir dado velho
+
+Duas defesas em `sheets.js`, na função que lê as linhas:
+
+| Mecanismo | O que faz | Envelhece o dado? |
+|---|---|---|
+| **single-flight** (`emVoo`) | leituras **idênticas e simultâneas** compartilham a mesma promessa | **Não** — é a mesma resposta que já estava a caminho |
+| **janela** (`SHEETS_READ_TTL_MS`, padrão **10s**) | releitura da mesma aba dentro de segundos reaproveita o resultado | Sim, por **segundos** |
+
+A janela **não** é o cache removido em 08/08. Aquele valia até o processo reiniciar
+(dias, na prática) e só era invalidado no processo que escreveu. Esta vale 10 segundos,
+é **descartada na hora em qualquer escrita local** (quem grava vê o próprio dado) e é
+**furada de propósito** pelo botão "↻ Atualizar" (cabeçalho `X-Kampeki-Fresh` →
+`limparJanela()` no `app.js`). `SHEETS_READ_TTL_MS=0` desliga.
+
+**Medição** (sequência Dash Custos → Custos → Recorrentes → Dash Folha):
+
+| | Leituras |
+|---|---|
+| Antes | **20** |
+| Depois | **8** |
+
+Duas máquinas abrindo em seguida: 40 → 16. Bem abaixo dos 60/min.
+
+### 🔴 A regra que sustenta a segurança disso
+
+`fresh: true` em **tudo que calcula posição de linha** — `appendRow`/`appendRows` (a
+primeira linha livre) e `findRowByUuid`, `updateRowByUuid`, `updateColumnForUuids`,
+`updateCellsByUuid`, `deleteRowsByUuid`, `deleteRowByUuid` (o `_row` de cada registro).
+Uma contagem de linhas com segundos de atraso **escreveria por cima de lançamentos
+bons**, ou apagaria a linha errada. Consulta pode envelhecer; índice de linha, não.
+Está coberto por teste (o append escreve na linha 8 mesmo com a janela quente dizendo
+que a aba tinha 2 linhas).
+
+### Changelog técnico — 09/08/2026
+
+| Arquivo | O que mudou |
+|---|---|
+| `backend/src/services/sheets.js` | `buscarRows` + `getRows(tab, { fresh })` com single-flight e janela; `limparJanela(tab?)` exportado; `getObjects(tab, opcoes)`; `fresh: true` nas 7 primitivas que usam posição de linha; `limparJanela` em **toda** escrita (8 pontos) |
+| `backend/src/app.js` | Middleware que limpa a janela quando vem `X-Kampeki-Fresh` |
+| `frontend/src/api/client.js` | `api.get(path, { fresh })` → manda o cabeçalho |
+| `frontend/src/api/resources.js` | `opcoes` repassado em `crud().listar`, `custosApi.listarPeriodo`, `itensAClassificar`, `recorrentesApi.pendentes`/`excecoes` |
+| `frontend/src/pages/Recorrentes.jsx`, `Caixa.jsx`, `Custos.jsx` | "↻ Atualizar" e "↻ Tentar de novo" pedem `fresh` (e o `onClick` deixou de passar o evento como argumento) |
+
+### Validação
+
+- **Teste da janela — 6 asserções:** leituras simultâneas viram uma só; releitura dentro
+  da janela não chama a API; depois da janela chama; escrita invalida na hora;
+  `limparJanela()` força releitura; e **o append calcula a linha certa com a janela
+  desatualizada** (a asserção que protege contra sobrescrever dado).
+- Os testes de 08/08 (cache e retentativa) seguem verdes. `node --check` OK; `vite build` OK.
+- **Medição** com dublê da camada de rede: 20 → 8 leituras na sequência de 4 telas.
+- **NÃO exercitado:** a planilha real.
+
+### Ainda vale fazer no Google Cloud
+
+O limite de 60/min é o **padrão** do projeto e pode ser aumentado no console
+(APIs e Serviços → Google Sheets API → Cotas → *Read requests per minute per user*).
+Com a janela, o app cabe folgado nos 60; subir o limite é a margem para quando entrarem
+mais usuários. Projeto: `154397228132`.
+
+### Recorrências cadastradas no telefone — tabela vira lista de cartões (09/08/2026)
+
+A tabela tem **9 colunas** com `white-space: nowrap`, a de ações presa à direita
+(`sticky-actions`) e três botões só de emoji em `btn-sm`. Em 390px isso vira rolagem
+lateral para ler qualquer linha e alvos de toque pequenos demais para agir com o
+polegar. Espremer não resolvia — é a mesma situação da visão mês, onde nenhum chip cabe
+numa célula de 50px: **abaixo de certa largura, muda-se a forma, não o tamanho**.
+
+Em ≤520px (o mesmo `estreita`/`useTelaEstreita` do resto do módulo, fixado nos mesmos
+520px do CSS) cada recorrência vira um **cartão**:
+
+- **título + situação** na primeira linha (o título quebra em várias linhas em vez de
+  cortar com "…" — numa lista de custos fixos é justamente o fim do nome que distingue
+  dois lançamentos parecidos);
+- **item** logo abaixo, em tom secundário;
+- **valor em destaque** com a frequência ao lado;
+- **Próximo / Início / Fim** numa grade de colunas automáticas — com "Próximo" (ativa)
+  dá três colunas, sem ele dá duas, sem precisar de regra para cada caso;
+- **ações com rótulo** ("✏ Editar", "⛔ Cancelar", "🗑 Excluir"), dividindo a linha por
+  igual, com 40px de altura — o alvo de toque que a regra global só garante para `.btn`.
+
+Recorrência encerrada fica com `opacity: .72`: sai do foco sem sair da lista.
+
+Os **filtros** da seção também mudaram: "Buscar" ocupa a linha inteira e frequência +
+situação dividem a seguinte. Empilhados (regra geral de `.toolbar .field`), os três
+empurravam a primeira recorrência para fora da tela.
+
+A tabela continua **intacta** no desktop — o cartão só existe abaixo de 520px.
+
+`vite build` OK (1276 módulos); backend inalterado. Verificado que toda classe nova
+(`.rec-card*`) tem regra correspondente — nada de CSS órfão, nos dois sentidos.
+**Não verificado:** a aparência renderizada — não foi vista em aparelho nem no DevTools.
+
+---
+
+## Fechamento da versão **1.8.1** — 09/08/2026
+
+> A 1.8.0 **nunca chegou ao cliente** (a tag `v1.8.0` não foi publicada). O que sai é uma
+> entrega única: o **módulo Recorrentes** da 1.8.0 mais o pacote de correções de 08–09/08.
+> `desktop/package.json` e `frontend/package.json` em **1.8.1**.
+
+### O que a 1.8.1 contém
+
+| Frente | Origem | Situação |
+|---|---|---|
+| Módulo Recorrentes (calendário, prévia, "colocar em dia", exceções, cancelamento) | 1.8.0, 07/08 | Pronto — commit `1471cc9` |
+| Limite de 100 na listagem de Custos sem filtro | 1.8.0, 07/08 | Pronto |
+| **Fim do cache em memória** (cadastros desatualizados entre máquinas) | 08/08 parte 1 | Pronto |
+| **Retentativa + erros legíveis** (429/5xx do Google, falha de conexão) | 08/08 parte 2 | Pronto |
+| **Recorrentes atualiza ao lançar** + botão "↻ Atualizar" | 08/08 parte 2 | Pronto |
+| **Janela de leitura** (corta a cota do Google pela metade) | 09/08 | Pronto |
+| **Recorrências em cartões no telefone** | 09/08 | Pronto |
+
+### A linha do tempo que vale registrar
+
+As três sessões se encadeiam, e o encadeamento é a lição:
+
+1. **08/08 —** o cache eterno dos cadastros foi removido (defeito real: invalidação só
+   valia no processo que escreveu).
+2. **09/08 —** a remoção **estourou a cota** do Google (429). O diagnóstico da véspera
+   estava certo, mas a conta de leituras por tela não tinha sido feita — e o limite por
+   service account (60/min) é bem mais apertado do que a estimativa dizia.
+3. **09/08 —** a correção não foi voltar atrás, e sim **cortar leitura**: single-flight
+   (sem envelhecer nada) + janela de 10s invalidada por escrita local. Medido: **20 → 8**
+   leituras numa sequência de 4 telas.
+
+> Regra que ficou: **`fresh: true` em tudo que calcula posição de linha.** É o que separa
+> uma economia de chamadas de um bug que sobrescreve lançamentos. Coberta por teste.
+
+### Arquivos tocados desde a 1.8.0 (15)
+
+**Backend (9):** `config/google.js`, `app.js`, `routes/itens.js`, `services/sheets.js`,
+`services/custos.js`, `services/itens.js`, `services/fornecedor.js`, `services/tag.js`,
+`services/subcategoria.js`, `services/recorrentes.js` — mais `services/cache.js`
+**removido**.
+
+**Frontend (6):** `api/client.js`, `api/resources.js`, `pages/Custos.jsx`,
+`pages/Recorrentes.jsx`, `pages/Caixa.jsx`, `styles.css`.
+
+**Documentação:** `KAMPEKI_APP_BRIEF.md`, `MANUAL-TECNICO-KAMPEKI-DASH.md` (novo, ainda
+**fora do git**), `ReleaseNotes/ReleaseNotes_1.8.0_Kampeki_Finance.html` (atualizado para
+1.8.1 — **o nome do arquivo ainda diz 1.8.0**).
+
+### Validação acumulada
+
+| Bateria | Resultado |
+|---|---|
+| Funções puras de recorrência | 169/169 |
+| Paridade backend × frontend | 112 comparações idênticas |
+| Serviço de recorrentes contra dublês | 86/86 |
+| Cadastros sem cache (duas máquinas) | 7 asserções — e **falha** no código anterior |
+| Retentativa do Google | 5 asserções, incluindo "batchUpdate estrutural nunca repete" |
+| Janela de leitura | 6 asserções, incluindo "append calcula a linha certa com janela quente" |
+| `node --check` (26 arquivos) · `vite build` (1276 módulos) | OK |
+
+**NÃO exercitado:** a **escrita real na planilha** (o `.env` de dev segue com a chave
+revogada) e a **aparência renderizada** — nenhuma tela nova foi vista em navegador ou
+aparelho. É o mesmo par pendente desde 07/08.
+
+> Os testes seguem em pasta temporária, **fora do repositório**. Promovê-los a
+> `backend/test/` continua sendo a maior melhoria disponível (§22.3 do manual técnico):
+> hoje são 18 asserções que ninguém consegue rodar de novo sem reescrevê-las.
+
+### Roteiro de publicação (na ordem)
+
+1. **Teste manual** com a credencial reposta — a bateria de 9 passos de 07/08, mais:
+   cadastrar um fornecedor na web e vê-lo no desktop **sem reiniciar**; abrir o app nas
+   duas pontas em sequência e confirmar que o **429 não volta**; conferir os cartões de
+   recorrência no telefone.
+2. **Commit** dos 15 arquivos + a documentação (inclusive o manual técnico, que ainda não
+   está versionado).
+3. **Renomear** `ReleaseNotes_1.8.0_Kampeki_Finance.html` → `..._1.8.1_...` (o conteúdo já
+   está em 1.8.1).
+4. `git tag -a v1.8.1` + push da tag → GitHub Actions → **publicar** o release (rascunho
+   não atualiza ninguém).
+5. **Web (VM):** `git pull` + `pm2 restart kampeki` **e** `npm run build` no Windows +
+   `scp` do `dist` (destino termina em `/frontend/`, **não** em `/frontend/dist`). Houve
+   mudança de backend **e** de frontend.
+6. Enviar as notas da versão ao cliente.
+
+### Opcional, mas recomendado antes de escalar
+
+Aumentar a cota no Google Cloud (projeto `154397228132`): *APIs e Serviços → Google Sheets
+API → Cotas → Read requests per minute per user*. Com a janela de leitura o app cabe nos
+60/min atuais; o aumento é margem para mais usuários simultâneos.
+
+### Pendências herdadas (não tocadas)
+
+- 🔴 **CORS com wildcard** — aberto desde a **1.5.2**; é a pendência de segurança mais
+  antiga, e o app está na internet.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar o DuckDNS.
+- **Sem trava de escrita concorrente** — duas máquinas gravando no mesmo instante podem se
+  sobrescrever (inerente a usar planilha como banco; §22.2 do manual).

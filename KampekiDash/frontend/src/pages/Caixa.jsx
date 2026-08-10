@@ -127,11 +127,13 @@ export default function Caixa() {
   const [fTipo, setFTipo] = useState(TODOS);
   const [fPessoas, setFPessoas] = useState([]);
 
-  async function carregar() {
+  // `fresh` vem do botão ↻ Atualizar (nunca do carregamento inicial): pede o
+  // dado do instante, furando a janela de leitura do backend.
+  async function carregar(fresh = false) {
     setLoading(true);
     setError(''); // uma releitura bem-sucedida tem de limpar o erro anterior
     try {
-      setLista(await caixaApi.listar());
+      setLista(await caixaApi.listar(fresh ? { fresh: true } : undefined));
       setAtualizadoEm(new Date().toLocaleTimeString('pt-BR', {
         hour: '2-digit', minute: '2-digit', second: '2-digit',
       }));
@@ -524,7 +526,7 @@ export default function Caixa() {
               de consulta, que é justamente quem mais precisa ver o dado novo. */}
           <button
             className="btn btn-ghost"
-            onClick={carregar}
+            onClick={() => carregar(true)}
             disabled={loading}
             title="Buscar de novo as movimentações na planilha"
           >

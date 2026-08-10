@@ -1,7 +1,6 @@
 import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid, updateCellsByUuid,
 } from './sheets.js';
-import { invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 import { derivarCamposData } from '../utils/date.js';
 import { exigeTag } from '../utils/switch-categoria.js';
@@ -17,7 +16,8 @@ const TAB_CUSTOS = 'CUSTOS';
 // Sem cache, deliberadamente. É a regra que saiu da 1.7.1: cache em memória é
 // incompatível com deploy multiprocesso (a VM da web mais um backend embutido em
 // cada instalação desktop) sem canal de invalidação entre os processos. Cada
-// leitura vai à planilha, como custos.js e folha.js sempre fizeram.
+// leitura vai à planilha, como custos.js e folha.js sempre fizeram — e, desde
+// 08/08/2026, como TODOS os serviços fazem (o cache.js foi removido).
 
 function norm(s) {
   return String(s ?? '').trim().toUpperCase();
@@ -476,7 +476,6 @@ export async function processar({ hoje = hojeStr(), uuids = null } = {}) {
   )];
   if (faltantes.length) {
     await appendRows('FORNECEDOR', faltantes.map((f) => [newUuid(), f]));
-    invalidate('fornecedores');
   }
 
   await appendRows(TAB_CUSTOS, alvo.map((l) => l.linha));

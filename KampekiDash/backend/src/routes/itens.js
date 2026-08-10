@@ -5,8 +5,9 @@ import * as subcategoria from '../services/subcategoria.js';
 const router = Router();
 
 // Catálogo de subcategorias (fixas + criadas em runtime) + categoria derivada.
-router.get('/subcategorias', (req, res) => {
-  res.json(subcategoria.listar());
+// Assíncrona: relê a aba SUBCATEGORIA para não servir o catálogo do boot.
+router.get('/subcategorias', async (req, res, next) => {
+  try { res.json(await subcategoria.listar()); } catch (e) { next(e); }
 });
 
 // Categorias disponíveis para associar a uma subcategoria nova.

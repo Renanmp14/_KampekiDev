@@ -2,13 +2,13 @@ import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
   deleteRowsByUuid, updateColumnForUuids, updateCellsByUuid,
 } from './sheets.js';
-import { invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 import { derivarCamposData, ultimoDiaDoMes, dataParaMs } from '../utils/date.js';
 import { exigeTag, categoriaDe } from '../utils/switch-categoria.js';
 import { buscarPorUuid as buscarItem } from './itens.js';
 import { listar as listarFornecedores } from './fornecedor.js';
 import { tagExiste } from './tag.js';
+import { sincronizar as sincronizarSubcategorias } from './subcategoria.js';
 
 const TAB = 'CUSTOS';
 
@@ -167,7 +167,6 @@ async function limparItensOrfaos() {
     .map((i) => i.UUID);
   if (orfaos.length) {
     await deleteRowsByUuid('ITENS', orfaos);
-    invalidate('itens');
   }
   return orfaos.length;
 }
@@ -232,6 +231,9 @@ export async function atualizarEmMassa({ uuids, campo, valor }) {
  * deduplicados em memória — suporta massas grandes com poucas chamadas à API.
  */
 export async function importarLote(rows, { fallbackMesAno } = {}) {
+  // Itens novos derivam a categoria da subcategoria do arquivo — o mapa precisa
+  // estar atualizado (ver a nota em subcategoria.sincronizar).
+  await sincronizarSubcategorias();
   const [fornObjs, itemObjs] = await Promise.all([
     getObjects('FORNECEDOR'),
     getObjects('ITENS'),
@@ -359,14 +361,12 @@ export async function importarLote(rows, { fallbackMesAno } = {}) {
     ]);
   });
 
-  // Persiste cadastros novos antes dos custos (e invalida os caches).
+  // Persiste cadastros novos antes dos custos.
   if (novosForn.length) {
     await appendRows('FORNECEDOR', novosForn);
-    invalidate('fornecedores');
   }
   if (novosItens.length) {
     await appendRows('ITENS', novosItens);
-    invalidate('itens');
   }
   if (novosCustos.length) {
     await appendRows(TAB, novosCustos);
@@ -510,8 +510,8 @@ export async function importarLoteXml(notas) {
     if (chave) chavesExistentes.add(chave);
   });
 
-  if (novosForn.length) { await appendRows('FORNECEDOR', novosForn); invalidate('fornecedores'); }
-  if (novosItens.length) { await appendRows('ITENS', novosItens); invalidate('itens'); }
+  if (novosForn.length) { await appendRows('FORNECEDOR', novosForn); }
+  if (novosItens.length) { await appendRows('ITENS', novosItens); }
   if (novosCustos.length) { await appendRows(TAB, novosCustos); }
 
   return {
@@ -579,7 +579,6 @@ export async function importarNfse(payload) {
   if (!fornecedorFinal) {
     fornecedorFinal = fornNome;
     await appendRows('FORNECEDOR', [[newUuid(), fornecedorFinal]]);
-    invalidate('fornecedores');
     fornecedorCriado = true;
   }
 
@@ -592,7 +591,6 @@ export async function importarNfse(payload) {
       DESCRICAO_ITEM: descricao, SUB_CATEGORIA: '', CATEGORIA: '', TAG: '',
     };
     await appendRows('ITENS', [[newUuid(), descricao, '', '', '']]);
-    invalidate('itens');
     itemCriado = true;
   }
 
@@ -736,8 +734,8 @@ export async function importarNfseLote(notas) {
     if (chave) chavesExistentes.add(chave);
   });
 
-  if (novosForn.length) { await appendRows('FORNECEDOR', novosForn); invalidate('fornecedores'); }
-  if (novosItens.length) { await appendRows('ITENS', novosItens); invalidate('itens'); }
+  if (novosForn.length) { await appendRows('FORNECEDOR', novosForn); }
+  if (novosItens.length) { await appendRows('ITENS', novosItens); }
   if (novosCustos.length) { await appendRows(TAB, novosCustos); }
 
   return {
@@ -788,6 +786,7 @@ export async function classificarItem({ ITEM_UUID, SUB_CATEGORIA }) {
   if (!ITEM_UUID) throw new Error('Item é obrigatório');
   const sub = String(SUB_CATEGORIA || '').trim().toUpperCase();
   if (!sub) throw new Error('Subcategoria é obrigatória');
+  await sincronizarSubcategorias();
   const categoria = categoriaDe(sub);
   if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
 
@@ -797,7 +796,6 @@ export async function classificarItem({ ITEM_UUID, SUB_CATEGORIA }) {
 
   // Atualiza o item.
   await updateRowByUuid('ITENS', ITEM_UUID, [ITEM_UUID, item.DESCRICAO_ITEM, sub, categoria]);
-  invalidate('itens');
 
   // Back-fill: custos desse item ainda sem classificação.
   const custos = await getObjects('CUSTOS');
@@ -830,6 +828,7 @@ export async function classificarItensEmLote({ ITEM_UUIDS, SUB_CATEGORIA }) {
   }
   const sub = String(SUB_CATEGORIA || '').trim().toUpperCase();
   if (!sub) throw new Error('Subcategoria é obrigatória');
+  await sincronizarSubcategorias();
   const categoria = categoriaDe(sub);
   if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
 
@@ -843,7 +842,6 @@ export async function classificarItensEmLote({ ITEM_UUIDS, SUB_CATEGORIA }) {
   // Atualiza a classificação dos itens (DESCRICAO_ITEM permanece intacta).
   await updateColumnForUuids('ITENS', 'SUB_CATEGORIA', itemUuids, sub);
   await updateColumnForUuids('ITENS', 'CATEGORIA', itemUuids, categoria);
-  invalidate('itens');
 
   // Back-fill: custos desses itens ainda sem classificação.
   const custos = await getObjects('CUSTOS');
@@ -884,6 +882,7 @@ export async function classificarItensLoteVariado({ classificacoes }) {
   }
 
   // Normaliza e valida cada entrada; deriva a categoria da subcategoria.
+  await sincronizarSubcategorias();
   const alvoPorUuid = new Map(); // ITEM_UUID -> { sub, categoria }
   for (const c of classificacoes) {
     const uuid = String(c?.ITEM_UUID || '').trim();
@@ -925,7 +924,6 @@ export async function classificarItensLoteVariado({ classificacoes }) {
 
   await updateCellsByUuid('ITENS', itensUpdates);
   if (custosUpdates.length) await updateCellsByUuid('CUSTOS', custosUpdates);
-  invalidate('itens');
 
   return {
     itensClassificados: alvoPorDescricao.size,

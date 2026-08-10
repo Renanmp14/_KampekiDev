@@ -1,19 +1,18 @@
 import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
 } from './sheets.js';
-import { getCache, setCache, invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 
 const TAB = 'FORNECEDOR';
-const CACHE_KEY = 'fornecedores';
 
+// Sempre lê a planilha — sem cache em memória. O app roda em vários processos
+// independentes (a VM e o backend embutido de CADA instalação do desktop), então
+// um cache local só seria invalidado no processo que recebeu a escrita: as demais
+// máquinas continuariam servindo a lista congelada do boot. É a mesma regra que
+// custos/folha/caixa/recorrentes já seguem.
 export async function listar() {
-  const cached = getCache(CACHE_KEY);
-  if (cached) return cached;
   const objs = await getObjects(TAB);
-  const list = objs.map((o) => ({ UUID: o.UUID, NOME_FORNECEDOR: o.NOME_FORNECEDOR }));
-  setCache(CACHE_KEY, list);
-  return list;
+  return objs.map((o) => ({ UUID: o.UUID, NOME_FORNECEDOR: o.NOME_FORNECEDOR }));
 }
 
 function normalizar(nome) {
@@ -31,7 +30,6 @@ export async function criar({ NOME_FORNECEDOR }) {
 
   const uuid = newUuid();
   await appendRow(TAB, [uuid, nome]);
-  invalidate(CACHE_KEY);
   return { UUID: uuid, NOME_FORNECEDOR: nome };
 }
 
@@ -45,13 +43,11 @@ export async function atualizar(uuid, { NOME_FORNECEDOR }) {
   }
 
   await updateRowByUuid(TAB, uuid, [uuid, nome]);
-  invalidate(CACHE_KEY);
   return { UUID: uuid, NOME_FORNECEDOR: nome };
 }
 
 export async function remover(uuid) {
   await deleteRowByUuid(TAB, uuid);
-  invalidate(CACHE_KEY);
   return { ok: true };
 }
 
@@ -81,7 +77,6 @@ export async function importarLote(rows) {
 
   if (novas.length) {
     await appendRows(TAB, novas);
-    invalidate(CACHE_KEY);
   }
 
   return {

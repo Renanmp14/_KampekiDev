@@ -69,7 +69,7 @@ export function clearCredentials() {
   localStorage.removeItem(LOGIN_KEY);
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, { fresh = false } = {}) {
   // Rede de segurança: um usuário de consulta nunca dispara uma escrita, mesmo
   // que algum botão escape de ser escondido. O login é POST e fica de fora.
   if (method !== 'GET' && !path.startsWith('/auth/login') && !podeEscrever()) {
@@ -79,12 +79,25 @@ async function request(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  // Marca a requisição como "quero o dado deste instante": o backend descarta a
+  // janela de leitura antes de responder. Só o botão "↻ Atualizar" usa isso — se
+  // toda navegação usasse, a cota do Google voltaria a estourar.
+  if (fresh) headers['X-Kampeki-Fresh'] = '1';
 
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // O fetch só rejeita quando a requisição não chegou ao servidor (backend
+    // fora do ar, rede caída, app desktop encerrado). "Failed to fetch" não diz
+    // nada a quem está usando — e, num app de finanças, uma tela vazia com erro
+    // técnico dá a impressão de que os dados sumiram. Eles não saíram da planilha.
+    throw new Error('Sem conexão com o servidor do Kampeki. Nenhum dado foi perdido — verifique se o aplicativo/servidor está aberto e tente de novo.');
+  }
 
   if (res.status === 401) {
     clearToken();
@@ -104,7 +117,7 @@ async function request(method, path, body) {
 }
 
 export const api = {
-  get: (p) => request('GET', p),
+  get: (p, opcoes) => request('GET', p, undefined, opcoes),
   post: (p, b) => request('POST', p, b),
   put: (p, b) => request('PUT', p, b),
   del: (p) => request('DELETE', p),

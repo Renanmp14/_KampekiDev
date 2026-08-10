@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kampeki Finance — Notas da versão 1.8.0</title>
+<title>Kampeki Finance — Notas da versão 1.8.1</title>
 <style>html{background:#0e1b18}@media(prefers-color-scheme:light){html{background:#efe7dd}}body{margin:0}</style>
 </head>
 <body>
@@ -157,23 +157,27 @@
 
   <div class="brandbar">
     <div class="wordmark">KAM<span>PEKI</span> · FINANCE</div>
-    <div class="stamp">Notas da versão · 07 / 08 / 2026</div>
+    <div class="stamp">Notas da versão · 09 / 08 / 2026</div>
   </div>
 
   <p class="eyebrow">Notas da versão</p>
-  <h1>Versão 1.8.0 — <span class="accent">chegou o Recorrentes</span></h1>
+  <h1>Versão 1.8.1 — <span class="accent">chegou o Recorrentes</span></h1>
   <p class="lede">
     Aluguel, internet, sistema, contador, assinaturas: os custos que se repetem
     todo mês agora ficam cadastrados <b>uma vez</b> e aparecem num <b>calendário</b>,
     com data e valor. Quando vencem, você lança tudo <b>com um clique</b> — depois de
     conferir. E a tela de Custos, que estava pesada, abre bem mais rápido.
+    Esta entrega traz também um <b>pacote de correções</b>: dados atualizados entre
+    o computador e a web, avisos claros no lugar de erros técnicos, e o módulo
+    Recorrentes utilizável no <b>celular</b>.
   </p>
   <div class="meta">
-    <span class="pill version"><span class="dot"></span> v1.8.0</span>
+    <span class="pill version"><span class="dot"></span> v1.8.1</span>
     <span class="pill">🗓 Novo módulo</span>
     <span class="pill">⚡ Custos mais rápido</span>
     <span class="pill">🪟 Windows</span>
     <span class="pill">🌐 Web</span>
+    <span class="pill">🔧 Correções</span>
   </div>
 
   <!-- ===== O que muda ===== -->
@@ -427,6 +431,96 @@
     </div>
   </section>
 
+  <!-- ===== Correções e melhorias da 1.8.1 ===== -->
+  <section>
+    <p class="sec-label">Correções e melhorias desta entrega</p>
+
+    <div class="tiles">
+      <div class="tile destaque"><div class="k">🔄</div><h4>Dados sempre atuais</h4><p>O que você cadastra num computador aparece nos outros sem precisar fechar o app.</p></div>
+      <div class="tile"><div class="k">📱</div><h4>Recorrentes no celular</h4><p>A lista de recorrências virou cartões, fáceis de ler e de tocar.</p></div>
+      <div class="tile"><div class="k">💬</div><h4>Avisos que explicam</h4><p>Quando algo falha, a tela diz o que houve — e que nada foi perdido.</p></div>
+      <div class="tile"><div class="k">↻</div><h4>Botão Atualizar</h4><p>No Recorrentes, como já existia no Caixa, com a hora da última busca.</p></div>
+    </div>
+
+    <div class="card">
+      <div class="os-head"><span class="os-badge">🔄</span><h3 style="margin:0">Cadastros atualizados entre o computador e a web</h3></div>
+      <p>Havia um problema silencioso: <b>fornecedores, tags, itens e subcategorias</b> eram
+      lidos da planilha uma vez, quando o programa abria, e ficavam guardados na memória.
+      Quem cadastrava um fornecedor no computador <b>não o via na web</b> — e vice-versa —
+      até fechar e abrir o app. Uma alteração feita direto na planilha não chegava a
+      ninguém.</p>
+      <p>Agora todas as telas leem a planilha do jeito que a de <b>Custos</b> sempre leu:
+      ao abrir, buscando o dado do momento. Cadastrou de um lado, aparece do outro.</p>
+      <div class="callout good">
+        <b>Por que só agora?</b> O sistema roda em vários lugares ao mesmo tempo — o
+        servidor da web e o programa instalado em cada máquina. Cada um tinha a sua
+        memória, e nenhum avisava o outro quando algo mudava. Foi essa memória que saiu.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="os-head"><span class="os-badge">🗓</span><h3 style="margin:0">Recorrentes: a tela agora se atualiza sozinha ao lançar</h3></div>
+      <p>Depois de clicar em <b>“Colocar em dia”</b>, o calendário continuava marcando as
+      ocorrências como <b>a lançar</b>, embora já estivessem gravadas em Custos. Só a faixa
+      de vencidas zerava. Corrigido: assim que o lançamento termina, os dias aparecem
+      como <b>lançados</b>, com o valor efetivamente gravado.</p>
+      <p>Ganhou também o botão <b>“↻ Atualizar”</b>, igual ao do Caixa, com a hora da
+      última busca ao lado. Ele é útil justamente quando o app está aberto em dois
+      lugares: a tela que não lançou se atualiza sem precisar sair do módulo.</p>
+      <div class="callout">
+        <b>Nada é lançado duas vezes.</b> Se o app estiver aberto em duas telas e você
+        clicar em “Colocar em dia” nas duas, a segunda não duplica nada — ela reconhece o
+        que já foi gravado e responde “0 lançamentos”. Isso foi testado e continua valendo.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="os-head"><span class="os-badge">💬</span><h3 style="margin:0">Fim da tela vazia que parecia perda de dados</h3></div>
+      <p>Quando a consulta à planilha falhava — o Google recusa por alguns segundos quando
+      recebe muitos pedidos de uma vez —, a tela de Custos aparecia <b>vazia</b>, dizendo
+      “Nenhum lançamento”. É a pior frase possível nessa hora: parece que os dados sumiram.</p>
+      <p>Três mudanças:</p>
+      <ul class="plain">
+        <li>o sistema <b>tenta de novo sozinho</b>, e na maioria das vezes você nem percebe
+        que houve tropeço;</li>
+        <li>se ainda assim falhar, aparece um aviso dizendo <b>o que aconteceu</b>, que
+        <b>nada foi perdido</b> e um botão <b>“↻ Tentar de novo”</b>;</li>
+        <li>a lista vazia passou a explicar o motivo — se é erro de leitura, ou se são
+        apenas os <b>filtros</b> que não deixaram nada aparecer.</li>
+      </ul>
+      <div class="callout warn">
+        <b>Se você vir alguma mensagem de erro, ela agora diz o que é.</b> Vale a pena
+        mandar um print para o responsável pelo sistema: o texto identifica a causa.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="os-head"><span class="os-badge">⚡</span><h3 style="margin:0">Abrir em dois lugares ao mesmo tempo</h3></div>
+      <p>O Google limita quantas consultas a planilha aceita por minuto, e esse limite é
+      compartilhado por <b>todos</b> os pontos de acesso — o site e cada computador com o
+      programa instalado. Abrir o sistema em dois lugares em seguida chegava a estourar o
+      limite e travava a navegação por alguns instantes.</p>
+      <p>O sistema passou a <b>aproveitar melhor cada consulta</b>, sem deixar o dado velho:
+      a mesma informação pedida duas vezes na mesma tela é buscada uma vez só. Na prática,
+      <b>a mesma navegação consome menos da metade das consultas de antes</b>.</p>
+      <div class="callout good">
+        E o <b>“↻ Atualizar”</b> nunca aproveita nada: quando você aperta esse botão, o
+        sistema vai buscar o dado do momento na planilha, sempre.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="os-head"><span class="os-badge">📱</span><h3 style="margin:0">Recorrências cadastradas no celular</h3></div>
+      <p>A lista de recorrências era uma tabela de nove colunas: no celular, exigia arrastar
+      para os lados para ler qualquer linha, e os botões de editar, cancelar e excluir eram
+      minúsculos, um do lado do outro.</p>
+      <p>No celular ela virou uma <b>lista de cartões</b> — um por recorrência, com a
+      descrição, o item, o <b>valor em destaque</b>, o <b>próximo vencimento</b> e os botões
+      <b>com nome</b> e tamanho confortável para o dedo. Recorrência encerrada aparece mais
+      discreta, sem sumir da lista. No computador, a tabela continua exatamente como era.</p>
+    </div>
+  </section>
+
   <!-- ===== Como atualizar ===== -->
   <section>
     <p class="sec-label">Como atualizar</p>
@@ -435,7 +529,7 @@
         <div class="os-head"><span class="os-badge">🪟</span><h3 style="margin:0">Windows</h3></div>
         <p style="color:var(--muted); margin:0"><b>Automático.</b> Abra o app: ele baixa a
         versão nova em segundo plano e instala quando você fecha. Na próxima abertura, o
-        rodapé mostra <b>v1.8.0</b> e a seção <b>Recorrentes</b> aparece no menu. Seu login e
+        rodapé mostra <b>v1.8.1</b> e a seção <b>Recorrentes</b> aparece no menu. Seu login e
         seus dados permanecem. Para antecipar, use <b>Sistema → Configurações →
         “🔄 Verificar atualizações”</b>.</p>
       </div>
@@ -464,7 +558,7 @@
   </section>
 
   <div class="foot">
-    Kampeki Finance · versão 1.8.0 · notas da versão.<br>
+    Kampeki Finance · versão 1.8.1 · notas da versão.<br>
     Em caso de dúvida, entre em contato com o responsável pelo sistema.
   </div>
 

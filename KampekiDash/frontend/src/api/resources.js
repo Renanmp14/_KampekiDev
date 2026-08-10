@@ -13,9 +13,11 @@ export const getConfig = () => api.get('/config');
 export const getCellUsage = () => api.get('/meta/cell-usage');
 
 // Fábrica de CRUD simples para os recursos de cadastro.
+// `opcoes` chega até o client.js: { fresh: true } marca a requisição como
+// "quero o dado deste instante" (é o que o botão ↻ Atualizar usa).
 function crud(base) {
   return {
-    listar: () => api.get(base),
+    listar: (opcoes) => api.get(base, opcoes),
     criar: (body) => api.post(base, body),
     atualizar: (uuid, body) => api.put(`${base}/${uuid}`, body),
     remover: (uuid) => api.del(`${base}/${uuid}`),
@@ -47,8 +49,9 @@ export const custosApi = {
   ...crud('/custos'),
   // Recorte por DATA_NOTA (DD/MM/YYYY) — usado pelo calendário de Recorrentes
   // para carregar só o intervalo visível em vez da base inteira.
-  listarPeriodo: (dataInicio, dataFim) => api.get(
+  listarPeriodo: (dataInicio, dataFim, opcoes) => api.get(
     `/custos?dataInicio=${encodeURIComponent(dataInicio)}&dataFim=${encodeURIComponent(dataFim)}`,
+    opcoes,
   ),
   // extra pode conter { fallbackMesAno } para datar linhas sem data.
   importar: (rows, extra = {}) => api.post('/custos/import', { rows, ...extra }),
@@ -60,7 +63,7 @@ export const custosApi = {
   importarNfseLote: (notas) => api.post('/custos/import-nfse-lote', { notas }),
   atualizarEmMassa: (body) => api.post('/custos/bulk', body),
   removerEmMassa: (uuids) => api.post('/custos/bulk-delete', { uuids }),
-  itensAClassificar: () => api.get('/custos/itens-a-classificar'),
+  itensAClassificar: (opcoes) => api.get('/custos/itens-a-classificar', opcoes),
   classificar: (body) => api.post('/custos/classificar', body),
   classificarLote: (body) => api.post('/custos/classificar-lote', body),
   // Lote com subcategorias variadas: { classificacoes: [{ ITEM_UUID, SUB_CATEGORIA }] }
@@ -74,13 +77,14 @@ export const recorrentesApi = {
   ...crud('/recorrentes'),
   frequencias: () => api.get('/recorrentes/frequencias'),
   // Prévia (leitura pura): o que seria lançado agora + a contagem de vencidas.
-  pendentes: () => api.get('/recorrentes/pendentes'),
+  pendentes: (opcoes) => api.get('/recorrentes/pendentes', opcoes),
   // uuids opcional restringe a um ou mais templates.
   processar: (uuids) => api.post('/recorrentes/processar', uuids ? { uuids } : {}),
   // Cancelamento a partir de uma data (default hoje): grava DATA_FIM na véspera.
   cancelar: (uuid, aPartirDe) => api.post(`/recorrentes/${uuid}/cancelar`, { aPartirDe }),
-  excecoes: (template) => api.get(
+  excecoes: (template, opcoes) => api.get(
     template ? `/recorrentes/excecoes?template=${encodeURIComponent(template)}` : '/recorrentes/excecoes',
+    opcoes,
   ),
   // Upsert por (template, data): salvar duas vezes na mesma data substitui.
   salvarExcecao: (body) => api.post('/recorrentes/excecoes', body),

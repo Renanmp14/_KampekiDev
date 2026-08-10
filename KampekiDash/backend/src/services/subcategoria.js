@@ -7,7 +7,6 @@ import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
   updateCellsByUuid, getCellValue, setCellValue,
 } from './sheets.js';
-import { invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 import {
   categoriaMap, categoriasFixas, listarSubcategorias as listarCombinadas,
@@ -57,8 +56,32 @@ export async function carregar() {
   }
 }
 
+/**
+ * Relê a aba SUBCATEGORIA e realimenta o mapa em memória. Sem a migração do
+ * `carregar()` — é a versão barata, para rodar a cada requisição que depende da
+ * classificação.
+ *
+ * Existe porque `categoriaDe()` precisa continuar SÍNCRONO (é chamado no meio do
+ * fluxo de custos) e por isso o mapa vive em memória. Como cada processo tem o
+ * seu — a VM e o backend embutido de cada desktop —, uma subcategoria criada ou
+ * movida em outra máquina só chegaria aqui no próximo reinício. Falha de leitura
+ * PRESERVA o mapa atual: melhor um mapa um pouco velho que nenhum.
+ */
+export async function sincronizar() {
+  try {
+    const objs = await getObjects(TAB);
+    if (objs.length) setSubcategoriasDinamicas(objs);
+    return objs;
+  } catch {
+    return null;
+  }
+}
+
 // Lista combinada (da aba, ou fallback do código) para os selects do frontend.
-export function listar() {
+// Relê a aba antes de responder — o catálogo precisa refletir o que outra
+// máquina acabou de criar/editar.
+export async function listar() {
+  await sincronizar();
   return listarCombinadas();
 }
 
@@ -74,6 +97,7 @@ export function categorias() {
  * informativa.
  */
 export async function listarGestao() {
+  await sincronizar();
   const combinadas = listarCombinadas(); // [{ SUB_CATEGORIA, CATEGORIA }]
   const [itens, custos] = await Promise.all([
     getObjects('ITENS').catch(() => []),
@@ -136,7 +160,7 @@ async function aplicarCascata(subAtual, alvoSub, alvoCat) {
   const cu = montarUpdates(custos);
   if (it.ups.length) await updateCellsByUuid('ITENS', it.ups);
   if (cu.ups.length) await updateCellsByUuid('CUSTOS', cu.ups);
-  if (it.n) invalidate('itens');
+  if (it.n)
   return { itens: it.n, custos: cu.n };
 }
 

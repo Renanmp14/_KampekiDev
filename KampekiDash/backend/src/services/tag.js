@@ -1,19 +1,14 @@
 import {
   getObjects, appendRow, updateRowByUuid, deleteRowByUuid,
 } from './sheets.js';
-import { getCache, setCache, invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 
 const TAB = 'TAG';
-const CACHE_KEY = 'tags';
 
+// Sempre lê a planilha — sem cache em memória (ver a nota em fornecedor.js).
 export async function listar() {
-  const cached = getCache(CACHE_KEY);
-  if (cached) return cached;
   const objs = await getObjects(TAB);
-  const list = objs.map((o) => ({ UUID: o.UUID, TAG: o.TAG }));
-  setCache(CACHE_KEY, list);
-  return list;
+  return objs.map((o) => ({ UUID: o.UUID, TAG: o.TAG }));
 }
 
 function normalizar(t) {
@@ -31,7 +26,6 @@ export async function criar({ TAG }) {
 
   const uuid = newUuid();
   await appendRow(TAB, [uuid, tag]);
-  invalidate(CACHE_KEY);
   return { UUID: uuid, TAG: tag };
 }
 
@@ -45,13 +39,11 @@ export async function atualizar(uuid, { TAG }) {
   }
 
   await updateRowByUuid(TAB, uuid, [uuid, tag]);
-  invalidate(CACHE_KEY);
   return { UUID: uuid, TAG: tag };
 }
 
 export async function remover(uuid) {
   await deleteRowByUuid(TAB, uuid);
-  invalidate(CACHE_KEY);
   return { ok: true };
 }
 

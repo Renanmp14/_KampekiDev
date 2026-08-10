@@ -2,27 +2,23 @@ import {
   getObjects, appendRow, appendRows, updateRowByUuid, deleteRowByUuid,
   updateColumnForUuids,
 } from './sheets.js';
-import { getCache, setCache, invalidate } from './cache.js';
 import { newUuid } from '../utils/uuid.js';
 import { categoriaDe, exigeTag } from '../utils/switch-categoria.js';
 import { tagExiste } from './tag.js';
+import { sincronizar as sincronizarSubcategorias } from './subcategoria.js';
 
 const TAB = 'ITENS';
-const CACHE_KEY = 'itens';
 
+// Sempre lê a planilha — sem cache em memória (ver a nota em fornecedor.js).
 export async function listar() {
-  const cached = getCache(CACHE_KEY);
-  if (cached) return cached;
   const objs = await getObjects(TAB);
-  const list = objs.map((o) => ({
+  return objs.map((o) => ({
     UUID: o.UUID,
     DESCRICAO_ITEM: o.DESCRICAO_ITEM,
     SUB_CATEGORIA: o.SUB_CATEGORIA,
     CATEGORIA: o.CATEGORIA,
     TAG: o.TAG || '',
   }));
-  setCache(CACHE_KEY, list);
-  return list;
 }
 
 // Resolve a TAG de um item: só faz sentido para categorias de folha; é opcional
@@ -68,6 +64,10 @@ function montar({ DESCRICAO_ITEM, SUB_CATEGORIA }) {
 }
 
 export async function criar(payload) {
+  // O mapa de subcategorias vive em memória (categoriaDe é síncrono): relê a aba
+  // antes de derivar a categoria, senão uma subcategoria criada/movida em outra
+  // máquina seria rejeitada como "desconhecida" ou classificada pela versão velha.
+  await sincronizarSubcategorias();
   const { descricao, sub, categoria } = montar(payload);
 
   const existentes = await listar();
@@ -78,7 +78,6 @@ export async function criar(payload) {
   const tag = await resolverTagItem(categoria, payload.TAG);
   const uuid = newUuid();
   await appendRow(TAB, [uuid, descricao, sub, categoria, tag]);
-  invalidate(CACHE_KEY);
   // Item novo pode já casar com custos existentes (mesma descrição) — sincroniza a tag.
   const { atualizados: custosAtualizados, limpou } = await aplicarTagAosCustosDoItem(descricao, tag);
   return {
@@ -87,6 +86,7 @@ export async function criar(payload) {
 }
 
 export async function atualizar(uuid, payload) {
+  await sincronizarSubcategorias();
   const { descricao, sub, categoria } = montar(payload);
 
   const existentes = await listar();
@@ -96,7 +96,6 @@ export async function atualizar(uuid, payload) {
 
   const tag = await resolverTagItem(categoria, payload.TAG);
   await updateRowByUuid(TAB, uuid, [uuid, descricao, sub, categoria, tag]);
-  invalidate(CACHE_KEY);
   // O custo sempre segue o item: ao salvar, sincroniza a tag nos custos deste
   // item — aplica quando há tag, e LIMPA quando a tag foi removida.
   const { atualizados: custosAtualizados, limpou } = await aplicarTagAosCustosDoItem(descricao, tag);
@@ -134,6 +133,7 @@ export async function atualizarEmMassa({ ITEM_UUIDS, campo, valor }) {
   if (campo === 'SUB_CATEGORIA') {
     const sub = String(valor || '').trim().toUpperCase();
     if (!sub) throw new Error('Subcategoria é obrigatória');
+    await sincronizarSubcategorias();
     const categoria = categoriaDe(sub);
     if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
     const folha = exigeTag(categoria);
@@ -148,7 +148,6 @@ export async function atualizarEmMassa({ ITEM_UUIDS, campo, valor }) {
       const itensComTag = selecionados.filter((i) => String(i.TAG || '').trim()).map((i) => i.UUID);
       if (itensComTag.length) await updateColumnForUuids(TAB, 'TAG', itensComTag, '');
     }
-    invalidate(CACHE_KEY);
 
     // Re-sincroniza TODOS os custos desses itens (sub/cat, e tag se virou não-folha).
     const custosDoItem = custos.filter((c) => descricoes.has(normalizar(c.ITEM)));
@@ -176,7 +175,6 @@ export async function atualizarEmMassa({ ITEM_UUIDS, campo, valor }) {
 
   const itemUuids = folhaSel.map((i) => i.UUID);
   await updateColumnForUuids(TAB, 'TAG', itemUuids, tag);
-  invalidate(CACHE_KEY);
 
   // Sincroniza os custos desses itens que estão com tag diferente do alvo.
   const descricoes = new Set(folhaSel.map((i) => normalizar(i.DESCRICAO_ITEM)));
@@ -249,7 +247,6 @@ export async function reprocessarTagsNosCustos() {
 
 export async function remover(uuid) {
   await deleteRowByUuid(TAB, uuid);
-  invalidate(CACHE_KEY);
   return { ok: true };
 }
 
@@ -264,6 +261,7 @@ export async function buscarPorUuid(uuid) {
 // usa a CATEGORIA informada no arquivo como fallback. Linhas sem categoria
 // possível são reportadas como erro (não entram), nunca derrubam a importação.
 export async function importarLote(rows) {
+  await sincronizarSubcategorias();
   const existentes = await listar();
   const vistos = new Set(existentes.map((i) => normalizar(i.DESCRICAO_ITEM)));
 
@@ -305,7 +303,6 @@ export async function importarLote(rows) {
 
   if (novas.length) {
     await appendRows(TAB, novas);
-    invalidate(CACHE_KEY);
   }
 
   return {

@@ -104,27 +104,36 @@ export default function Recorrentes() {
   // de despejar a pessoa de volta no calendário.
   const [voltarAoDia, setVoltarAoDia] = useState('');
   const [showPrevia, setShowPrevia] = useState(false);
+  const [atualizadoEm, setAtualizadoEm] = useState('');
   const [cancelando, setCancelando] = useState(null); // { template, aPartirDe }
   const [confirmDel, setConfirmDel] = useState(null);
 
   const { de, ate } = intervaloDe(visao, cursor);
 
-  const carregar = useCallback(async () => {
+  // `fresh` só vem do botão ↻ Atualizar: pede ao backend o dado do instante,
+  // furando a janela de leitura que segura a cota do Google.
+  const carregar = useCallback(async (fresh = false) => {
     setLoading(true);
     setError('');
+    const o = fresh ? { fresh: true } : undefined;
     try {
       const [tpls, excs, its, forns, pend] = await Promise.all([
-        recorrentesApi.listar(),
-        recorrentesApi.excecoes(),
-        itensApi.listar(),
-        fornecedorApi.listar(),
-        recorrentesApi.pendentes(),
+        recorrentesApi.listar(o),
+        recorrentesApi.excecoes(undefined, o),
+        itensApi.listar(o),
+        fornecedorApi.listar(o),
+        recorrentesApi.pendentes(o),
       ]);
       setTemplates(tpls);
       setExcecoes(excs);
       setItens(its);
       setFornecedores(forns);
       setPendentes(pend);
+      // Sem a hora, clicar em "Atualizar" quando nada mudou não dá sinal nenhum
+      // de que a busca aconteceu (mesma razão do Caixa).
+      setAtualizadoEm(new Date().toLocaleTimeString('pt-BR', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -139,6 +148,15 @@ export default function Recorrentes() {
   // recorrência reescreveria o passado na tela (uma ocorrência lançada por R$ 250
   // passaria a exibir R$ 300 porque o template mudou). A flag controla apenas se
   // os custos NÃO recorrentes também aparecem — por isso ligá-la é instantâneo.
+  //
+  // Separado em callback (e não só dentro do efeito) porque é o ✓ do calendário:
+  // depois de "Colocar em dia" é ESTA leitura que faz a ocorrência aparecer como
+  // lançada. Recarregar só os pendentes zerava a faixa de vencidas e deixava os
+  // chips mentindo que ainda faltava lançar.
+  const carregarCustos = useCallback(async (fresh = false) => {
+    setCustos(await custosApi.listarPeriodo(de, ate, fresh ? { fresh: true } : undefined));
+  }, [de, ate]);
+
   useEffect(() => {
     let cancelado = false;
     custosApi.listarPeriodo(de, ate)
@@ -299,12 +317,24 @@ export default function Recorrentes() {
     return datas[0] || '—';
   }
 
+  // Releitura completa do módulo (recorrências, pendentes e os custos do período).
+  async function atualizar() {
+    setError('');
+    try {
+      await Promise.all([carregar(true), carregarCustos(true)]);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function acao(fn, mensagem) {
     setSalvando(true);
     setError('');
     try {
       const r = await fn();
-      await carregar();
+      // Os custos entram junto: qualquer ação daqui (lançar, editar, cancelar)
+      // muda o que está gravado em CUSTOS, e é de lá que sai o ✓ do calendário.
+      await Promise.all([carregar(), carregarCustos()]);
       if (mensagem) setAviso(typeof mensagem === 'function' ? mensagem(r) : mensagem);
       return r;
     } catch (e) {
@@ -422,6 +452,19 @@ export default function Recorrentes() {
 
           <span className="spacer" />
           <span className="muted">Total no período: <strong>{brl(totalPeriodo)}</strong></span>
+          {/* Releitura da planilha sem F5 e sem sair do módulo — mesmo botão do
+              Caixa. Aqui é essencial: com duas telas abertas (web e desktop), a
+              que não processou continua mostrando as ocorrências como pendentes.
+              É LEITURA, então vale também para o perfil de consulta. */}
+          <button
+            className="btn btn-ghost"
+            onClick={atualizar}
+            disabled={loading || salvando}
+            title="Buscar de novo as recorrências e os custos do período na planilha"
+          >
+            {loading ? '↻ Atualizando...' : '↻ Atualizar'}
+          </button>
+          {atualizadoEm && <span className="rec-atualizado">{`atualizado ${atualizadoEm}`}</span>}
           {escrever && (
             <button className="btn" onClick={() => { setEditando(null); setShowForm(true); }}>
               + Nova recorrência
@@ -510,6 +553,74 @@ export default function Recorrentes() {
           )}
         </div>
 
+        {/* No telefone a tabela de 9 colunas só funcionava rolando de lado, com a
+            coluna de ações presa à direita e três botões de emoji minúsculos. Vira
+            uma lista de cartões — mesma decisão da visão mês, pelo mesmo motivo:
+            em 390px não adianta espremer o que não cabe, muda-se a forma. */}
+        {estreita ? (
+          <div className="rec-cards">
+            {templatesFiltrados.map(({ t, item, encerrada }) => (
+              <div className={`rec-card ${encerrada ? 'rec-card-encerrada' : ''}`} key={t.UUID}>
+                <div className="rec-card-topo">
+                  <strong className="rec-card-titulo">{t.DESCRICAO}</strong>
+                  <span className={`badge ${encerrada ? 'badge-default' : 'badge-folha'}`}>
+                    {encerrada ? 'Encerrada' : 'Ativa'}
+                  </span>
+                </div>
+
+                <div className="rec-card-item">
+                  {item?.DESCRICAO_ITEM || <span className="muted">(item não encontrado)</span>}
+                </div>
+
+                <div className="rec-card-destaque">
+                  <span className="rec-card-valor">{brl(toNum(t.QTD) * toNum(t.VALOR_UNIT))}</span>
+                  <span className="muted">
+                    {labelFrequencia(t.FREQUENCIA)}{t.DIA_BASE ? ` · dia ${t.DIA_BASE}` : ''}
+                  </span>
+                </div>
+
+                {/* Próximo vencimento é o que se procura numa recorrência ativa;
+                    início/fim ficam depois, em tom secundário. */}
+                <dl className="rec-card-dados">
+                  {!encerrada && (
+                    <div><dt>Próximo</dt><dd>{proximoVencimento(t)}</dd></div>
+                  )}
+                  <div><dt>Início</dt><dd>{t.DATA_INICIO}</dd></div>
+                  <div><dt>Fim</dt><dd>{t.DATA_FIM || '—'}</dd></div>
+                </dl>
+
+                {escrever && (
+                  <div className="rec-card-acoes">
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => { setEditando(t); setShowForm(true); }}
+                    >
+                      ✏ Editar
+                    </button>
+                    {!encerrada && (
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setCancelando({ template: t, aPartirDe: hoje })}
+                      >
+                        ⛔ Cancelar
+                      </button>
+                    )}
+                    <button className="btn btn-sm btn-danger" onClick={() => setConfirmDel(t)}>
+                      🗑 Excluir
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {templatesFiltrados.length === 0 && !loading && (
+              <p className="empty">
+                {templates.length === 0
+                  ? 'Nenhuma recorrência cadastrada.'
+                  : 'Nenhuma recorrência com esses filtros.'}
+              </p>
+            )}
+          </div>
+        ) : (
         <div className="table-wrap">
           <table className="sticky-actions rec-tabela">
             <thead>
@@ -581,6 +692,7 @@ export default function Recorrentes() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {showForm && (

@@ -6,7 +6,7 @@ import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { authRequired, escritaRequerAdmin } from './middleware/auth.js';
-import { initSheets, getCellUsage } from './services/sheets.js';
+import { initSheets, getCellUsage, limparJanela } from './services/sheets.js';
 import { carregar as carregarSubcategorias } from './services/subcategoria.js';
 
 import authRoutes from './routes/auth.js';
@@ -58,6 +58,14 @@ if (process.env.TRUST_PROXY) {
 app.use(cors());
 // Limite alto para suportar importações em lote (planilhas grandes).
 app.use(express.json({ limit: '50mb' }));
+
+// "↻ Atualizar" pede dado do momento, não o da janela de segundos do sheets.js.
+// O frontend marca só ESSAS requisições com o cabeçalho; o resto da navegação
+// continua aproveitando a janela, que é o que segura a cota do Google.
+app.use((req, res, next) => {
+  if (req.get('X-Kampeki-Fresh')) limparJanela();
+  next();
+});
 
 // Health check (público).
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -117,11 +125,35 @@ if (fs.existsSync(path.join(distDir, 'index.html'))) {
 }
 
 // Handler de erros centralizado.
+//
+// Falha da API do Google não é erro de requisição: quando a cota estoura (429)
+// ou o serviço oscila (5xx), devolver 400 com a mensagem crua do Google faz a
+// tela parecer quebrada — e uma tabela vazia com um erro em cima passa a
+// impressão de que os dados sumiram. Esses dois casos ganham status e texto
+// próprios, deixando explícito que nada foi perdido.
+//
+// Os demais códigos do Google (401/403 por credencial inválida, por exemplo)
+// continuam virando 400 DE PROPÓSITO: um 401 aqui faria o frontend achar que o
+// token do usuário expirou e jogá-lo na tela de login, escondendo o problema real.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error('[erro]', err.message);
-  const status = err.status || 400;
-  res.status(status).json({ error: err.message || 'Erro interno' });
+  const codigoGoogle = typeof err.code === 'number' ? err.code : err?.response?.status;
+  let status = err.status || 400;
+  let mensagem = err.message || 'Erro interno';
+
+  if (!err.status && Number.isInteger(codigoGoogle)) {
+    if (codigoGoogle === 429) {
+      status = 429;
+      mensagem = 'O Google limitou temporariamente as consultas à planilha (muitas leituras ao mesmo tempo). '
+        + 'Nenhum dado foi perdido — espere alguns segundos e tente de novo.';
+    } else if (codigoGoogle >= 500 && codigoGoogle <= 599) {
+      status = 503;
+      mensagem = 'A planilha do Google não respondeu agora. Nenhum dado foi perdido — tente de novo em instantes.';
+    }
+  }
+
+  console.error('[erro]', status, err.message);
+  res.status(status).json({ error: mensagem });
 });
 
 /**

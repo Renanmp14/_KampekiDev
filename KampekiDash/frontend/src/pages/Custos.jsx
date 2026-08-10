@@ -177,6 +177,8 @@ export default function Custos() {
   const [showConfirmSave, setShowConfirmSave] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
   const [error, setError] = useState('');
+  // Erro de LEITURA da planilha — separado do `error` dos formulários.
+  const [erroCarregar, setErroCarregar] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Filtros da listagem. Podem chegar pela URL (?mes=MM/YYYY&dia=DD&item=...) —
@@ -202,13 +204,17 @@ export default function Custos() {
   const [confirmBulkDel, setConfirmBulkDel] = useState(false);
   const [bulkDelSaving, setBulkDelSaving] = useState(false);
 
-  async function carregar() {
+  // `fresh` vem do "↻ Tentar de novo": depois de uma falha, insistir com o
+  // mesmo dado guardado não ajudaria em nada.
+  async function carregar(fresh = false) {
     setLoading(true);
+    setErroCarregar('');
+    const o = fresh ? { fresh: true } : undefined;
     try {
       const [c, f, i, t, subs, cats, pend] = await Promise.all([
-        custosApi.listar(), fornecedorApi.listar(), itensApi.listar(), tagApi.listar(),
+        custosApi.listar(o), fornecedorApi.listar(o), itensApi.listar(o), tagApi.listar(o),
         itensApi.subcategorias(), itensApi.categorias(),
-        custosApi.itensAClassificar().catch(() => []),
+        custosApi.itensAClassificar(o).catch(() => []),
       ]);
       setCustos(c);
       setFornecedores(f);
@@ -218,7 +224,12 @@ export default function Custos() {
       setCategoriasCad(cats);
       setQtdAClassificar(pend.length);
     } catch (e) {
-      setError(e.message);
+      // Falha de LEITURA vai para um estado próprio, exibido acima da tabela.
+      // Mandá-la para `error` (que só aparece dentro dos modais) deixava a tela
+      // com uma tabela vazia e nenhuma explicação — o que se lê como "sumiram os
+      // meus lançamentos". Nada é apagado aqui: o que já estava carregado
+      // permanece na tela, porque só sobrescrevemos o estado em caso de sucesso.
+      setErroCarregar(e.message);
     } finally {
       setLoading(false);
     }
@@ -789,6 +800,21 @@ export default function Custos() {
             </div>
           )}
         </div>
+        {erroCarregar && (
+          <div className="load-error">
+            <div>
+              <strong>Não foi possível ler os lançamentos da planilha.</strong>
+              <div className="load-error-motivo">{erroCarregar}</div>
+              <div className="load-error-calma">
+                Nenhum dado foi perdido — isto é uma falha de leitura, não de gravação.
+                Os lançamentos continuam na planilha.
+              </div>
+            </div>
+            <button className="btn btn-sm" onClick={() => carregar(true)} disabled={loading}>
+              {loading ? 'Tentando...' : '↻ Tentar de novo'}
+            </button>
+          </div>
+        )}
         {loading ? <div className="empty">Carregando...</div> : (
           <div className="table-wrap">
             <table className="sticky-actions">
@@ -847,7 +873,20 @@ export default function Custos() {
                     </td>
                   </tr>
                 ))}
-                {registrosExibidos.length === 0 && <tr><td colSpan={12} className="empty">Nenhum lançamento.</td></tr>}
+                {/* A mensagem de vazio precisa dizer POR QUE está vazio: "nenhum
+                    lançamento" numa tela que falhou ao carregar, ou que está
+                    filtrada, é o que passa a impressão de dado perdido. */}
+                {registrosExibidos.length === 0 && (
+                  <tr>
+                    <td colSpan={12} className="empty">
+                      {erroCarregar
+                        ? 'A lista não pôde ser carregada — veja o aviso acima.'
+                        : (semFiltroAtivo
+                          ? 'Nenhum lançamento.'
+                          : 'Nenhum lançamento para os filtros atuais. Limpe os filtros para ver os demais.')}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -187,6 +187,7 @@ export async function setCellValue(a1Range, value) {
   await sheets.spreadsheets.values.update({
     spreadsheetId, range: a1Range, valueInputOption: 'RAW', requestBody: { values: [[value]] },
   });
+  limparJanela(String(a1Range).split('!')[0]);
 }
 
 // Lê as linhas de dados (a partir da linha 3) como matriz de valores.
@@ -197,7 +198,7 @@ export async function setCellValue(a1Range, value) {
 // consegue parsear → exibe zero, mesmo com o dado correto na planilha.
 // dateTimeRenderOption=FORMATTED_STRING mantém colunas de data (DATA_NOTA,
 // MES_ANO...) como string de exibição, preservando o formato DD/MM/YYYY.
-export async function getRows(tab) {
+async function buscarRows(tab) {
   const sheets = await getSheets();
   const spreadsheetId = getSpreadsheetId();
   const range = `${tab}!A${DATA_START_ROW}:${lastColLetter(tab)}`;
@@ -210,9 +211,74 @@ export async function getRows(tab) {
   return res.data.values || [];
 }
 
+// --- Janela de leitura ------------------------------------------------------
+// A cota do Google é de 60 leituras por minuto POR SERVICE ACCOUNT — e a VM da
+// web mais cada instalação desktop dividem a mesma. Abrir o app em duas telas
+// seguidas estourava o limite (429), porque uma única tela custa de 5 a 10
+// leituras e várias abas são lidas repetidas vezes na MESMA carga (a tela de
+// Custos lê CUSTOS duas vezes: a listagem e o "itens a classificar").
+//
+// Duas defesas, nesta ordem:
+//
+//  1. `emVoo` — leituras IDÊNTICAS e SIMULTÂNEAS compartilham a mesma promessa.
+//     Não tem prazo de validade nem envelhece nada: é a mesma resposta que já
+//     estava a caminho. Sozinha, já corta as leituras de uma tela quase pela
+//     metade.
+//
+//  2. `janela` — releitura da mesma aba dentro de poucos SEGUNDOS reaproveita o
+//     resultado. Nada a ver com o cache removido em 08/08: aquele valia até o
+//     processo reiniciar (dias), este vale segundos e é DESCARTADO na hora em
+//     qualquer escrita local. O botão "↻ Atualizar" ignora a janela (ver
+//     `limparJanela` e o cabeçalho X-Kampeki-Fresh em app.js).
+//
+// `SHEETS_READ_TTL_MS=0` desliga a janela e volta ao "sempre relê".
+const JANELA_MS = Number(process.env.SHEETS_READ_TTL_MS ?? 10_000);
+const janela = new Map(); // tab -> { em, valor }
+const emVoo = new Map(); // tab -> Promise
+
+export function limparJanela(tab) {
+  if (tab) { janela.delete(tab); return; }
+  janela.clear();
+}
+
+// Lê as linhas de dados (a partir da linha 3) como matriz de valores.
+//
+// `fresh: true` pula as duas defesas e vai à planilha. É OBRIGATÓRIO em tudo que
+// calcula POSIÇÃO DE LINHA (a primeira linha livre de um append, o `_row` de um
+// update/delete): uma contagem de linhas com segundos de atraso escreveria por
+// cima de dado bom ou apagaria a linha errada. Consulta pode envelhecer; índice
+// de linha, não.
+export async function getRows(tab, { fresh = false } = {}) {
+  if (fresh) {
+    const valor = await buscarRows(tab);
+    janela.set(tab, { em: Date.now(), valor });
+    return valor;
+  }
+
+  const guardado = janela.get(tab);
+  if (JANELA_MS > 0 && guardado && Date.now() - guardado.em < JANELA_MS) return guardado.valor;
+
+  const voando = emVoo.get(tab);
+  if (voando) return voando;
+
+  const p = buscarRows(tab)
+    .then((valor) => {
+      janela.set(tab, { em: Date.now(), valor });
+      emVoo.delete(tab);
+      return valor;
+    })
+    .catch((e) => {
+      emVoo.delete(tab);
+      throw e;
+    });
+  emVoo.set(tab, p);
+  return p;
+}
+
 // Lê as linhas como objetos { COLUNA: valor }, incluindo o número real da linha.
-export async function getObjects(tab) {
-  const rows = await getRows(tab);
+// Sobre `fresh`, ver getRows: quem vai usar `_row` para gravar precisa passar true.
+export async function getObjects(tab, opcoes) {
+  const rows = await getRows(tab, opcoes);
   const headers = TABS[tab];
   return rows.map((row, i) => {
     const obj = { _row: DATA_START_ROW + i };
@@ -227,7 +293,8 @@ export async function getObjects(tab) {
 export async function appendRow(tab, rowArray) {
   const sheets = await getSheets();
   const spreadsheetId = getSpreadsheetId();
-  const existing = await getRows(tab);
+  // fresh: a primeira linha livre não pode vir de leitura envelhecida.
+  const existing = await getRows(tab, { fresh: true });
   const targetRow = DATA_START_ROW + existing.length;
   await ensureRowCapacity(tab, targetRow);
   await sheets.spreadsheets.values.update({
@@ -236,6 +303,7 @@ export async function appendRow(tab, rowArray) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [rowArray] },
   });
+  limparJanela(tab); // a aba mudou: quem ler logo em seguida tem de ver a linha nova
   return targetRow;
 }
 
@@ -272,7 +340,8 @@ export async function appendRows(tab, rowsArray, chunkSize = 2000) {
   if (!rowsArray.length) return { inseridas: 0, startRow: null };
   const sheets = await getSheets();
   const spreadsheetId = getSpreadsheetId();
-  const existing = await getRows(tab);
+  // fresh: idem appendRow — escrever a partir de uma contagem velha sobrescreveria dados.
+  const existing = await getRows(tab, { fresh: true });
   const startRow = DATA_START_ROW + existing.length;
   // Expande a grade para caber todas as novas linhas antes de escrever.
   await ensureRowCapacity(tab, startRow + rowsArray.length - 1);
@@ -290,6 +359,7 @@ export async function appendRows(tab, rowsArray, chunkSize = 2000) {
     });
     written += chunk.length;
   }
+  limparJanela(tab);
   return { inseridas: written, startRow };
 }
 
@@ -300,7 +370,7 @@ export async function updateColumnForUuids(tab, field, uuids, value) {
   if (colIdx < 0) throw new Error(`Campo desconhecido em ${tab}: ${field}`);
   const letter = colLetter(colIdx);
   const alvo = new Set(uuids);
-  const objs = await getObjects(tab);
+  const objs = await getObjects(tab, { fresh: true }); // usa _row para gravar
   const data = objs
     .filter((o) => alvo.has(o.UUID))
     .map((o) => ({ range: `${tab}!${letter}${o._row}`, values: [[value]] }));
@@ -311,6 +381,7 @@ export async function updateColumnForUuids(tab, field, uuids, value) {
     spreadsheetId,
     requestBody: { valueInputOption: 'USER_ENTERED', data },
   });
+  limparJanela(tab);
   return data.length;
 }
 
@@ -323,7 +394,7 @@ export async function updateCellsByUuid(tab, updates) {
   const lista = Array.isArray(updates) ? updates : [];
   if (!lista.length) return 0;
   const headers = TABS[tab];
-  const objs = await getObjects(tab);
+  const objs = await getObjects(tab, { fresh: true }); // usa _row para gravar
   const rowByUuid = new Map(objs.map((o) => [o.UUID, o._row]));
   const colByField = new Map();
   const data = [];
@@ -345,12 +416,13 @@ export async function updateCellsByUuid(tab, updates) {
     spreadsheetId,
     requestBody: { valueInputOption: 'USER_ENTERED', data },
   });
+  limparJanela(tab);
   return data.length;
 }
 
 // Localiza o número da linha (real) de um registro pelo UUID, ou null.
 export async function findRowByUuid(tab, uuid) {
-  const objs = await getObjects(tab);
+  const objs = await getObjects(tab, { fresh: true }); // devolve _row para gravar/apagar
   const found = objs.find((o) => o.UUID === uuid);
   return found ? found._row : null;
 }
@@ -367,6 +439,7 @@ export async function updateRowByUuid(tab, uuid, rowArray) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [rowArray] },
   });
+  limparJanela(tab);
   return row;
 }
 
@@ -377,7 +450,7 @@ export async function updateRowByUuid(tab, uuid, rowArray) {
 export async function deleteRowsByUuid(tab, uuids) {
   const alvo = new Set(uuids || []);
   if (!alvo.size) return 0;
-  const objs = await getObjects(tab);
+  const objs = await getObjects(tab, { fresh: true }); // usa _row para apagar
   const linhas = objs.filter((o) => alvo.has(o.UUID)).map((o) => o._row).sort((a, b) => a - b);
   if (!linhas.length) return 0;
 
@@ -406,6 +479,7 @@ export async function deleteRowsByUuid(tab, uuids) {
       })),
     },
   });
+  limparJanela(tab);
   return linhas.length;
 }
 
@@ -433,5 +507,6 @@ export async function deleteRowByUuid(tab, uuid) {
       ],
     },
   });
+  limparJanela(tab);
   return row;
 }
