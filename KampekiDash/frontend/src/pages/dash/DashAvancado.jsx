@@ -4,10 +4,14 @@ import {
 } from 'recharts';
 import { custosApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import FornecedorFiltro from '../../components/FornecedorFiltro.jsx';
 import { brl, brlCompact, toNum } from '../../utils/format.js';
 import {
   keyToLabel, monthsBetween, rowMonthKey, filterByPeriod,
 } from '../../utils/agg.js';
+import {
+  opcoesFornecedor, filtrarPorFornecedor, fornecedorDe,
+} from '../../utils/fornecedorFiltro.js';
 
 // Hub de análises avançadas (deep-dives que não pertencem ao dashboard operacional
 // do dia a dia). Primeira visão: evolução de preço médio × quantidade.
@@ -19,6 +23,7 @@ export default function DashAvancado() {
   // Evolução de preço médio × quantidade: categoria + subcategoria selecionadas.
   const [precoCat, setPrecoCat] = useState('');
   const [precoSub, setPrecoSub] = useState('');
+  const [fFornecedores, setFFornecedores] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -37,7 +42,33 @@ export default function DashAvancado() {
   );
   const deKey = period.de || todasChaves[0] || '';
   const ateKey = period.ate || todasChaves[todasChaves.length - 1] || '';
-  const noPeriodo = useMemo(() => filterByPeriod(custos, deKey, ateKey), [custos, deKey, ateKey]);
+  const noPeriodoBruto = useMemo(
+    () => filterByPeriod(custos, deKey, ateKey),
+    [custos, deKey, ateKey],
+  );
+  const noPeriodo = useMemo(
+    () => filtrarPorFornecedor(noPeriodoBruto, fFornecedores),
+    [noPeriodoBruto, fFornecedores],
+  );
+
+  // Cascata: as opções de fornecedor respeitam a categoria/subcategoria escolhida
+  // (sem filtro prévio, lista todos os do período).
+  const baseOpcoesForn = useMemo(() => {
+    let r = noPeriodoBruto;
+    if (precoCat) r = r.filter((x) => x.CATEGORIA === precoCat);
+    if (precoSub) r = r.filter((x) => x.SUB_CATEGORIA === precoSub);
+    return r;
+  }, [noPeriodoBruto, precoCat, precoSub]);
+  const opcoesForn = useMemo(
+    () => opcoesFornecedor(baseOpcoesForn, fFornecedores),
+    [baseOpcoesForn, fFornecedores],
+  );
+  useEffect(() => {
+    if (!fFornecedores.length) return;
+    const presentes = new Set(baseOpcoesForn.map(fornecedorDe));
+    const validos = fFornecedores.filter((f) => presentes.has(f));
+    if (validos.length !== fFornecedores.length) setFFornecedores(validos);
+  }, [baseOpcoesForn, fFornecedores]);
 
   const precoCategorias = useMemo(
     () => [...new Set(custos.map((r) => r.CATEGORIA).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
@@ -76,7 +107,14 @@ export default function DashAvancado() {
     <div>
       <h1 className="page-title">Visões avançadas</h1>
 
-      <PeriodFilter de={period.de} ate={period.ate} onChange={setPeriod} />
+      <PeriodFilter de={period.de} ate={period.ate} onChange={setPeriod}>
+        <FornecedorFiltro
+          valores={fFornecedores}
+          onAdd={(f) => setFFornecedores((p) => (p.includes(f) ? p : [...p, f]))}
+          onRemove={(f) => setFFornecedores((p) => p.filter((x) => x !== f))}
+          opcoes={opcoesForn}
+        />
+      </PeriodFilter>
 
       <div className="card">
         <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -124,7 +162,8 @@ export default function DashAvancado() {
               </LineChart>
             </ResponsiveContainer>
             <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-              Preço médio = Σ valor total ÷ Σ quantidade no mês, para {precoSub || precoCat}. Itens de unidades diferentes dentro do recorte são somados — leia como preço médio por unidade pedida.
+              Preço médio = Σ valor total ÷ Σ quantidade no mês, para {precoSub || precoCat}
+              {fFornecedores.length > 0 && ` (fornecedor: ${fFornecedores.join(', ')})`}. Itens de unidades diferentes dentro do recorte são somados — leia como preço médio por unidade pedida.
             </div>
           </div>
         ) : (

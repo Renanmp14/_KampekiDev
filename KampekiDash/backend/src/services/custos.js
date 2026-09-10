@@ -173,12 +173,88 @@ async function limparItensOrfaos() {
 
 // Campos permitidos na edição em massa (o mesmo valor é replicado a todos os
 // registros selecionados).
-const CAMPOS_MASSA = { TAG: 'TAG', FORNECEDOR: 'FORNECEDOR' };
+const CAMPOS_MASSA = {
+  TAG: 'TAG', FORNECEDOR: 'FORNECEDOR', VALOR_UNIT: 'VALOR_UNIT', QTD: 'QTD',
+};
+
+// Os dois campos numéricos que compõem o VALOR_TOTAL. Cada um, ao mudar em massa,
+// precisa do OUTRO (lido de cada linha) para recalcular o total daquela linha.
+const CAMPOS_NUMERICOS = {
+  VALOR_UNIT: {
+    // Unitário 0 é aceito (montarLinha só rejeita negativo); o parceiro é a QTD,
+    // que precisa ser > 0 para haver total.
+    valido: (n) => Number.isFinite(n) && n >= 0,
+    erro: 'VALOR_UNIT inválido',
+    arredondar: (n) => +n.toFixed(2), // dinheiro: 2 casas
+    parceiro: 'QTD',
+    parceiroValido: (n) => Number.isFinite(n) && n > 0,
+    motivoParceiro: 'QTD inválida',
+    erroTodos: 'Nenhum lançamento pôde ser atualizado (quantidade inválida em todos)',
+  },
+  QTD: {
+    // QTD tem de ser > 0 (mesma regra do montarLinha). NÃO arredonda: quantidade
+    // fracionada é legítima (0,333 kg) e cortar em 2 casas mudaria o dado.
+    valido: (n) => Number.isFinite(n) && n > 0,
+    erro: 'QTD inválida',
+    arredondar: (n) => n,
+    parceiro: 'VALOR_UNIT',
+    parceiroValido: (n) => Number.isFinite(n) && n >= 0,
+    motivoParceiro: 'VALOR_UNIT inválido',
+    erroTodos: 'Nenhum lançamento pôde ser atualizado (valor unitário inválido em todos)',
+  },
+};
+
+/**
+ * Edição em massa de QTD ou VALOR_UNIT.
+ *
+ * Diferente de TAG/FORNECEDOR, estes campos NÃO podem ser gravados com
+ * `updateColumnForUuids` (que replica o MESMO valor em todas as linhas): o
+ * VALOR_TOTAL precisa acompanhar, e ele é `QTD × VALOR_UNIT` — ou seja, varia por
+ * linha, porque o outro fator varia. Por isso usa `updateCellsByUuid`, que grava
+ * valores diferentes por registro numa única chamada (1 leitura + 1 escrita,
+ * mesmo com centenas de linhas selecionadas).
+ *
+ * Regra de negócio registrada: o VALOR_TOTAL é SEMPRE recalculado aqui, mesmo
+ * onde havia um total ajustado à mão (a política de total editável da 20/06). Um
+ * total antigo convivendo com um fator novo seria incoerente — e a incoerência
+ * ficaria invisível na planilha. A tela avisa antes de aplicar.
+ *
+ * Linha cujo campo PARCEIRO é inválido é PULADA (sem ele não há total possível) e
+ * volta em `ignorados`, em vez de derrubar a operação inteira.
+ */
+async function atualizarNumericoEmMassa(field, uuids, valor) {
+  const regra = CAMPOS_NUMERICOS[field];
+  const n = num(valor);
+  if (!regra.valido(n)) throw new Error(regra.erro);
+  const novo = regra.arredondar(n);
+
+  const alvo = new Set(uuids);
+  const linhas = (await getObjects(TAB)).filter((c) => alvo.has(c.UUID));
+
+  const updates = [];
+  const ignorados = [];
+  for (const c of linhas) {
+    const outro = num(c[regra.parceiro]);
+    if (!regra.parceiroValido(outro)) {
+      ignorados.push({ uuid: c.UUID, item: c.ITEM || '', motivo: regra.motivoParceiro });
+      continue;
+    }
+    updates.push({ uuid: c.UUID, field, value: novo });
+    updates.push({ uuid: c.UUID, field: 'VALOR_TOTAL', value: +(novo * outro).toFixed(2) });
+  }
+
+  if (!updates.length) throw new Error(regra.erroTodos);
+
+  await updateCellsByUuid(TAB, updates);
+  return { atualizados: updates.length / 2, campo: field, ignorados };
+}
 
 /**
  * Edição em massa: aplica o mesmo `valor` ao `campo` de todos os `uuids`.
  * Ex.: tagear de uma vez vários custos de folha.
- * Valida o valor conforme o campo (TAG cadastrada; FORNECEDOR existente).
+ * Valida o valor conforme o campo (TAG cadastrada; FORNECEDOR existente;
+ * QTD/VALOR_UNIT numéricos — estes dois também recalculam o VALOR_TOTAL de cada
+ * linha, a partir do fator que não mudou).
  */
 export async function atualizarEmMassa({ uuids, campo, valor }) {
   if (!Array.isArray(uuids) || uuids.length === 0) {
@@ -186,6 +262,8 @@ export async function atualizarEmMassa({ uuids, campo, valor }) {
   }
   const field = CAMPOS_MASSA[String(campo || '').toUpperCase()];
   if (!field) throw new Error('Campo não permitido para edição em massa');
+
+  if (CAMPOS_NUMERICOS[field]) return atualizarNumericoEmMassa(field, uuids, valor);
 
   const valorFinal = String(valor ?? '').trim();
 

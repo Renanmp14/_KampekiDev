@@ -32,6 +32,10 @@ function custoParaFolha(c) {
     VALOR: c.VALOR_TOTAL,
     OBSERVACAO: '',
     CATEGORIA: c.CATEGORIA, // útil para quebra por unidade (Canoas/POA/Tele)
+    // Fornecedor do custo de origem, para o filtro de fornecedor dos dashboards.
+    // Lançamentos MANUAIS da aba FOLHA não têm fornecedor — ficam vazios e o
+    // front os agrupa como "(sem fornecedor)".
+    FORNECEDOR: c.FORNECEDOR || '',
     _origem: 'custo',
   };
 }

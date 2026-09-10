@@ -635,10 +635,31 @@ export default function Custos() {
     if (bulkCampo === 'FORNECEDOR' && !bulkValor) {
       setBulkError('Selecione o fornecedor'); return;
     }
+    if (bulkCampo === 'VALOR_UNIT') {
+      const v = toNum(bulkValor);
+      if (!bulkValor.trim() || !Number.isFinite(v) || v < 0) {
+        setBulkError('Informe um valor unitário válido (maior ou igual a zero)'); return;
+      }
+    }
+    if (bulkCampo === 'QTD') {
+      const v = toNum(bulkValor);
+      // Quantidade zero não é permitida (mesma regra do lançamento individual).
+      if (!bulkValor.trim() || !Number.isFinite(v) || v <= 0) {
+        setBulkError('Informe uma quantidade válida (maior que zero)'); return;
+      }
+    }
     setBulkSaving(true);
     try {
       const uuids = [...selected];
-      await custosApi.atualizarEmMassa({ uuids, campo: bulkCampo, valor: bulkValor });
+      const r = await custosApi.atualizarEmMassa({ uuids, campo: bulkCampo, valor: bulkValor });
+      // Linhas sem quantidade válida não têm total possível e são puladas pelo
+      // backend — avisar é melhor do que fechar como se tudo tivesse ido.
+      if (r?.ignorados?.length) {
+        setBulkError(`${r.atualizados} atualizado(s). ${r.ignorados.length} lançamento(s) foram pulados por quantidade inválida.`);
+        limparSelecao();
+        await carregar();
+        return;
+      }
       setShowBulk(false);
       limparSelecao();
       await carregar();
@@ -1141,26 +1162,63 @@ export default function Custos() {
             >
               <option value="TAG">Tag</option>
               <option value="FORNECEDOR">Fornecedor</option>
+              <option value="VALOR_UNIT">Valor unitário</option>
+              <option value="QTD">Quantidade</option>
             </select>
           </div>
           <div className="field">
-            <label>{bulkCampo === 'TAG' ? 'Nova tag' : 'Novo fornecedor'}</label>
+            <label>
+              {bulkCampo === 'TAG' ? 'Nova tag'
+                : bulkCampo === 'FORNECEDOR' ? 'Novo fornecedor'
+                  : bulkCampo === 'QTD' ? 'Nova quantidade'
+                    : 'Novo valor unitário (R$)'}
+            </label>
             {bulkCampo === 'TAG' ? (
               <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
                 <option value="">(limpar tag)</option>
                 {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
               </select>
-            ) : (
+            ) : bulkCampo === 'FORNECEDOR' ? (
               <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
                 <option value="">Selecione...</option>
                 {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR}>{f.NOME_FORNECEDOR}</option>)}
               </select>
+            ) : (
+              <input
+                type="text"
+                inputMode="decimal"
+                value={bulkValor}
+                onChange={(e) => setBulkValor(e.target.value)}
+                placeholder={bulkCampo === 'QTD' ? 'Ex.: 3 ou 0,5' : 'Ex.: 12,50'}
+              />
             )}
           </div>
           {bulkCampo === 'TAG' && (
             <p className="muted" style={{ fontSize: 12 }}>
               Útil para tagear de uma vez os custos de folha (filtre pela categoria, selecione todos e aplique).
             </p>
+          )}
+          {(bulkCampo === 'VALOR_UNIT' || bulkCampo === 'QTD') && (
+            <div className="muted" style={{ fontSize: 12 }}>
+              <p style={{ margin: '0 0 6px' }}>
+                O <strong>Valor total</strong> de cada lançamento é recalculado como
+                {bulkCampo === 'QTD'
+                  ? <> <strong>nova quantidade × V. unit</strong> — o valor unitário de cada linha é</>
+                  : <> <strong>Qtd × novo valor unitário</strong> — a quantidade de cada linha é</>}
+                {' '}preservado, então o total fica diferente de linha para linha.
+              </p>
+              <p style={{ margin: '0 0 6px' }}>
+                ⚠ Onde o total tiver sido <strong>ajustado manualmente</strong>, o ajuste será
+                substituído pelo recálculo. Lançamentos
+                {bulkCampo === 'QTD' ? ' sem valor unitário válido' : ' sem quantidade válida'}
+                {' '}são pulados e reportados.
+              </p>
+              <p style={{ margin: 0 }}>
+                Use <strong>vírgula</strong> para decimal (<code>2,5</code>). Um ponto sozinho é
+                lido como decimal — <code>1.200</code> vale <strong>1,2</strong>; para mil e
+                duzentos escreva <code>1200</code>.
+              </p>
+            </div>
           )}
           {bulkError && <div className="error-msg">{bulkError}</div>}
         </Modal>

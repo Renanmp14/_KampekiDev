@@ -4,12 +4,16 @@ import {
 } from 'recharts';
 import { custosApi, folhaApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import FornecedorFiltro from '../../components/FornecedorFiltro.jsx';
 import DrillPeriodoModal from '../../components/DrillPeriodoModal.jsx';
 import { exportarRelatorioPeriodo } from '../../utils/exportPdf.js';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import {
   filterByPeriod, toNum, keyToLabel, comparar, grupoDe,
 } from '../../utils/agg.js';
+import {
+  opcoesFornecedor, filtrarPorFornecedor, rotuloFornecedor, fornecedorDe,
+} from '../../utils/fornecedorFiltro.js';
 
 // Rótulo de período a partir de { de, ate } (chaves 'YYYY-MM' do month input).
 function periodLabel(p) {
@@ -256,6 +260,7 @@ function AnaliseCustos({ custos }) {
   const [periodoB, setPeriodoB] = useState({ de: '', ate: '' });
   const [fCat, setFCat] = useState('');
   const [fSubs, setFSubs] = useState([]);
+  const [fFornecedores, setFFornecedores] = useState([]);
   const [topItens, setTopItens] = useState(15);
   const [exportando, setExportando] = useState(false);
   // Nível inicial da dialog de detalhe: { tipo: 'grupo'|'categoria'|'subcategoria'|'item', valor }
@@ -278,8 +283,27 @@ function AnaliseCustos({ custos }) {
     () => (r) => (!fCat || r.CATEGORIA === fCat) && (!fSubs.length || fSubs.includes(r.SUB_CATEGORIA)),
     [fCat, fSubs],
   );
-  const a = useMemo(() => filterByPeriod(custos, periodoA.de, periodoA.ate).filter(filtrar), [custos, periodoA, filtrar]);
-  const b = useMemo(() => filterByPeriod(custos, periodoB.de, periodoB.ate).filter(filtrar), [custos, periodoB, filtrar]);
+  // Bases sem o filtro de fornecedor — servem à cascata das opções.
+  const aSemForn = useMemo(() => filterByPeriod(custos, periodoA.de, periodoA.ate).filter(filtrar), [custos, periodoA, filtrar]);
+  const bSemForn = useMemo(() => filterByPeriod(custos, periodoB.de, periodoB.ate).filter(filtrar), [custos, periodoB, filtrar]);
+
+  // O fornecedor entra nos DOIS períodos (como categoria/subcategoria) — senão a
+  // comparação A×B seria entre recortes diferentes.
+  const a = useMemo(() => filtrarPorFornecedor(aSemForn, fFornecedores), [aSemForn, fFornecedores]);
+  const b = useMemo(() => filtrarPorFornecedor(bSemForn, fFornecedores), [bSemForn, fFornecedores]);
+
+  // Opções: união de A e B (um fornecedor que só aparece num dos períodos ainda é
+  // escolhível — é justamente o que a comparação quer mostrar).
+  const opcoesForn = useMemo(
+    () => opcoesFornecedor([...aSemForn, ...bSemForn], fFornecedores),
+    [aSemForn, bSemForn, fFornecedores],
+  );
+  useEffect(() => {
+    if (!fFornecedores.length) return;
+    const presentes = new Set([...aSemForn, ...bSemForn].map(fornecedorDe));
+    const validos = fFornecedores.filter((f) => presentes.has(f));
+    if (validos.length !== fFornecedores.length) setFFornecedores(validos);
+  }, [aSemForn, bSemForn, fFornecedores]);
 
   const totalA = a.reduce((s, r) => s + val(r), 0);
   const totalB = b.reduce((s, r) => s + val(r), 0);
@@ -290,8 +314,11 @@ function AnaliseCustos({ custos }) {
   const porGrupo = useMemo(() => comparar(a, b, (r) => grupoDe(r.CATEGORIA), val), [a, b]);
   const precoQtd = useMemo(() => precoQtdPorSub(a, b, val), [a, b]);
 
-  const filtrosLabel = [fCat && `Categoria: ${fCat}`, fSubs.length && `Subcategorias: ${fSubs.join(', ')}`]
-    .filter(Boolean).join(' · ') || null;
+  const filtrosLabel = [
+    fCat && `Categoria: ${fCat}`,
+    fSubs.length && `Subcategorias: ${fSubs.join(', ')}`,
+    rotuloFornecedor(fFornecedores),
+  ].filter(Boolean).join(' · ') || null;
   const nItens = Number(topItens) || 15;
 
   function exportarPdf() {
@@ -349,12 +376,18 @@ function AnaliseCustos({ custos }) {
             </div>
           )}
         </div>
+        <FornecedorFiltro
+          valores={fFornecedores}
+          onAdd={(f) => setFFornecedores((p) => (p.includes(f) ? p : [...p, f]))}
+          onRemove={(f) => setFFornecedores((p) => p.filter((x) => x !== f))}
+          opcoes={opcoesForn}
+        />
         <div className="field" style={{ maxWidth: 120, margin: 0 }}>
           <label>Top N itens</label>
           <input type="number" min="1" value={topItens} onChange={(e) => setTopItens(e.target.value)} />
         </div>
-        {(fCat || fSubs.length > 0) && (
-          <button className="btn btn-sm" onClick={() => { setFCat(''); setFSubs([]); }}>Limpar filtros</button>
+        {(fCat || fSubs.length > 0 || fFornecedores.length > 0) && (
+          <button className="btn btn-sm" onClick={() => { setFCat(''); setFSubs([]); setFFornecedores([]); }}>Limpar filtros</button>
         )}
       </div>
       <TotaisAB totalA={totalA} totalB={totalB} nLancA={a.length} nLancB={b.length} />
@@ -465,6 +498,7 @@ function AnaliseFolha({ folha }) {
   const [periodoB, setPeriodoB] = useState({ de: '', ate: '' });
   const [fCat, setFCat] = useState(''); // unidade FOLHA CANOAS/POA/TELE
   const [fTags, setFTags] = useState([]); // folha não tem subcategoria → filtro por Tag (multi)
+  const [fFornecedores, setFFornecedores] = useState([]);
   const [topItens, setTopItens] = useState(15);
   const [exportando, setExportando] = useState(false);
   const val = (r) => toNum(r.VALOR);
@@ -482,8 +516,24 @@ function AnaliseFolha({ folha }) {
     () => (r) => (!fCat || r.CATEGORIA === fCat) && (!fTags.length || fTags.includes(r.TAG)),
     [fCat, fTags],
   );
-  const a = useMemo(() => filterByPeriod(folha, periodoA.de, periodoA.ate).filter(filtrar), [folha, periodoA, filtrar]);
-  const b = useMemo(() => filterByPeriod(folha, periodoB.de, periodoB.ate).filter(filtrar), [folha, periodoB, filtrar]);
+  const aSemForn = useMemo(() => filterByPeriod(folha, periodoA.de, periodoA.ate).filter(filtrar), [folha, periodoA, filtrar]);
+  const bSemForn = useMemo(() => filterByPeriod(folha, periodoB.de, periodoB.ate).filter(filtrar), [folha, periodoB, filtrar]);
+
+  const a = useMemo(() => filtrarPorFornecedor(aSemForn, fFornecedores), [aSemForn, fFornecedores]);
+  const b = useMemo(() => filtrarPorFornecedor(bSemForn, fFornecedores), [bSemForn, fFornecedores]);
+
+  // Cascata sobre a união A ∪ B. Na Folha, o fornecedor vem do custo de origem;
+  // lançamentos manuais da aba FOLHA caem em "(sem fornecedor)".
+  const opcoesForn = useMemo(
+    () => opcoesFornecedor([...aSemForn, ...bSemForn], fFornecedores),
+    [aSemForn, bSemForn, fFornecedores],
+  );
+  useEffect(() => {
+    if (!fFornecedores.length) return;
+    const presentes = new Set([...aSemForn, ...bSemForn].map(fornecedorDe));
+    const validos = fFornecedores.filter((f) => presentes.has(f));
+    if (validos.length !== fFornecedores.length) setFFornecedores(validos);
+  }, [aSemForn, bSemForn, fFornecedores]);
 
   const totalA = a.reduce((s, r) => s + val(r), 0);
   const totalB = b.reduce((s, r) => s + val(r), 0);
@@ -495,8 +545,11 @@ function AnaliseFolha({ folha }) {
     [a, b],
   );
 
-  const filtrosLabel = [fCat && `Categoria: ${fCat}`, fTags.length && `Tags: ${fTags.join(', ')}`]
-    .filter(Boolean).join(' · ') || null;
+  const filtrosLabel = [
+    fCat && `Categoria: ${fCat}`,
+    fTags.length && `Tags: ${fTags.join(', ')}`,
+    rotuloFornecedor(fFornecedores),
+  ].filter(Boolean).join(' · ') || null;
   const nItens = Number(topItens) || 15;
 
   function exportarPdf() {
@@ -551,12 +604,18 @@ function AnaliseFolha({ folha }) {
             </div>
           )}
         </div>
+        <FornecedorFiltro
+          valores={fFornecedores}
+          onAdd={(f) => setFFornecedores((p) => (p.includes(f) ? p : [...p, f]))}
+          onRemove={(f) => setFFornecedores((p) => p.filter((x) => x !== f))}
+          opcoes={opcoesForn}
+        />
         <div className="field" style={{ maxWidth: 120, margin: 0 }}>
           <label>Top N itens</label>
           <input type="number" min="1" value={topItens} onChange={(e) => setTopItens(e.target.value)} />
         </div>
-        {(fCat || fTags.length > 0) && (
-          <button className="btn btn-sm" onClick={() => { setFCat(''); setFTags([]); }}>Limpar filtros</button>
+        {(fCat || fTags.length > 0 || fFornecedores.length > 0) && (
+          <button className="btn btn-sm" onClick={() => { setFCat(''); setFTags([]); setFFornecedores([]); }}>Limpar filtros</button>
         )}
       </div>
       <TotaisAB totalA={totalA} totalB={totalB} nLancA={a.length} nLancB={b.length} />

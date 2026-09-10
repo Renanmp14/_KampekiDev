@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { custosApi, getConfig } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
+import FornecedorFiltro from '../../components/FornecedorFiltro.jsx';
 import NotasItemModal from '../../components/NotasItemModal.jsx';
 import NotasFiltroModal from '../../components/NotasFiltroModal.jsx';
 import { brl, pct, brlCompact } from '../../utils/format.js';
@@ -12,6 +13,9 @@ import { exportarRelatorioCustos } from '../../utils/exportPdf.js';
 import {
   groupSum, keyToLabel, monthsBetween, previousWindow, filterByPeriod, rowMonthKey, toNum,
 } from '../../utils/agg.js';
+import {
+  opcoesFornecedor, filtrarPorFornecedor, rotuloFornecedor, fornecedorDe,
+} from '../../utils/fornecedorFiltro.js';
 
 // Paleta de gráficos derivada do brand Kampeki.
 const COLORS = ['#ff8b7c', '#4f868f', '#bfcb7f', '#d7c4b6', '#e6e6e6', '#9c6b6b', '#7fb8a4'];
@@ -42,6 +46,9 @@ export default function DashCustos() {
   // Drill-down por clique nos gráficos (compõe com o filtro de período).
   const [selCategoria, setSelCategoria] = useState('');
   const [selSubcategoria, setSelSubcategoria] = useState('');
+  // Filtro de fornecedor (multi). Filtra a BASE do dashboard, como o multi-tag do
+  // Dash Folha — todas as visões, KPIs e o PDF refletem só os escolhidos.
+  const [fFornecedores, setFFornecedores] = useState([]);
   // Mês selecionado no "Comparativo mês a mês" (dropdown / clique na barra).
   const [selMes, setSelMes] = useState('');
   const [exportando, setExportando] = useState(false);
@@ -81,10 +88,17 @@ export default function DashCustos() {
   // própria barra clicada). Usado nas <Bar> em vez de no <BarChart>, para que o
   // alvo venha do hit-test do navegador e não de coordenada calculada.
   const cliqueNaBarraDoMes = (d) => toggleMes(d?.key ?? d?.payload?.key);
+  function addFornecedor(f) {
+    if (f) setFFornecedores((prev) => (prev.includes(f) ? prev : [...prev, f]));
+  }
+  function removeFornecedor(f) {
+    setFFornecedores((prev) => prev.filter((x) => x !== f));
+  }
   function limparDrill() {
     setSelCategoria('');
     setSelSubcategoria('');
     setSelMes('');
+    setFFornecedores([]);
   }
 
   // Limites efetivos do período (default = todo o histórico).
@@ -95,7 +109,18 @@ export default function DashCustos() {
   const deKey = period.de || todasChaves[0] || '';
   const ateKey = period.ate || todasChaves[todasChaves.length - 1] || '';
 
-  const noPeriodo = useMemo(() => filterByPeriod(custos, deKey, ateKey), [custos, deKey, ateKey]);
+  // Recorte de período, ANTES do filtro de fornecedor — é sobre ele que a lista
+  // de opções do filtro é montada (ver `opcoesForn` abaixo).
+  const noPeriodoBruto = useMemo(
+    () => filterByPeriod(custos, deKey, ateKey),
+    [custos, deKey, ateKey],
+  );
+  // Fornecedor filtra a base inteira: todas as visões (pizza de categoria
+  // inclusive), KPIs e PDF passam a refletir só os escolhidos.
+  const noPeriodo = useMemo(
+    () => filtrarPorFornecedor(noPeriodoBruto, fFornecedores),
+    [noPeriodoBruto, fFornecedores],
+  );
 
   // Se o mês selecionado sair do período (ao mudar o filtro de período), limpa.
   useEffect(() => {
@@ -187,6 +212,30 @@ export default function DashCustos() {
     [baseCat, selSubcategoria],
   );
 
+  // Cascata do filtro de fornecedor: as opções saem do MESMO recorte (mês →
+  // categoria → subcategoria), mas SEM o filtro de fornecedor aplicado — senão
+  // escolher um fornecedor esvaziaria a própria lista e travaria a troca.
+  const baseOpcoesForn = useMemo(() => {
+    let r = selMes ? noPeriodoBruto.filter((x) => rowMonthKey(x) === selMes) : noPeriodoBruto;
+    if (selCategoria) r = r.filter((x) => x.CATEGORIA === selCategoria);
+    if (selSubcategoria) r = r.filter((x) => x.SUB_CATEGORIA === selSubcategoria);
+    return r;
+  }, [noPeriodoBruto, selMes, selCategoria, selSubcategoria]);
+
+  const opcoesForn = useMemo(
+    () => opcoesFornecedor(baseOpcoesForn, fFornecedores),
+    [baseOpcoesForn, fFornecedores],
+  );
+
+  // Se um fornecedor escolhido sair do recorte (troca de período/mês/categoria),
+  // ele deixaria o dashboard vazio sem explicação. Auto-limpa, como o mês já fazia.
+  useEffect(() => {
+    if (!fFornecedores.length) return;
+    const presentes = new Set(baseOpcoesForn.map(fornecedorDe));
+    const validos = fFornecedores.filter((f) => presentes.has(f));
+    if (validos.length !== fFornecedores.length) setFFornecedores(validos);
+  }, [baseOpcoesForn, fFornecedores]);
+
   const totalGeral = filtrado.reduce((s, r) => s + val(r), 0);
   // Base da categoria (antes do filtro de subcategoria) — referência do % das subs.
   const totalBaseCat = baseCat.reduce((s, r) => s + val(r), 0);
@@ -206,8 +255,10 @@ export default function DashCustos() {
     if (selMes) parts.push(`Mês: ${keyToLabel(selMes)}`);
     if (selCategoria) parts.push(`Categoria: ${selCategoria}`);
     if (selSubcategoria) parts.push(`Subcategoria: ${selSubcategoria}`);
+    const forn = rotuloFornecedor(fFornecedores);
+    if (forn) parts.push(forn);
     return parts.join(' · ') || null;
-  }, [selMes, selCategoria, selSubcategoria]);
+  }, [selMes, selCategoria, selSubcategoria, fFornecedores]);
 
   // Rótulo da janela "período anterior" (reusado na UI dos KPIs e no PDF).
   const periodoAnteriorLabel = useMemo(() => {
@@ -219,11 +270,17 @@ export default function DashCustos() {
   // Item a item com % do total e variação vs janela anterior (respeita o mesmo
   // drill-down de categoria/subcategoria).
   const tabelaItens = useMemo(() => {
+    // O mesmo recorte precisa valer na janela anterior — incluindo o fornecedor,
+    // senão compararia "um fornecedor agora" com "todos antes".
     const drill = (r) => (!selCategoria || r.CATEGORIA === selCategoria)
       && (!selSubcategoria || r.SUB_CATEGORIA === selSubcategoria);
     const atual = groupSum(filtrado, (r) => r.ITEM, val);
     const prev = previousWindow(effDe, effAte);
-    const anterior = groupSum(filterByPeriod(custos, prev.de, prev.ate).filter(drill), (r) => r.ITEM, val);
+    const anterior = groupSum(
+      filtrarPorFornecedor(filterByPeriod(custos, prev.de, prev.ate), fFornecedores).filter(drill),
+      (r) => r.ITEM,
+      val,
+    );
     const prevMap = Object.fromEntries(anterior.map((a) => [a.key, a.total]));
     return atual.map((a) => {
       const ant = prevMap[a.key] || 0;
@@ -236,7 +293,7 @@ export default function DashCustos() {
         variacao,
       };
     });
-  }, [filtrado, custos, effDe, effAte, totalGeral, selCategoria, selSubcategoria]);
+  }, [filtrado, custos, effDe, effAte, totalGeral, selCategoria, selSubcategoria, fFornecedores]);
 
   const topItens = tabelaItens.slice(0, Number(topN) || 10);
 
@@ -335,6 +392,12 @@ export default function DashCustos() {
       </div>
 
       <PeriodFilter de={period.de} ate={period.ate} onChange={setPeriod}>
+        <FornecedorFiltro
+          valores={fFornecedores}
+          onAdd={addFornecedor}
+          onRemove={removeFornecedor}
+          opcoes={opcoesForn}
+        />
         <div className="field" style={{ maxWidth: 120 }}>
           <label>Top N itens</label>
           <input type="number" min="1" value={topN} onChange={(e) => setTopN(e.target.value)} />
@@ -345,7 +408,7 @@ export default function DashCustos() {
         </div>
       </PeriodFilter>
 
-      {(selCategoria || selSubcategoria || selMes) && (
+      {(selCategoria || selSubcategoria || selMes || fFornecedores.length > 0) && (
         <div className="row-actions" style={{ marginBottom: 14, gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Drill-down ativo:</span>
           {selMes && (
@@ -363,6 +426,11 @@ export default function DashCustos() {
               Subcategoria: {selSubcategoria} ✕
             </button>
           )}
+          {fFornecedores.map((f) => (
+            <button key={f} className="btn btn-sm btn-ghost" onClick={() => removeFornecedor(f)}>
+              Fornecedor: {f} ✕
+            </button>
+          ))}
           <button className="btn btn-sm" onClick={limparDrill}>Limpar drill-down</button>
         </div>
       )}

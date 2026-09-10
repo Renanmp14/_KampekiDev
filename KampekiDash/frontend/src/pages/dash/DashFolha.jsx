@@ -6,12 +6,16 @@ import {
 import { folhaApi, tagApi } from '../../api/resources.js';
 import PeriodFilter from '../../components/PeriodFilter.jsx';
 import SearchableSelect from '../../components/SearchableSelect.jsx';
+import FornecedorFiltro from '../../components/FornecedorFiltro.jsx';
 import CruzamentoMesModal from '../../components/CruzamentoMesModal.jsx';
 import { exportarRelatorioFolha } from '../../utils/exportPdf.js';
 import { brl, pct, brlCompact } from '../../utils/format.js';
 import {
   groupSum, keyToLabel, monthsBetween, filterByPeriod, rowMonthKey, toNum,
 } from '../../utils/agg.js';
+import {
+  opcoesFornecedor, filtrarPorFornecedor, rotuloFornecedor, fornecedorDe,
+} from '../../utils/fornecedorFiltro.js';
 
 // Paleta de gráficos derivada do brand Kampeki (teal à frente p/ a Folha).
 const COLORS = ['#4f868f', '#ff8b7c', '#bfcb7f', '#d7c4b6', '#e6e6e6', '#9c6b6b', '#7fb8a4'];
@@ -23,6 +27,8 @@ export default function DashFolha() {
   // Filtro de tag MULTI-seleção: filtra TODO o dashboard (pizza, subtotais,
   // cruzamento, KPIs e PDF). Clicar na pizza/tabela adiciona/remove tags aqui.
   const [fTags, setFTags] = useState([]);
+  // Filtro de fornecedor (multi) — mesma semântica do multi-tag: filtra a base.
+  const [fFornecedores, setFFornecedores] = useState([]);
   const [selMes, setSelMes] = useState(''); // mês selecionado na evolução (filtro global)
   const [showCruzMes, setShowCruzMes] = useState(false); // modal do cruzamento por mês
   // Flag global: quando ligada, descarta a folha SEM tag de TODAS as visões.
@@ -43,6 +49,12 @@ export default function DashFolha() {
   }
   function removeTagFiltro(t) {
     setFTags((prev) => prev.filter((x) => x !== t));
+  }
+  function addFornecedor(f) {
+    if (f) setFFornecedores((prev) => (prev.includes(f) ? prev : [...prev, f]));
+  }
+  function removeFornecedor(f) {
+    setFFornecedores((prev) => prev.filter((x) => x !== f));
   }
 
   useEffect(() => {
@@ -78,12 +90,19 @@ export default function DashFolha() {
 
   // base: período + filtro de tags (multi). Filtra o dashboard inteiro — quando há
   // tags escolhidas, TODAS as visões (inclusive "por Tag") mostram só elas.
-  const base = useMemo(() => {
+  // Base ANTES do fornecedor — é sobre ela que a lista de opções é montada, para
+  // a cascata (só aparecem fornecedores com lançamento no recorte já escolhido).
+  const baseSemForn = useMemo(() => {
     let r = filterByPeriod(folha, deKey, ateKey);
     if (fTags.length) r = r.filter((x) => fTags.includes(x.TAG));
     if (ocultarSemTag) r = r.filter((x) => String(x.TAG || '').trim() !== '');
     return r;
   }, [folha, deKey, ateKey, fTags, ocultarSemTag]);
+
+  const base = useMemo(
+    () => filtrarPorFornecedor(baseSemForn, fFornecedores),
+    [baseSemForn, fFornecedores],
+  );
 
   const porMes = useMemo(() => {
     const sums = groupSum(base, rowMonthKey, val);
@@ -97,6 +116,23 @@ export default function DashFolha() {
     () => (selMes ? base.filter((r) => rowMonthKey(r) === selMes) : base),
     [base, selMes],
   );
+
+  // Cascata: opções do recorte (período → tags → mês), sem o próprio fornecedor.
+  const baseOpcoesForn = useMemo(
+    () => (selMes ? baseSemForn.filter((r) => rowMonthKey(r) === selMes) : baseSemForn),
+    [baseSemForn, selMes],
+  );
+  const opcoesForn = useMemo(
+    () => opcoesFornecedor(baseOpcoesForn, fFornecedores),
+    [baseOpcoesForn, fFornecedores],
+  );
+  // Fornecedor que sai do recorte se auto-limpa (como o drill de tag já fazia).
+  useEffect(() => {
+    if (!fFornecedores.length) return;
+    const presentes = new Set(baseOpcoesForn.map(fornecedorDe));
+    const validos = fFornecedores.filter((f) => presentes.has(f));
+    if (validos.length !== fFornecedores.length) setFFornecedores(validos);
+  }, [baseOpcoesForn, fFornecedores]);
 
   const total = baseMes.reduce((s, r) => s + val(r), 0);
   const porTag = useMemo(() => groupSum(baseMes, (r) => r.TAG, val), [baseMes]);
@@ -140,9 +176,11 @@ export default function DashFolha() {
   const filtrosLabel = useMemo(() => {
     const parts = [];
     if (fTags.length) parts.push(`Tags: ${fTags.join(', ')}`);
+    const forn = rotuloFornecedor(fFornecedores);
+    if (forn) parts.push(forn);
     if (selMes) parts.push(`Mês: ${keyToLabel(selMes)}`);
     return parts.join(' · ') || null;
-  }, [fTags, selMes]);
+  }, [fTags, fFornecedores, selMes]);
 
   function exportarPdf() {
     setExportando(true);
@@ -189,9 +227,15 @@ export default function DashFolha() {
           <label>Tags (uma ou mais)</label>
           <SearchableSelect value="" onPick={addTagFiltro} options={tagNomes} placeholder="Adicionar tag..." />
         </div>
+        <FornecedorFiltro
+          valores={fFornecedores}
+          onAdd={addFornecedor}
+          onRemove={removeFornecedor}
+          opcoes={opcoesForn}
+        />
       </PeriodFilter>
 
-      {(selMes || fTags.length > 0) && (
+      {(selMes || fTags.length > 0 || fFornecedores.length > 0) && (
         <div className="row-actions" style={{ marginBottom: 14, gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="muted">Filtros ativos:</span>
           {fTags.map((t) => (
@@ -199,13 +243,20 @@ export default function DashFolha() {
               Tag: {t} ✕
             </button>
           ))}
+          {fFornecedores.map((f) => (
+            <button key={f} className="btn btn-sm btn-ghost" onClick={() => removeFornecedor(f)}>
+              Fornecedor: {f} ✕
+            </button>
+          ))}
           {selMes && (
             <button className="btn btn-sm btn-ghost" onClick={() => setSelMes('')}>
               Mês: {keyToLabel(selMes)} ✕
             </button>
           )}
-          {fTags.length > 0 && (
-            <button className="btn btn-sm" onClick={() => setFTags([])}>Limpar tags</button>
+          {(fTags.length > 0 || fFornecedores.length > 0) && (
+            <button className="btn btn-sm" onClick={() => { setFTags([]); setFFornecedores([]); }}>
+              Limpar filtros
+            </button>
           )}
         </div>
       )}

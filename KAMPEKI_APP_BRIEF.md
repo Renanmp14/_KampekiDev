@@ -3873,3 +3873,220 @@ API → Cotas → Read requests per minute per user*. Com a janela de leitura o 
 - **IP público efêmero** na VM — converter para *Reserved* ou agendar o DuckDNS.
 - **Sem trava de escrita concorrente** — duas máquinas gravando no mesmo instante podem se
   sobrescrever (inerente a usar planilha como banco; §22.2 do manual).
+
+---
+
+## Atualizações — 10/09/2026 — versão 1.8.2 — **Filtro de Fornecedor nos dashboards + valor unitário na edição em massa**
+
+> Dois pedidos do gestor, independentes entre si: (1) um **filtro de Fornecedor em
+> todos os dashboards**, encadeado com os filtros já existentes; e (2) poder editar o
+> **valor unitário em massa** na tela de Custos (antes só Tag e Fornecedor).
+>
+> `desktop/package.json` e `frontend/package.json` em **1.8.2**.
+
+### 1. Filtro de Fornecedor — a regra é a CASCATA
+
+O pedido não é só "ter um filtro": é que a lista oferecida mostre **apenas quem tem
+lançamento no recorte já escolhido**. Escolhida a categoria CMV, o campo passa a
+oferecer só os fornecedores de CMV; refinando a subcategoria, estreita de novo. Sem
+filtro prévio, lista todos.
+
+**O detalhe que faz a cascata funcionar** (e que é fácil errar): as opções são
+calculadas sobre a base filtrada por categoria/subcategoria **mas ainda não pelo
+próprio fornecedor**. Calcular sobre a base final faria o filtro estreitar a própria
+lista — escolhido um fornecedor, ele seria o único visível e não daria para trocar
+sem antes limpar a seleção. São duas bases distintas de propósito em cada tela:
+`baseOpcoes...` (sem fornecedor, alimenta o campo) e a base final (com fornecedor,
+alimenta as visões).
+
+**Multi-seleção, não escolha única.** É o padrão para onde os filtros do app
+convergiram (Mês/Subcategoria em Custos na 1.3.1/1.4.1, Tag no Dash Folha na 1.5.1) e
+é estritamente mais capaz — um único chip se comporta como seleção única. O campo é o
+`SearchableSelect` como **adicionador** (`value=""` + `onPick`), então a busca por
+digitação pedida (reduz a lista a cada tecla, sem acento/caixa) vem pronta do
+componente, junto com a virtualização que já sustenta listas de 10k+.
+
+**Onde o filtro age:** na **base** de cada dashboard, como o multi-tag do Dash Folha —
+todas as visões, KPIs, gráficos, dialogs de detalhe e o **PDF** refletem o recorte.
+Na Análise por Período ele entra nos **dois** períodos antes de comparar (senão A e B
+seriam recortes diferentes) e, no Dash Custos, também na **janela anterior** da
+variação — comparar "um fornecedor agora" com "todos antes" daria variação falsa.
+
+**Auto-limpeza:** fornecedor que sai do recorte (troca de período/mês/categoria) é
+removido sozinho da seleção, em vez de deixar o dashboard vazio sem explicação. É a
+mesma conduta que o mês e a tag já tinham.
+
+**`(sem fornecedor)`** entra como opção **só quando existe** linha sem fornecedor no
+recorte, e vai no topo (é curadoria, não um fornecedor). Em `CUSTOS` é raro — a
+importação cadastra `"Sem Fornecedor"` como fornecedor real —, mas os lançamentos
+**manuais** da aba `FOLHA` não têm fornecedor nenhum e precisavam continuar acessíveis.
+
+#### A única mudança de backend: a Folha não carregava o fornecedor
+
+O Dash Folha e a aba Folha da Análise por Período não tinham como filtrar por
+fornecedor — `custoParaFolha` (folha.js) montava a linha só com
+`TAG`/`ITEM_FOLHA`/`VALOR`/`CATEGORIA`, descartando o `FORNECEDOR` do custo de origem.
+É a mesma limitação que, na 1.5.3, deixou a aba Folha **fora** do `DrillPeriodoModal`.
+
+Agora o mapa carrega `FORNECEDOR` também. É campo **aditivo** — nenhum consumidor lê
+uma forma fixa da linha —, então a Folha, o Dash Folha, o cruzamento e o backup seguem
+idênticos onde não usam o campo novo.
+
+> Efeito colateral favorável: com o fornecedor disponível na folha, o drill da aba
+> Folha na Análise por Período deixa de ter esse impedimento. Não foi feito nesta
+> sessão (segue faltando `NUM_NOTA`/`DATA_NOTA`), mas o caminho encurtou.
+
+#### Sobre "item" na cascata
+
+O pedido cita categoria → subcategoria → **item**. Os dashboards não têm hoje um
+*filtro* de item (o item é dimensão de tabela: "Top N itens", dialogs de notas), então
+não há o que encadear ali. A cascata foi construída de forma **genérica** — quem monta
+a lista de opções passa o recorte já filtrado, qualquer que seja o filtro —, de modo
+que um filtro de item, se um dia entrar, encadeia sem tocar neste código. O
+comportamento está coberto por teste (`item estreita mais que a subcategoria`).
+
+### 2. Valor unitário **e quantidade** na edição em massa
+
+A barra "Editar em massa" da listagem de Custos só oferecia **Tag** e **Fornecedor**.
+Ganhou **Valor unitário** e, no mesmo movimento, **Quantidade** (pedida logo em seguida,
+ao ver a primeira funcionando).
+
+**Por que não foi só acrescentar o campo à lista branca:** Tag e Fornecedor são
+gravados com `updateColumnForUuids`, que replica **o mesmo valor** numa coluna para
+todas as linhas selecionadas. Os dois campos numéricos não podem: o `VALOR_TOTAL`
+precisa acompanhar, e ele é `QTD × VALOR_UNIT` — ou seja, **varia por linha**, porque
+o **outro fator** varia. Gravar só um deles deixaria totais mentirosos na planilha;
+replicar um total único seria pior. A gravação usa `updateCellsByUuid` (a primitiva da
+1.3.3, feita para valores diferentes por registro): **1 leitura + 1 escrita**, mesmo
+com centenas de linhas — conferido com 200 lançamentos no teste.
+
+**Os dois campos são o mesmo problema espelhado**, então viraram uma função só
+(`atualizarNumericoEmMassa`) governada por uma tabela de regras (`CAMPOS_NUMERICOS`):
+cada campo declara sua validação, seu **parceiro** (o fator que ele lê de cada linha
+para recalcular o total) e o que fazer quando esse parceiro é inválido. Duplicar a
+função para QTD teria duplicado junto a regra do total — o lugar exato onde uma
+divergência futura passaria despercebida.
+
+| Campo | Aceita | Arredonda | Parceiro lido da linha | Linha pulada quando |
+|---|---|---|---|---|
+| `VALOR_UNIT` | `>= 0` (zero é válido) | 2 casas (dinheiro) | `QTD` | QTD ausente ou `<= 0` |
+| `QTD` | `> 0` (zero não) | **não arredonda** | `VALOR_UNIT` | V. unit ausente ou negativo |
+
+Os dois assimétricos de propósito: quantidade **zero** é rejeitada (mesma regra do
+lançamento individual), enquanto valor unitário zero é aceito; e a quantidade **não é
+arredondada**, porque fração é legítima (0,333 kg) e cortar em 2 casas mudaria o dado —
+só o `VALOR_TOTAL` fecha em 2 casas.
+
+**Regra registrada — o total ajustado à mão cede ao recálculo.** A política da 20/06
+permite ajustar o `VALOR_TOTAL` manualmente. Aqui ele é **sempre** recalculado: um
+total antigo convivendo com um preço unitário novo seria incoerente, e a incoerência
+ficaria invisível na planilha. O modal avisa antes de aplicar.
+
+**Linhas com QTD inválida são puladas, não derrubam a operação.** Sem quantidade não
+existe total possível. Elas voltam em `ignorados` e a tela informa quantas foram
+puladas, em vez de fechar como se tudo tivesse ido. Se **todas** forem inválidas, a
+operação é rejeitada com mensagem própria.
+
+#### Ambiguidade do separador — achada por um teste que estava errado
+
+Escrevi uma asserção esperando que `'1.200'` virasse **1200** na quantidade. Falhou: o
+`num()` do serviço devolve **1,2**. O teste é que estava errado, não o código — com
+**um separador só**, ele é tratado como **decimal**, que é exatamente a correção de
+20/06 para `'1.5'` não virar `15`; só com **os dois** (`1.234,56`) o ponto vira milhar.
+
+Mantido como está (mexer no `num()` mexeria em importação e lançamento), mas a
+ambiguidade **importa mais na quantidade** do que no dinheiro — daí o aviso no próprio
+modal: vírgula para decimal, e mil e duzentos se escreve `1200`, não `1.200`. Fica
+registrado como comportamento herdado e consciente, coberto por teste nos quatro casos
+(`1.200` → 1,2; `1.200,5` → 1200,5; `1200` → 1200; `2,5` → 2,5).
+
+### Changelog técnico — 1.8.2 (por arquivo)
+
+**Backend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/services/folha.js` | `custoParaFolha` passa a carregar `FORNECEDOR` (vazio nos lançamentos manuais da aba FOLHA). Única mudança para viabilizar o filtro na Folha. |
+| `src/services/custos.js` | `CAMPOS_MASSA` ganhou `VALOR_UNIT` e `QTD`; nova tabela `CAMPOS_NUMERICOS` (validação, arredondamento, campo parceiro e motivo de pulo por campo) e `atualizarNumericoEmMassa(field, uuids, valor)` — grava o campo **e** o total recalculado por linha via `updateCellsByUuid` (1 leitura + 1 escrita), pula linhas cujo parceiro é inválido e as devolve em `ignorados`. `atualizarEmMassa` roteia para ela; TAG/FORNECEDOR seguem pelo caminho antigo, intactos. |
+
+**Frontend**
+
+| Arquivo | O que mudou |
+|---|---|
+| `src/utils/fornecedorFiltro.js` | **Novo** — núcleo do filtro: `SEM_FORNECEDOR`, `fornecedorDe`, `opcoesFornecedor(rows, escolhidos)` (a cascata), `filtrarPorFornecedor`, `rotuloFornecedor` (rótulo do PDF). Funções puras, testáveis sem React. |
+| `src/components/FornecedorFiltro.jsx` | **Novo** — o campo (multi + chips) compartilhado pelos 4 dashboards, para o comportamento ser idêntico em todos. |
+| `src/pages/dash/DashCustos.jsx` | `noPeriodoBruto` (sem fornecedor) × `noPeriodo` (com); `baseOpcoesForn`/`opcoesForn` (cascata mês→categoria→subcategoria); auto-limpeza; fornecedor entra na **janela anterior** de `tabelaItens`; chips no "Drill-down ativo"; `drillLabel` (PDF) inclui os fornecedores. |
+| `src/pages/dash/DashFolha.jsx` | `baseSemForn` × `base`; cascata sobre período→tags→mês; chips e "Limpar filtros" (antes "Limpar tags"); `filtrosLabel` (PDF e `CruzamentoMesModal`) inclui os fornecedores. |
+| `src/pages/dash/DashPeriodo.jsx` | Nas **duas** abas: `aSemForn`/`bSemForn` × `a`/`b`; opções da **união A ∪ B** (fornecedor presente em só um dos períodos continua escolhível — é o que a comparação quer mostrar); auto-limpeza; `filtrosLabel` do PDF. O `DrillPeriodoModal` herda o recorte via `a`/`b`. |
+| `src/pages/dash/DashAvancado.jsx` | Filtro no `PeriodFilter`; cascata sobre categoria→subcategoria; nota do gráfico cita os fornecedores ativos. |
+| `src/pages/Custos.jsx` | Opções **Valor unitário** e **Quantidade** no modal de edição em massa (input numérico pt-BR, placeholder por campo), validação local por campo (qtd `> 0`, unitário `>= 0`), aviso do recálculo do total, do ajuste manual substituído e da leitura do separador decimal, e relato de linhas puladas. |
+| `desktop/package.json`, `frontend/package.json` | `version` 1.8.1 → **1.8.2**. |
+
+### Validação
+
+- **Núcleo do filtro exercitado contra o módulo real — 18/18** (`utils/fornecedorFiltro.js`):
+  cascata em cada nível (categoria, subcategoria, **item**), lista cheia sem filtro
+  prévio, `(sem fornecedor)` aparecendo **só** quando há linha sem fornecedor,
+  escolhidos saindo das opções, multi-seleção como OU, recorte vazio devolvendo lista
+  vazia (e não "todos"), e **reconciliação** — somar cada fornecedor isoladamente
+  reproduz a base inteira, nenhuma linha some nem conta duas vezes.
+- **Edição em massa exercitada contra o `services/custos.js` real, com dublês da
+  camada de planilha — 31/31** (mesma técnica da 1.7.1/1.8.0), cobrindo os dois campos:
+  - **VALOR_UNIT:** três QTDs diferentes gerando **três totais diferentes** com um único
+    unitário (o que uma gravação replicada não conseguiria produzir); 1 leitura + 1
+    escrita para **200 lançamentos**; unitário 0 permitido; arredondamento a 2 casas com
+    QTD fracionada.
+  - **QTD:** três V. unit diferentes gerando **três totais diferentes** com uma única
+    quantidade; 1 leitura + 1 escrita para **150 lançamentos**; **quantidade fracionada
+    não arredondada** (0,333 continua 0,333, e só o total fecha em 2 casas); **qtd zero
+    rejeitada**; V. unit **zero** aceito como parceiro (total 0 legítimo); linha sem V.
+    unit válido pulada e reportada com as demais passando.
+  - **Comuns:** `updateColumnForUuids` **nunca** chamado nesse caminho; linhas fora da
+    seleção intactas; **total ajustado à mão substituído pelo recálculo** nos dois
+    campos; contrato do separador decimal nos quatro casos; as rejeições (não numérico,
+    negativo, vazio, seleção vazia, campo fora da lista branca, todos os parceiros
+    inválidos); e **regressão de TAG/FORNECEDOR** confirmando que seguem pelo caminho
+    antigo — o que também prova que a generalização das duas funções numa só não
+    quebrou o que já existia.
+- `node --check` OK em `custos.js` e `folha.js`; `vite build` OK (**1278 módulos** — os
+  dois arquivos novos; único aviso é o de tamanho de chunk, pré-existente).
+- **NÃO exercitado:** a **escrita real na planilha** (o `backend/.env` de dev segue com
+  a chave revogada — pendência aberta desde 26/07) e a **aparência renderizada** —
+  nenhuma tela foi vista em navegador ou aparelho. É o mesmo par pendente desde 07/08.
+
+> Os testes seguem em pasta temporária, **fora do repositório** — agora são 49
+> asserções a mais que ninguém consegue rodar de novo sem reescrevê-las. Promovê-los a
+> `backend/test/` continua sendo a maior melhoria disponível (§22.3 do manual técnico).
+> Esta rodada deu um argumento concreto: foi um teste que pegou a divergência do
+> separador decimal, e é ele que garantiria que uma futura mexida no `num()` não
+> mudasse silenciosamente o significado de uma quantidade.
+
+### Pendências em aberto
+
+- **Teste manual** (depende de repor o `GOOGLE_CREDENTIALS_JSON` do `.env` local):
+  1. **Cascata** — sem filtro, o campo lista todos; escolher uma categoria reduz a
+     lista aos fornecedores dela; refinar a subcategoria reduz de novo; limpar volta ao
+     conjunto anterior. Repetir nos 4 dashboards.
+  2. **Digitação** — escrever no campo reduz a lista a cada tecla (o `SearchableSelect`
+     tem **debounce de 500ms** por padrão: a lista responde na pausa, não a cada letra).
+  3. **Dash Folha** — conferir que os fornecedores aparecem (é a mudança de backend) e
+     que os lançamentos manuais caem em `(sem fornecedor)`.
+  4. **PDF** — exportar com fornecedor ativo e conferir a linha "Filtros:".
+  5. **Valor unitário em massa** — selecionar lançamentos com **quantidades diferentes**,
+     aplicar um unitário e conferir **na planilha** que cada `VALOR_TOTAL` ficou
+     `QTD × novo unitário` (é o ponto que mais importa); testar também uma seleção que
+     inclua linha sem quantidade e ver o relato de puladas.
+  6. **Quantidade em massa** — o espelho: selecionar lançamentos com **valores unitários
+     diferentes**, aplicar uma quantidade e conferir que cada total ficou
+     `nova qtd × V. unit da linha`. Testar uma quantidade **fracionada** (`2,5`) e
+     confirmar que a planilha guardou `2,5` e não `3` nem `2,50` truncado.
+- **Deploy da 1.8.2 — os dois destinos.** Houve mudança de backend **e** de frontend: na
+  VM `git pull` + `pm2 restart kampeki` **e** `npm run build` no Windows + `scp` do
+  `dist` (destino termina em `/frontend/`, **não** em `/frontend/dist`); para o Windows,
+  tag `v1.8.2` + release publicado.
+- ⚠ **A 1.8.1 ainda não foi publicada** — ver "Fechamento da versão 1.8.1". A 1.8.2 é
+  construída em cima dela, então **as duas saem juntas** na mesma entrega.
+- 🔴 **CORS com wildcard** — aberto desde a **1.5.2**; segue sendo a pendência de
+  segurança mais antiga, com o app na internet.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar o DuckDNS.
+- **Sem trava de escrita concorrente** — inerente a usar planilha como banco (§22.2).
