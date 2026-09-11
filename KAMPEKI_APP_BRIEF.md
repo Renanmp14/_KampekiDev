@@ -3884,6 +3884,12 @@ API → Cotas → Read requests per minute per user*. Com a janela de leitura o 
 >
 > `desktop/package.json` e `frontend/package.json` em **1.8.2**.
 
+> **Atualização de estado (11/09):** esta versão foi **commitada (`6820d1c`), publicada
+> e implantada nos dois destinos** — junto com a 1.8.1, que estava represada. As
+> pendências de deploy listadas no fim desta seção estão **fechadas**; a verificação com
+> evidência está em "Atualizações — 11/09/2026 — a 1.8.2 está no ar". O que segue aberto
+> é o **teste manual com dado real**.
+
 ### 1. Filtro de Fornecedor — a regra é a CASCATA
 
 O pedido não é só "ter um filtro": é que a lista oferecida mostre **apenas quem tem
@@ -4080,13 +4086,90 @@ registrado como comportamento herdado e consciente, coberto por teste nos quatro
      diferentes**, aplicar uma quantidade e conferir que cada total ficou
      `nova qtd × V. unit da linha`. Testar uma quantidade **fracionada** (`2,5`) e
      confirmar que a planilha guardou `2,5` e não `3` nem `2,50` truncado.
-- **Deploy da 1.8.2 — os dois destinos.** Houve mudança de backend **e** de frontend: na
-  VM `git pull` + `pm2 restart kampeki` **e** `npm run build` no Windows + `scp` do
-  `dist` (destino termina em `/frontend/`, **não** em `/frontend/dist`); para o Windows,
-  tag `v1.8.2` + release publicado.
-- ⚠ **A 1.8.1 ainda não foi publicada** — ver "Fechamento da versão 1.8.1". A 1.8.2 é
-  construída em cima dela, então **as duas saem juntas** na mesma entrega.
+- ~~**Deploy da 1.8.2 — os dois destinos**~~ — **FEITO** (11/09): backend e frontend no
+  ar, bundle conferido byte a byte, release `v1.8.2` publicado.
+- ~~**A 1.8.1 ainda não foi publicada**~~ — **FEITO** (11/09): saiu junto, como previsto.
 - 🔴 **CORS com wildcard** — aberto desde a **1.5.2**; segue sendo a pendência de
   segurança mais antiga, com o app na internet.
 - **IP público efêmero** na VM — converter para *Reserved* ou agendar o DuckDNS.
+- **Sem trava de escrita concorrente** — inerente a usar planilha como banco (§22.2).
+
+---
+
+## Atualizações — 11/09/2026 — **a 1.8.2 está no ar** (e a 1.8.1 junto)
+
+> A versão foi commitada, publicada e implantada nos **dois destinos**. Esta seção
+> registra o que foi **comprovado por verificação direta**, não relatado — no mesmo
+> espírito do fechamento da 1.7.0.
+
+### Evidências coletadas
+
+| O quê | Como foi verificado | Resultado |
+|---|---|---|
+| **Commit** | `git log` | `6820d1c` — *"desktop 1.8.2: Filtro de Fornecedor nos Dash e Edição em massa com Valor Uniário e Quantidade"* |
+| **Árvore de trabalho** | `git status` | **limpa** (0 arquivos modificados); `main` sincronizada com `origin/main` |
+| **Tags** | `git ls-remote --tags origin` | `v1.8.2` → `6820d1c` **e** `v1.8.1` → `4b2db92` — as duas no remoto |
+| **Release do desktop** | API do GitHub | `v1.8.2` **publicado** (não é rascunho) em `2026-09-11T00:00:55Z`, com **6 arquivos** — o auto-update do Windows enxerga |
+| **Backend web** | `GET /api/version` | **`{"version":"1.8.2"}`** |
+| **Saúde da web** | `GET /api/health` | `{"ok":true}` |
+| **Frontend web** | bundle servido × build local | `assets/index-BHXxcQYd.js` — **idêntico byte a byte** (2.169.963 bytes nos dois) |
+| **As features no ar** | strings exclusivas dentro do bundle servido | `Adicionar fornecedor`, `Novo valor unitário`, `Nova quantidade`, `Nenhum fornecedor no recorte` — **todas presentes** |
+
+> A conferência do **bundle** foi feita de propósito, e desta vez em dois níveis: o nome
+> do arquivo (que muda a cada build) prova que o `dist` foi enviado, e a **comparação
+> byte a byte** mais a busca pelas **strings exclusivas** provam que é este build, com
+> estas features. `/api/version` sozinho não serviria — ele vem do backend, que sobe com
+> o `git pull`, e mostraria `1.8.2` mesmo com o frontend antigo no ar. É o erro
+> operacional que este documento vem alertando desde 26/07.
+
+### A 1.8.1 saiu junto, como previsto
+
+A 1.8.1 nunca havia sido publicada (a tag existia desde 10/08, mas a entrega parou na
+bateria de teste). Como a 1.8.2 foi construída em cima dela, as duas chegaram ao
+cliente na mesma leva: o release `v1.8.1` consta publicado em `2026-08-10T23:46:19Z` e
+o `v1.8.2` em `2026-09-11T00:00:55Z`, ambos com 6 arquivos. Fecha a pendência aberta no
+"Fechamento da versão 1.8.1".
+
+### O que isto significa
+
+- **Web:** o **filtro de Fornecedor** nos quatro dashboards e a **edição em massa de
+  Valor unitário e Quantidade** estão disponíveis em <https://kampeki.duckdns.org>
+  (recarregando a página, se a tela não mudar).
+- **Windows:** o release publicado faz o app instalado se atualizar sozinho para a
+  1.8.2 na próxima abertura. Também dá para forçar em **Sistema → Configurações →
+  "🔄 Verificar atualizações"**.
+- **Mac:** segue pela web, como desde 26/07.
+- **`.env`:** nada precisou mudar em nenhuma máquina — não houve variável nova nesta
+  versão.
+
+### O que segue **não** verificado
+
+- **O comportamento com dado real.** Tudo o que foi provado até aqui é *estrutural*: o
+  código certo está no ar. O que **nenhuma** verificação desta sessão alcançou é a
+  escrita na planilha e o uso das telas — o roteiro da seção anterior continua valendo,
+  em especial:
+  - a **cascata** reduzindo a lista de fornecedores ao escolher categoria/subcategoria,
+    nos quatro dashboards;
+  - selecionar custos com **quantidades diferentes**, aplicar um valor unitário e
+    conferir **na planilha** que cada `VALOR_TOTAL` ficou `QTD × novo unitário`;
+  - o espelho: custos com **valores unitários diferentes**, aplicar uma quantidade, e
+    conferir uma quantidade **fracionada** (`2,5`) gravada sem arredondar.
+- **O fornecedor na Folha** — é a única mudança de backend da versão (`custoParaFolha`
+  passou a carregar `FORNECEDOR`); conferir que o filtro lista fornecedores no Dash
+  Folha e que os lançamentos manuais caem em `(sem fornecedor)`.
+- **A aparência renderizada** — nenhuma tela foi vista em navegador ou aparelho por
+  quem escreveu o código.
+
+### Pendências que permanecem
+
+- 🔴 **CORS com wildcard** (`app.use(cors())`) — aberto desde a **1.5.2**. É a pendência
+  de segurança mais antiga, e o app está na internet. **Cinco versões** já passaram por
+  cima dela.
+- **IP público efêmero** na VM — converter para *Reserved* ou agendar a sincronização do
+  DuckDNS.
+- **Testes fora do repositório** — as 49 asserções desta versão (18 do filtro + 31 da
+  edição em massa) seguem em pasta temporária, como todas as anteriores. Promovê-las a
+  `backend/test/` continua sendo a maior melhoria disponível (§22.3 do manual técnico).
+- **`.env` local de dev com a chave revogada** — segue impedindo qualquer teste contra a
+  planilha na máquina de desenvolvimento.
 - **Sem trava de escrita concorrente** — inerente a usar planilha como banco (§22.2).
