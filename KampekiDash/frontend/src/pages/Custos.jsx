@@ -199,6 +199,7 @@ export default function Custos() {
   const [showBulk, setShowBulk] = useState(false);
   const [bulkCampo, setBulkCampo] = useState('TAG');
   const [bulkValor, setBulkValor] = useState('');
+  const [bulkCategoria, setBulkCategoria] = useState('');
   const [bulkError, setBulkError] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [confirmBulkDel, setConfirmBulkDel] = useState(false);
@@ -623,9 +624,24 @@ export default function Custos() {
     setSelected(new Set());
   }
 
+  // Cascata categoria→subcategoria para o modal de edição em massa (CLASSIFICACAO).
+  const bulkCategoriaResolvida = useMemo(
+    () => categoriasCad.find((c) => norm(c) === norm(bulkCategoria)) || '',
+    [categoriasCad, bulkCategoria],
+  );
+  const bulkSubcatsDaCategoria = useMemo(
+    () => (bulkCategoriaResolvida ? subcats.filter((s) => s.CATEGORIA === bulkCategoriaResolvida) : subcats),
+    [subcats, bulkCategoriaResolvida],
+  );
+  const bulkSubcatNomes = useMemo(
+    () => bulkSubcatsDaCategoria.map((s) => s.SUB_CATEGORIA),
+    [bulkSubcatsDaCategoria],
+  );
+
   function abrirBulk() {
     setBulkCampo('TAG');
     setBulkValor('');
+    setBulkCategoria('');
     setBulkError('');
     setShowBulk(true);
   }
@@ -634,6 +650,9 @@ export default function Custos() {
     setBulkError('');
     if (bulkCampo === 'FORNECEDOR' && !bulkValor) {
       setBulkError('Selecione o fornecedor'); return;
+    }
+    if (bulkCampo === 'CLASSIFICACAO' && !bulkValor) {
+      setBulkError('Selecione a subcategoria'); return;
     }
     if (bulkCampo === 'VALOR_UNIT') {
       const v = toNum(bulkValor);
@@ -1158,41 +1177,77 @@ export default function Custos() {
             <label>Campo</label>
             <select
               value={bulkCampo}
-              onChange={(e) => { setBulkCampo(e.target.value); setBulkValor(''); setBulkError(''); }}
+              onChange={(e) => { setBulkCampo(e.target.value); setBulkValor(''); setBulkCategoria(''); setBulkError(''); }}
             >
               <option value="TAG">Tag</option>
               <option value="FORNECEDOR">Fornecedor</option>
+              <option value="CLASSIFICACAO">Categoria / Subcategoria</option>
               <option value="VALOR_UNIT">Valor unitário</option>
               <option value="QTD">Quantidade</option>
             </select>
           </div>
-          <div className="field">
-            <label>
-              {bulkCampo === 'TAG' ? 'Nova tag'
-                : bulkCampo === 'FORNECEDOR' ? 'Novo fornecedor'
-                  : bulkCampo === 'QTD' ? 'Nova quantidade'
-                    : 'Novo valor unitário (R$)'}
-            </label>
-            {bulkCampo === 'TAG' ? (
-              <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
-                <option value="">(limpar tag)</option>
-                {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
-              </select>
-            ) : bulkCampo === 'FORNECEDOR' ? (
-              <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
-                <option value="">Selecione...</option>
-                {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR}>{f.NOME_FORNECEDOR}</option>)}
-              </select>
-            ) : (
-              <input
-                type="text"
-                inputMode="decimal"
-                value={bulkValor}
-                onChange={(e) => setBulkValor(e.target.value)}
-                placeholder={bulkCampo === 'QTD' ? 'Ex.: 3 ou 0,5' : 'Ex.: 12,50'}
-              />
-            )}
-          </div>
+          {bulkCampo === 'CLASSIFICACAO' ? (
+            <>
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label>Categoria</label>
+                <SearchableSelect
+                  value={bulkCategoria}
+                  onChange={(v) => { setBulkCategoria(v); setBulkValor(''); }}
+                  options={categoriasCad}
+                  placeholder="Selecionar ou digitar..."
+                  fixedMenu
+                />
+              </div>
+              <div className="field">
+                <label>Subcategoria</label>
+                <SearchableSelect
+                  value={bulkValor}
+                  onChange={(v) => {
+                    setBulkValor(v);
+                    const s = subcats.find((x) => norm(x.SUB_CATEGORIA) === norm(v));
+                    if (s) setBulkCategoria(s.CATEGORIA);
+                  }}
+                  options={bulkSubcatNomes}
+                  placeholder={bulkCategoriaResolvida ? 'Selecionar ou digitar...' : 'Escolha a categoria (ou digite)'}
+                  fixedMenu
+                />
+              </div>
+              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                A <strong>categoria</strong> filtra as subcategorias disponíveis. Ao escolher uma
+                subcategoria diretamente, a categoria é preenchida automaticamente.
+                A classificação será aplicada apenas aos custos selecionados — o cadastro
+                do item <strong>não</strong> é alterado.
+              </p>
+            </>
+          ) : (
+            <div className="field">
+              <label>
+                {bulkCampo === 'TAG' ? 'Nova tag'
+                  : bulkCampo === 'FORNECEDOR' ? 'Novo fornecedor'
+                    : bulkCampo === 'QTD' ? 'Nova quantidade'
+                      : 'Novo valor unitário (R$)'}
+              </label>
+              {bulkCampo === 'TAG' ? (
+                <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
+                  <option value="">(limpar tag)</option>
+                  {tags.map((t) => <option key={t.UUID} value={t.TAG}>{t.TAG}</option>)}
+                </select>
+              ) : bulkCampo === 'FORNECEDOR' ? (
+                <select value={bulkValor} onChange={(e) => setBulkValor(e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {fornecedores.map((f) => <option key={f.UUID} value={f.NOME_FORNECEDOR}>{f.NOME_FORNECEDOR}</option>)}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={bulkValor}
+                  onChange={(e) => setBulkValor(e.target.value)}
+                  placeholder={bulkCampo === 'QTD' ? 'Ex.: 3 ou 0,5' : 'Ex.: 12,50'}
+                />
+              )}
+            </div>
+          )}
           {bulkCampo === 'TAG' && (
             <p className="muted" style={{ fontSize: 12 }}>
               Útil para tagear de uma vez os custos de folha (filtre pela categoria, selecione todos e aplique).

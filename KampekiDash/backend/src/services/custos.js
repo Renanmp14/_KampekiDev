@@ -175,6 +175,7 @@ async function limparItensOrfaos() {
 // registros selecionados).
 const CAMPOS_MASSA = {
   TAG: 'TAG', FORNECEDOR: 'FORNECEDOR', VALOR_UNIT: 'VALOR_UNIT', QTD: 'QTD',
+  CLASSIFICACAO: 'CLASSIFICACAO',
 };
 
 // Os dois campos numéricos que compõem o VALOR_TOTAL. Cada um, ao mudar em massa,
@@ -250,11 +251,34 @@ async function atualizarNumericoEmMassa(field, uuids, valor) {
 }
 
 /**
+ * Edição em massa de CLASSIFICAÇÃO (SUB_CATEGORIA + CATEGORIA).
+ *
+ * Recebe a subcategoria; a categoria é derivada pelo mapa (mesma regra de
+ * `classificarItem`). Grava os dois campos nos custos selecionados com
+ * `updateColumnForUuids` (mesmo valor em todas as linhas — diferente dos
+ * numéricos). Não altera o ITEM nem os itens cadastrados: esta operação muda
+ * a classificação APENAS dos custos selecionados (útil para corrigir custos
+ * importados com classificação errada sem mudar o cadastro do item).
+ */
+async function atualizarClassificacaoEmMassa(uuids, subCategoria) {
+  const sub = String(subCategoria || '').trim().toUpperCase();
+  if (!sub) throw new Error('Subcategoria é obrigatória');
+  await sincronizarSubcategorias();
+  const categoria = categoriaDe(sub);
+  if (!categoria) throw new Error(`Subcategoria desconhecida: ${sub}`);
+
+  await updateColumnForUuids(TAB, 'SUB_CATEGORIA', uuids, sub);
+  await updateColumnForUuids(TAB, 'CATEGORIA', uuids, categoria);
+  return { atualizados: uuids.length, campo: 'CLASSIFICACAO', SUB_CATEGORIA: sub, CATEGORIA: categoria };
+}
+
+/**
  * Edição em massa: aplica o mesmo `valor` ao `campo` de todos os `uuids`.
  * Ex.: tagear de uma vez vários custos de folha.
  * Valida o valor conforme o campo (TAG cadastrada; FORNECEDOR existente;
  * QTD/VALOR_UNIT numéricos — estes dois também recalculam o VALOR_TOTAL de cada
- * linha, a partir do fator que não mudou).
+ * linha, a partir do fator que não mudou; CLASSIFICACAO grava SUB_CATEGORIA +
+ * CATEGORIA derivada).
  */
 export async function atualizarEmMassa({ uuids, campo, valor }) {
   if (!Array.isArray(uuids) || uuids.length === 0) {
@@ -263,6 +287,7 @@ export async function atualizarEmMassa({ uuids, campo, valor }) {
   const field = CAMPOS_MASSA[String(campo || '').toUpperCase()];
   if (!field) throw new Error('Campo não permitido para edição em massa');
 
+  if (field === 'CLASSIFICACAO') return atualizarClassificacaoEmMassa(uuids, valor);
   if (CAMPOS_NUMERICOS[field]) return atualizarNumericoEmMassa(field, uuids, valor);
 
   const valorFinal = String(valor ?? '').trim();
